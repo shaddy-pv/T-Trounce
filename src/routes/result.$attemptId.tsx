@@ -1,0 +1,352 @@
+import { createFileRoute, Link, useNavigate, redirect } from "@tanstack/react-router";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Play,
+  Pause,
+  RotateCcw,
+  Volume2,
+  Sparkles,
+} from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Waveform } from "@/components/tarang/Waveform";
+import { fetchAttemptByIdFn } from "@/server/data";
+import { useUser } from "@/lib/auth";
+import type { AttemptResult } from "@/types";
+
+export const Route = createFileRoute("/result/$attemptId")({
+  beforeLoad: ({ context }) => {
+    if (!context.session) throw redirect({ to: "/login" });
+  },
+  loader: async ({ params }): Promise<{ result: AttemptResult }> => {
+    const result = await fetchAttemptByIdFn({ data: params.attemptId });
+    return { result };
+  },
+  head: ({ loaderData }) => {
+    const res = (loaderData as { result?: AttemptResult } | undefined)?.result;
+    return {
+      meta: [
+        { title: `Diagnostic Result · Tarang` },
+        { name: "description", content: res?.feedback ?? "Your speaking attempt, broken down." },
+      ],
+    };
+  },
+  component: ResultPage,
+});
+
+function ResultPage() {
+  const loaderData = Route.useLoaderData() as { result?: AttemptResult } | undefined;
+  const user = useUser();
+  const navigate = useNavigate();
+
+  const result: AttemptResult =
+    loaderData?.result ??
+    ({
+      id: "attempt",
+      prompt: "Speech Practice",
+      durationSec: 45,
+      pronunciation: 75,
+      vocabulary: 70,
+      grammar: 80,
+      fillerCount: 1,
+      pauseCount: 1,
+      feedback: "Good speech articulation.",
+      waveform: [],
+    } as AttemptResult);
+
+  // Audio Playback state
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(result.durationSec || 30);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (user === null) navigate({ to: "/login", replace: true });
+  }, [user, navigate]);
+
+  const togglePlayback = () => {
+    if (!audioPlayerRef.current) return;
+    if (isPlayingAudio) {
+      audioPlayerRef.current.pause();
+      setIsPlayingAudio(false);
+    } else {
+      audioPlayerRef.current
+        .play()
+        .then(() => setIsPlayingAudio(true))
+        .catch(() => setIsPlayingAudio(false));
+    }
+  };
+
+  const formatSecs = (secs: number, fallback: number = 30) => {
+    let target = secs;
+    if (!isFinite(target) || isNaN(target) || target < 0) {
+      target = isFinite(fallback) && fallback > 0 ? fallback : 0;
+    }
+    const m = Math.floor(target / 60);
+    const s = Math.floor(target % 60);
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  };
+
+  const scores = [
+    { label: "Pronunciation", value: result.pronunciation },
+    { label: "Vocabulary", value: result.vocabulary },
+    { label: "Grammar", value: result.grammar },
+  ];
+  const lowest = scores.reduce((a, b) => (a.value <= b.value ? a : b));
+
+  const transcriptWords = (result.transcript || "").split(/(\s+)/);
+  const fillerKeywords = new Set(["um", "uh", "matlab", "like", "actually", "er", "ah"]);
+
+  // Determine retake target route
+  const retakeTo = result.assignmentId
+    ? "/practice/assignment/$assignmentId"
+    : result.moduleId
+      ? "/practice/$moduleId"
+      : "/practice";
+  const retakeParams = result.assignmentId
+    ? { assignmentId: result.assignmentId }
+    : result.moduleId
+      ? { moduleId: result.moduleId }
+      : {};
+
+  return (
+    <div className="min-h-screen bg-ink-950 text-primary-warm">
+      <div className="mx-auto flex min-h-screen w-full max-w-[500px] flex-col border-x border-hairline pb-12">
+        {/* Hidden HTML5 Audio Element */}
+        {result.audioUrl && (
+          <audio
+            ref={audioPlayerRef}
+            src={result.audioUrl}
+            onPlay={() => setIsPlayingAudio(true)}
+            onPause={() => setIsPlayingAudio(false)}
+            onEnded={() => {
+              setIsPlayingAudio(false);
+              setAudioCurrentTime(0);
+            }}
+            onTimeUpdate={() => {
+              if (audioPlayerRef.current) {
+                setAudioCurrentTime(audioPlayerRef.current.currentTime);
+              }
+            }}
+            onLoadedMetadata={() => {
+              if (
+                audioPlayerRef.current &&
+                isFinite(audioPlayerRef.current.duration) &&
+                !isNaN(audioPlayerRef.current.duration) &&
+                audioPlayerRef.current.duration > 0
+              ) {
+                setAudioDuration(audioPlayerRef.current.duration);
+              } else if (result.durationSec && result.durationSec > 0) {
+                setAudioDuration(result.durationSec);
+              }
+            }}
+          />
+        )}
+
+        {/* Top Header */}
+        <header className="flex h-14 items-center justify-between px-5">
+          <Link
+            to="/practice"
+            className="inline-flex items-center gap-1.5 text-[14px] text-secondary-warm hover:text-primary-warm"
+          >
+            <ArrowLeft size={16} />
+            Done
+          </Link>
+          <span className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
+            attempt · {result.durationSec || 30}s · saved to mongodb
+          </span>
+        </header>
+
+        {/* Prompt section */}
+        <section className="px-6 pt-5">
+          <div className="flex items-center gap-2 text-[#3FB8AF]">
+            <CheckCircle2 size={16} />
+            <p className="num text-[11px] uppercase tracking-[0.18em]">Signal Analyzed</p>
+          </div>
+          <p className="mt-1.5 text-[17px] font-medium text-primary-warm leading-snug">
+            “{result.prompt}”
+          </p>
+        </section>
+
+        {/* Audio Player Card */}
+        <section className="mt-5 px-5">
+          <div className="rounded-[12px] border border-hairline bg-ink-900 p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-[12px] font-medium text-secondary-warm">
+                <Volume2 size={14} className="text-[#3FB8AF]" />
+                Listen to Your Recording
+              </span>
+              <span className="font-mono text-[11px] text-tertiary-warm">
+                {formatSecs(audioCurrentTime, 0)} /{" "}
+                {formatSecs(audioDuration, result.durationSec || 30)}
+              </span>
+            </div>
+
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                onClick={togglePlayback}
+                disabled={!result.audioUrl}
+                className={`flex size-10 shrink-0 items-center justify-center rounded-full transition-all ${
+                  result.audioUrl
+                    ? "bg-[#3FB8AF] text-[#100E0C] hover:scale-105 active:scale-95 shadow-md shadow-[#3FB8AF]/20"
+                    : "bg-ink-800 text-tertiary-warm cursor-not-allowed opacity-50"
+                }`}
+                title={isPlayingAudio ? "Pause recording" : "Play recording"}
+              >
+                {isPlayingAudio ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
+              </button>
+
+              <input
+                type="range"
+                min={0}
+                max={audioDuration || 1}
+                step={0.1}
+                value={audioCurrentTime}
+                onChange={(e) => {
+                  const t = Number(e.target.value);
+                  setAudioCurrentTime(t);
+                  if (audioPlayerRef.current) audioPlayerRef.current.currentTime = t;
+                }}
+                disabled={!result.audioUrl}
+                className="h-1.5 flex-1 cursor-pointer appearance-none rounded-lg bg-ink-800 accent-[#3FB8AF]"
+              />
+
+              <button
+                onClick={() => {
+                  if (audioPlayerRef.current) {
+                    audioPlayerRef.current.currentTime = 0;
+                    setAudioCurrentTime(0);
+                  }
+                }}
+                className="text-tertiary-warm hover:text-secondary-warm"
+                title="Reset audio"
+              >
+                <RotateCcw size={15} />
+              </button>
+            </div>
+
+            {/* Waveform */}
+            <div className="mt-4 opacity-95">
+              <Waveform mode="result" data={result.waveform} height={80} />
+            </div>
+
+            <div className="mt-3 flex items-center justify-between text-[11px] text-secondary-warm">
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-[#3FB8AF]" />
+                  clear
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-[#E2A33C]" />
+                  filler ({result.fillerCount})
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-[#6B645A]" />
+                  pause ({result.pauseCount})
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Spoken Transcript Box */}
+        <section className="mt-5 px-5">
+          <div className="rounded-[12px] border border-hairline bg-ink-900 p-4">
+            <div className="flex items-center gap-2 text-secondary-warm">
+              <Sparkles size={14} className="text-[#3FB8AF]" />
+              <p className="num text-[11px] uppercase tracking-[0.14em]">Spoken Transcript</p>
+            </div>
+            <div className="mt-2.5 rounded-[8px] border border-hairline bg-ink-950 p-3 text-[13px] leading-relaxed text-primary-warm">
+              {transcriptWords.map((word, i) => {
+                const clean = word.toLowerCase().replace(/[^a-z]/g, "");
+                const isFiller = fillerKeywords.has(clean);
+                if (isFiller) {
+                  return (
+                    <span
+                      key={i}
+                      className="rounded bg-[#E2A33C]/25 px-1 py-0.5 font-medium text-[#E2A33C]"
+                    >
+                      {word}
+                    </span>
+                  );
+                }
+                return <span key={i}>{word}</span>;
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* Three scores */}
+        <section className="mt-5 px-5">
+          <div className="grid grid-cols-3 divide-x divide-[#2E2A26] rounded-[12px] border border-hairline bg-ink-900">
+            {scores.map((s) => (
+              <div key={s.label} className="px-3 py-4 text-center">
+                <p className="num text-[10px] uppercase tracking-[0.14em] text-tertiary-warm">
+                  {s.label.slice(0, 4)}
+                </p>
+                <p
+                  className={
+                    "num mt-1 text-[24px] leading-none " +
+                    (s.value < 50
+                      ? "text-[#C1503B]"
+                      : s.value < 70
+                        ? "text-[#E2A33C]"
+                        : "text-primary-warm")
+                  }
+                >
+                  {s.value}
+                  <span className="num text-[13px] text-tertiary-warm">%</span>
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <p className="mt-3 text-[12px]">
+            <span className="num uppercase tracking-[0.14em] text-tertiary-warm">
+              Primary Coaching Area ·{" "}
+            </span>
+            <span className="text-[#E2A33C]">{lowest.label}</span>
+          </p>
+        </section>
+
+        {/* Feedback */}
+        <section className="mt-5 px-5">
+          <div className="rounded-[12px] border border-hairline bg-ink-900 p-4">
+            <p className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
+              Acoustic Diagnostic Feedback
+            </p>
+            <p className="mt-2 text-[14px] leading-[1.55] text-primary-warm">{result.feedback}</p>
+          </div>
+        </section>
+
+        {/* Action Buttons */}
+        <section className="mt-8 flex flex-col gap-3 px-5">
+          <Link
+            to={retakeTo as "/practice"}
+            params={retakeParams as Record<string, string>}
+            className="flex w-full items-center justify-center gap-2 rounded-[12px] border border-[#3FB8AF]/40 bg-[#3FB8AF]/10 py-3.5 text-[14px] font-semibold text-[#3FB8AF] transition hover:bg-[#3FB8AF]/20"
+          >
+            <RotateCcw size={16} />
+            Retake Practice (Record Again)
+          </Link>
+
+          <Link
+            to="/practice"
+            className="flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#3FB8AF] py-3.5 text-[14px] font-semibold text-[#100E0C] transition hover:brightness-110 shadow-md shadow-[#3FB8AF]/20"
+          >
+            Practice Next Prompt
+            <ArrowRight size={16} />
+          </Link>
+
+          <Link
+            to="/progress"
+            className="flex w-full items-center justify-center rounded-[12px] border border-hairline bg-ink-900 py-3 text-[13px] text-secondary-warm transition hover:border-[#9C9388]"
+          >
+            View Portfolio History
+          </Link>
+        </section>
+      </div>
+    </div>
+  );
+}

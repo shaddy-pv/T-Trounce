@@ -1,0 +1,316 @@
+Listed directory t-trounce
+Listed directory signal-speak-studio-main
+Listed directory src
+Ran command: `Get-ChildItem -Recurse -File | Where-Object { $_.FullName -notmatch "node_modules|\.git|dist|\.tanstack" } | Select-Object -ExpandProperty FullName`
+Viewed package.json:1-94
+Ran command: `Get-ChildItem -Recurse -File | Where-Object { $_.FullName -notmatch "node_modules|\.git|dist|\.tanstack" } | Select-Object -Property RelativePath, Length`
+Ran command: `Get-ChildItem -Recurse -File | Where-Object { $_.FullName -notmatch "node_modules|\.git|dist|\.tanstack" } | Resolve-Path -Relative`
+Ran command: `npx tsc --noEmit`
+Viewed .env:1-8
+Viewed env.ts:1-21
+Used tool: manage_task
+Ran command: `npm run lint`
+Viewed server.ts:1-55
+Used tool: manage_task
+Viewed start.ts:1-22
+Used tool: manage_task
+Viewed vite.config.ts:1-17
+Used tool: manage_task
+Viewed eslint.config.js:1-41
+Used tool: manage_task
+Viewed error-capture.ts:1-28
+Used tool: manage_task
+Viewed error-page.ts:1-31
+Used tool: manage_task
+Viewed router.tsx:1-21
+Ran command: `npm run build`
+Viewed client.ts:1-103
+Used tool: manage_task
+Viewed schemas.ts:1-114
+Viewed data.ts:1-240
+Viewed auth.service.ts:1-122
+Viewed student.service.ts:1-261
+Viewed attempt.service.ts:1-141
+Viewed assignment.service.ts:1-160
+Viewed message.service.ts:1-81
+Viewed module.service.ts:1-79
+Viewed user.service.ts:1-139
+Viewed seed-mongo.ts:1-322
+Viewed auth.ts:1-32
+Viewed db.ts:1-3
+Viewed tarang-data.ts:1-210
+Viewed __root.tsx:1-146
+Viewed index.tsx:1-19
+Viewed login.tsx:1-184
+Viewed dashboard.tsx:1-164
+Viewed assignments.tsx:1-460
+Viewed flags.tsx:1-179
+Viewed reports.tsx:1-120
+Viewed users.tsx:1-527
+Viewed profile.tsx:1-104
+Viewed progress.tsx:1-116
+Viewed students.$id.tsx:1-301
+Viewed practice.index.tsx:1-353
+Viewed practice.$moduleId.tsx:1-207
+Viewed practice.assignment.$assignmentId.tsx:1-211
+Viewed result.$attemptId.tsx:1-166
+Viewed audio-analyzer.ts:1-122
+Viewed useAudioRecorder.ts:1-209
+Viewed audio-analyzer.ts:1-2
+Viewed BatchMeters.tsx:1-48
+Viewed ChannelStripTable.tsx:1-94
+Viewed FlaggedAlertPanel.tsx:1-71
+Viewed ParentReportCard.tsx:1-82
+Viewed whatsapp.ts:1-22
+Viewed AudioTranscriptEvaluator.tsx:1-230
+Viewed DirectNoteModal.tsx:1-104
+Viewed useAuth.ts:1-62
+Viewed StudentShell.tsx:1-72
+Viewed TeacherShell.tsx:1-77
+Viewed Waveform.tsx:1-257
+Viewed Button.tsx:1-51
+Viewed StatusDot.tsx:1-21
+Viewed index.ts:1-6
+Viewed attempt.types.ts:1-29
+Viewed audio.types.ts:1-22
+Viewed message.types.ts:1-19
+Viewed module.types.ts:1-11
+Viewed student.types.ts:1-31
+Viewed constants.ts:1-31
+Viewed styles.css:1-153
+Viewed use-mobile.tsx:1-20
+Viewed utils.ts:1-7
+Ran command: `Get-ChildItem -Recurse -File | Where-Object { $_.Name -match "test|spec" } | Select-Object -Property FullName`
+Used tool: manage_task
+Viewed ARCHITECTURE.md:1-97
+Viewed API.md:1-102
+Viewed DATABASE.md:1-143
+Viewed AI_RULES.md:1-4
+Viewed AGENTS.md:1-35
+
+# Comprehensive Deep Repository Audit & Production Readiness Analysis
+
+**Repository:** `signal-speak-studio-main` (Tarang / Signal Speak Studio)  
+**Evaluated Against:** Production Reliability, Enterprise Security, Data Integrity, Audio DSP Architecture, Framework Concurrency, Multi-tenant Isolation, and Code Quality.
+
+---
+
+## Executive Verdict
+
+> [!CAUTION]
+> **OVERALL VERDICT: NOT PRODUCTION READY (Stage: High-Fidelity Interactive Prototype / MVP)**
+>
+> While the UI design, visual aesthetic (the 12px deck / 4px console design system), TypeScript integration (`tsc --noEmit` passes with 0 errors), and build pipeline (`npm run build` succeeds) are well-crafted, the repository contains **critical security vulnerabilities, authorization bypasses, simulated AI/audio scoring, database design flaws, and zero automated tests**. 
+
+---
+
+## 1. Executive Summary Scorecard
+
+| Category | Readiness Score | Production Status | Critical Issues Found |
+| :--- | :---: | :---: | :--- |
+| **Security & Authentication** | **2 / 10** | ❌ **Critical Blocker** | Hardcoded credentials, plain-text passwords in UI/scripts, auto-registration exploit, missing route & RPC authorization |
+| **Backend & RPC Layer** | **4 / 10** | ❌ **High Risk** | No schema validation on RPC inputs, IDOR vulnerabilities, missing rate limiting |
+| **Database & Data Architecture** | **4 / 10** | ❌ **High Risk** | Storing Base64 audio in MongoDB docs, global module completion bug, status overwrite bug |
+| **Speech & Audio Engine** | **3 / 10** | ⚠️ **Demo Mock** | Pseudo-random filler tagging (`Math.random()`), volume-derived grammar/vocab scores, iOS Safari WebM incompatibility |
+| **Frontend UI/UX & React 19** | **8 / 10** | 🟢 **Good Quality** | Space Grotesk + IBM Plex Mono typography, custom canvas waveform rendering, reactive shells |
+| **Code Quality & Linting** | **5 / 10** | ⚠️ **Needs Remediation** | 407 ESLint/Prettier violations, multiple `@typescript-eslint/no-explicit-any` usages |
+| **DevOps, CI/CD & Testing** | **1 / 10** | ❌ **Critical Blocker** | 0 unit/E2E tests, no CI workflows, no Docker/containerization, no health checks, no telemetry |
+
+---
+
+## 2. Critical Production Blockers (Severity: P0 — Must Fix Before Any Release)
+
+### 2.1 Hardcoded Administrator Password & Secrets in Code & UI
+- **[login.tsx](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/routes/login.tsx#L36-L37)** & **[login.tsx:L169](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/routes/login.tsx#L169)**:
+  ```tsx
+  // Hardcoded in component state & helper text
+  const userEmail = email.trim() || (role === "teacher" ? "shadanmd566@gmail.com" : "priya@tarang.in");
+  const pwd = password.trim() || (userEmail === "shadanmd566@gmail.com" ? "700Shadan724@#" : "password123");
+  // Rendered directly to the public web in UI helper card:
+  • Admin: shadanmd566@gmail.com (Password: 700Shadan724@#)
+  ```
+- **[seed-mongo.ts](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/scripts/seed-mongo.ts#L82)**:
+  ```ts
+  const adminPasswordHash = await bcrypt.hash("700Shadan724@#", 10);
+  ```
+- **[auth.service.ts](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/server/services/auth.service.ts#L97)** & **[user.service.ts](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/server/services/user.service.ts#L129)**:
+  Admin privileges and deletion immunity are hardcoded to a specific personal email (`user.email === "shadanmd566@gmail.com"`).
+- **[env.ts](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/config/env.ts#L17)**:
+  `SESSION_SECRET` defaults to `"default_local_secret_key_change_in_prod"` if environment variables are missing.
+
+---
+
+### 2.2 Unauthenticated Registration & Role Hijacking Exploit
+- **[auth.service.ts](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/server/services/auth.service.ts#L61-L74)**:
+  When a user logs in, if their email does not exist in the database, the backend automatically creates a new account on the fly and grants whatever role was chosen in the UI:
+  ```ts
+  // Creates an account on any login attempt for unknown emails
+  const passwordHash = await bcrypt.hash(passwordPlain || "password123", 10);
+  const newUser: UserDoc = {
+    id: `user-${Date.now()}`,
+    email: cleanEmail,
+    name: emailOrIdentifier.trim() || (selectedRole === "teacher" ? "Mrs. Mehta" : "Priya Sharma"),
+    role: selectedRole, // <--- An attacker can select "teacher" and enter any email!
+    ...
+  };
+  await db.collection<UserDoc>("users").insertOne(newUser);
+  ```
+  **Impact:** Anyone can bypass authentication, select "Teacher / Admin", enter `attacker@evil.com`, and gain access to the teacher console and student rosters.
+
+---
+
+### 2.3 Completely Unprotected Server RPC Endpoints (Authorization Bypass / IDOR)
+In **[data.ts](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/server/data.ts)**, sensitive server functions do not inspect the session token or verify caller roles:
+- `fetchUsersFn`: Any anonymous client or student can dump the entire users table (emails, names, roles, batch IDs).
+- `createUserFn`: Any client can create permanent faculty/teacher accounts.
+- `deleteUserFn`: Any client can delete student and teacher accounts.
+- `createAssignmentFn` / `deleteAssignmentFn`: Any student can delete assignments and cascade-delete attempts.
+- `updateStudentStatusFn`: Any caller can alter student status flags.
+
+---
+
+### 2.4 Missing Route Guards
+The following routes contain no `beforeLoad` authentication checks:
+- **[reports.tsx](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/routes/reports.tsx)**: Direct URL access displays all students, scores, and parent WhatsApp reports.
+- **[flags.tsx](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/routes/flags.tsx)**: Direct URL access displays flagged students and allows status mutations.
+- **[students.$id.tsx](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/routes/students.$id.tsx)**: Direct URL access allows listening to any student's audio recordings and reading their transcripts.
+
+---
+
+## 3. Database & Data Architecture Deficiencies
+
+### 3.1 Raw Audio Stored as Base64 in MongoDB Documents
+- **[useAudioRecorder.ts](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/features/practice/hooks/useAudioRecorder.ts#L177-L184)** & **[attempt.service.ts](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/server/services/attempt.service.ts#L67)**:
+  Audio recording Blobs are converted to Base64 strings and written directly into the `attempts` collection in MongoDB.
+- **Production Risk**: Audio recordings easily exceed 3–10MB. MongoDB has a strict 16MB document limit. Storing raw audio inside BSON documents bloats indexes, exhausts server RAM cache, and causes query timeouts.
+- **Production Requirement**: Store media files in S3/Cloudflare R2/GCS and store only the secure object URL in MongoDB.
+
+### 3.2 Global Module Completion Collision
+- **[attempt.service.ts](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/server/services/attempt.service.ts#L76)** & **[module.service.ts](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/server/services/module.service.ts#L70)**:
+  When a student completes a module, the system updates `modules.updateOne({ id: payload.moduleId }, { $set: { completed: true } })`.
+- **Bug**: The `completed` boolean is stored on the global module document. When Student A finishes Module 1, Module 1 is marked as completed for **all students across the school**. Module progress must be tracked in a per-student progress record or derived from user attempts.
+
+### 3.3 Status Recalculation Resets Manual Teacher Actions
+- **[student.service.ts](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/server/services/student.service.ts#L51-L71)** & **[student.service.ts:L112-L132](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/server/services/student.service.ts#L112-L132)**:
+  When fetching a student or roster, status is dynamically overwritten based solely on `updatedAt` (`diffDays <= 2 ? "on-track" : ...`).
+- **Bug**: When a teacher manually resolves or flags a student, `updateStatus()` sets `updatedAt = new Date()`. Consequently, `diffDays` becomes 0, which immediately resets the status back to `"on-track"` on the next load.
+
+### 3.4 Cross-Batch Homework Leakage
+- **[practice.index.tsx](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/routes/practice.index.tsx#L30)**:
+  `fetchAssignmentsFn()` is invoked with no batch filter. Students in Summer Morning receive assignments meant for Winter Evening or Autumn batches.
+
+### 3.5 Streak Calculation Edge Case
+- **[practice.index.tsx](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/routes/practice.index.tsx#L86-L91)**:
+  The streak algorithm begins evaluating from `today`. If a student has an ongoing 10-day streak and opens the app at 9:00 AM (before recording their daily attempt), `activeDays.has(today)` is false and the streak immediately renders as `0 days`.
+
+---
+
+## 4. Speech, AI & Audio Engine Analysis
+
+### 4.1 Simulated DSP & Random Filler Tagging
+- **[audio-analyzer.ts](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/features/practice/lib/audio-analyzer.ts#L61)**:
+  ```ts
+  if (val >= ACOUSTIC_THRESHOLDS.silence && val < ACOUSTIC_THRESHOLDS.hesitation && Math.random() > 0.6) {
+    kind = "filler";
+    fillerCount++;
+  }
+  ```
+  Fillers are identified via `Math.random() > 0.6` on low-energy volume samples rather than phoneme classification or speech recognition.
+- **[audio-analyzer.ts:L90-L97](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/features/practice/lib/audio-analyzer.ts#L90-L97)**:
+  Vocabulary and Grammar scores are derived purely from RMS volume amplitude formulas. There is no natural language grammar parser or ASR (Automatic Speech Recognition) scoring pipeline.
+
+### 4.2 Audio Codec Compatibility on Mobile Safari / iOS
+- **[useAudioRecorder.ts](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/features/practice/hooks/useAudioRecorder.ts#L174)**:
+  MediaRecorder is instantiated without checking `MediaRecorder.isTypeSupported()`. On mobile Safari (iOS), `audio/webm` recording is either unsupported or corrupts playback without an `audio/mp4` fallback.
+
+---
+
+## 5. File-by-File Detailed Audit
+
+| File Path | Purpose | Key Findings & Deficiencies |
+| :--- | :--- | :--- |
+| **`package.json`** | Dependencies & Scripts | Missing test runner (Vitest/Jest), missing test scripts, outdated pinned versions |
+| **`.env`** | Environment Variables | Contains default development DB connection; lacks production JWT & storage keys |
+| **`src/config/env.ts`** | Env Config | Insecure session secret fallback string |
+| **`src/config/constants.ts`** | Constants | Hardcoded school name ("Sharma Coaching, Patna") and default teacher |
+| **`src/server.ts`** | SSR Entry & Error Normalizer | Catches h3 unhandled errors; good fallback SSR page |
+| **`src/start.ts`** | TanStack Start Setup | Contains basic error middleware |
+| **`src/router.tsx`** | Router Setup | Correct QueryClient & Router context initialization |
+| **`src/styles.css`** | Tailwind CSS Design System | Excellent color palette, semantic tokens, and typography |
+| **`src/routes/__root.tsx`** | Root Route Layout | Proper SSR hydration, fonts, and meta tags |
+| **`src/routes/index.tsx`** | Route Index | Proper auth redirection based on role |
+| **`src/routes/login.tsx`** | Login View | Exposes admin credentials in UI; lacks register/forgot password flow |
+| **`src/routes/dashboard.tsx`** | Teacher Dashboard | Good filtering; depends on flawed status calculation logic |
+| **`src/routes/assignments.tsx`** | Assignment Manager | Fully interactive modal, but delete/create RPCs are unauthenticated |
+| **`src/routes/flags.tsx`** | Student Flags | **Missing route authentication (`beforeLoad`)** |
+| **`src/routes/reports.tsx`** | Parent Reports | **Missing route authentication (`beforeLoad`)** |
+| **`src/routes/users.tsx`** | User Management | Full CRUD works, but endpoints are unprotected against IDOR |
+| **`src/routes/profile.tsx`** | Student Profile | Profile language switcher works; needs real user persistence |
+| **`src/routes/progress.tsx`** | Student Portfolio | Graph rendering is good; depends on attempt history |
+| **`src/routes/students.$id.tsx`** | Student Dossier | **Missing route authentication (`beforeLoad`)** |
+| **`src/routes/practice.index.tsx`** | Student Practice Hub | Leaks assignments from other batches; streak resets prematurely |
+| **`src/routes/practice.$moduleId.tsx`** | Practice Recording | Audio upload sends Base64 data; uses synthetic analysis fallback |
+| **`src/routes/practice.assignment.$assignmentId.tsx`** | Assignment Recording | Same Base64 upload issue as above |
+| **`src/routes/result.$attemptId.tsx`** | Attempt Diagnostic | Clean presentation of waveform segments and scores |
+| **`src/server/data.ts`** | Server Functions RPC | **0 authorization checks, no Zod input schema validation** |
+| **`src/server/db/client.ts`** | MongoDB Connection Pool | Falls back to in-memory mock data silently during DB errors |
+| **`src/server/db/schemas.ts`** | BSON TypeScript Schemas | Clear types, but missing compound indexes for tenant separation |
+| **`src/server/services/auth.service.ts`** | Authentication Service | Insecure auto-registration of unknown users; hardcoded admin email |
+| **`src/server/services/student.service.ts`** | Student Roster Service | Status calculation overwrites manual teacher changes |
+| **`src/server/services/attempt.service.ts`** | Attempt Service | Base64 audio storage; global module completion update bug |
+| **`src/server/services/assignment.service.ts`** | Assignment Service | Cascade deletes without checking teacher ownership |
+| **`src/server/services/message.service.ts`** | Direct Messaging | Working student-teacher communication |
+| **`src/server/services/module.service.ts`** | Curriculum Modules | Global completion flag instead of per-student tracking |
+| **`src/server/services/user.service.ts`** | User Service | Hardcoded admin deletion check |
+| **`src/features/practice/hooks/useAudioRecorder.ts`** | Web Audio & Recording | WebM-only without Safari fallback; memory leak risk if unmounted early |
+| **`src/features/practice/lib/audio-analyzer.ts`** | Acoustic Signal Engine | Simulated filler detection with `Math.random()`; pseudo-scoring |
+| **`src/features/reports/lib/whatsapp.ts`** | WhatsApp Integration | Hardcoded institute name in share URL |
+| **`src/components/tarang/Waveform.tsx`** | Canvas 60 FPS Waveform | Clean, performant canvas drawing logic for live, result, and thumbnail modes |
+| **`src/components/tarang/Button.tsx`** | Button Primitive | Clean component supporting deck and console radiuses |
+| **`src/components/tarang/StatusDot.tsx`** | Status Dot Primitive | Clean status indicator component |
+| **`eslint.config.js`** | Linter Configuration | 407 ESLint errors currently blocking pipeline |
+| **`scripts/seed-mongo.ts`** | Database Seeder | Seeds realistic mock data; contains hardcoded plaintext passwords |
+
+---
+
+## 6. Actionable Production Readiness Roadmap
+
+To transition this codebase from prototype to production-grade SaaS, follow these sequential phases:
+
+```mermaid
+graph LR
+    P1[Phase 1: Security & Auth Hardening] --> P2[Phase 2: Database & Storage Refactoring]
+    P2 --> P3[Phase 3: Speech/AI Engine Integration]
+    P3 --> P4[Phase 4: Testing & CI/CD DevOps]
+```
+
+### Phase 1: Security & Auth Hardening
+1. **Remove all hardcoded credentials and emails** from `login.tsx`, `seed-mongo.ts`, `auth.service.ts`, and `user.service.ts`.
+2. **Remove auto-registration from `AuthService.authenticateUserWithRole`**: Fail with `401 Unauthorized` if the user does not exist or password does not match.
+3. **Add Middleware / Session Guard to all Server Functions in `src/server/data.ts`**: Verify the JWT cookie and assert `session.role === 'teacher' | 'admin'` before allowing mutations.
+4. **Add `beforeLoad` route guards** to `flags.tsx`, `reports.tsx`, and `students.$id.tsx`.
+5. **Enforce Zod input validation** on all server functions rather than identity functions.
+
+### Phase 2: Database & Storage Refactoring
+1. **Integrate S3 / Cloudflare R2 / MinIO**: Stream audio recordings from the client directly to Object Storage via presigned URLs; store only the audio URL in MongoDB.
+2. **Fix Module Progress Tracking**: Remove `completed` from `ModuleDoc` and create a `student_module_progress` collection (or query `attempts` per `studentId`).
+3. **Fix Student Status Logic**: Store status persistently; do not dynamically overwrite teacher flags on load based on `updatedAt`.
+4. **Add multi-tenant institute isolation** (institute ID, class ID) to replace hardcoded strings.
+
+### Phase 3: Real Speech / AI Pipeline
+1. **Replace simulated acoustic scoring** with real Speech-to-Text (e.g., Whisper API, Google Cloud Speech-to-Text with phoneme analysis) for accurate filler detection, grammar, and pronunciation scoring.
+2. **Implement cross-browser audio recording** with `audio/webm` and `audio/mp4` MIME fallbacks for iOS Safari.
+
+### Phase 4: Quality, Testing & DevOps
+1. **Fix 407 ESLint/Prettier errors** (`npm run format && npm run lint`).
+2. **Add Unit & Integration Tests** using Vitest and React Testing Library for components, services, and route loaders.
+3. **Add End-to-End Tests** using Playwright for login, recording workflow, and dashboard navigation.
+4. **Create a production Dockerfile and CI/CD workflow** (`.github/workflows/ci.yml`).
+5. **Add centralized logging & healthcheck endpoint** (`/api/health`).
+
+---
+
+## 7. Conclusion
+
+**Is this repository production-ready right now?**  
+**No.** It is a functional, visually well-structured **prototype/demo**. It must not be deployed to real users or loaded with sensitive student data until the P0 security vulnerabilities, authorization gaps, audio storage issues, and test suites are implemented.

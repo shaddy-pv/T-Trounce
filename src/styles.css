@@ -1,0 +1,152 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Tarang Design System
+ *
+ * Functional color, not decorative. Warm near-black ink, parchment text,
+ * single teal accent, amber/rust used only for status meaning.
+ * Two radius systems: 4px (teacher / data) vs 12px (student / mic deck).
+ */
+
+@theme inline {
+  /* Surfaces */
+  --color-ink-950: #100e0c;
+  --color-ink-900: #1b1815;
+  --color-ink-800: #242019;
+  --color-hairline: #2e2a26;
+
+  /* Text */
+  --color-text-primary: #ede7dd;
+  --color-text-secondary: #9c9388;
+  --color-text-tertiary: #6b645a;
+
+  /* Functional accents */
+  --color-signal-teal: #3fb8af;
+  --color-static-amber: #e2a33c;
+  --color-alert-rust: #c1503b;
+
+  /* Shadcn semantic mappings — kept so shadcn primitives don't break */
+  --color-background: var(--color-ink-950);
+  --color-foreground: var(--color-text-primary);
+  --color-card: var(--color-ink-900);
+  --color-card-foreground: var(--color-text-primary);
+  --color-popover: var(--color-ink-900);
+  --color-popover-foreground: var(--color-text-primary);
+  --color-primary: var(--color-signal-teal);
+  --color-primary-foreground: var(--color-ink-950);
+  --color-secondary: var(--color-ink-800);
+  --color-secondary-foreground: var(--color-text-primary);
+  --color-muted: var(--color-ink-800);
+  --color-muted-foreground: var(--color-text-secondary);
+  --color-accent: var(--color-ink-800);
+  --color-accent-foreground: var(--color-text-primary);
+  --color-destructive: var(--color-alert-rust);
+  --color-destructive-foreground: var(--color-text-primary);
+  --color-border: var(--color-hairline);
+  --color-input: var(--color-hairline);
+  --color-ring: var(--color-signal-teal);
+  --color-ring-offset-background: var(--color-ink-950);
+
+  /* Type — three roles */
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Radius — two systems, intentional */
+  --radius-deck: 12px;
+  --radius-console: 4px;
+
+  /* Shadcn radius tokens (fall back to console scale) */
+  --radius: 4px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-hairline);
+  }
+
+  html,
+  body {
+    background-color: var(--color-ink-950);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Numbers are measurement → mono everywhere they appear in a .num */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  .display {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /* Focus rings — visible, teal, never removed */
+  :focus-visible {
+    outline: 2px solid var(--color-signal-teal);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-signal-teal) 35%, transparent);
+    color: var(--color-text-primary);
+  }
+}
+
+@layer utilities {
+  .border-hairline {
+    border-color: var(--color-hairline);
+  }
+  .bg-ink-950 {
+    background-color: var(--color-ink-950);
+  }
+  .bg-ink-900 {
+    background-color: var(--color-ink-900);
+  }
+  .bg-ink-800 {
+    background-color: var(--color-ink-800);
+  }
+  .text-primary-warm {
+    color: var(--color-text-primary);
+  }
+  .text-secondary-warm {
+    color: var(--color-text-secondary);
+  }
+  .text-tertiary-warm {
+    color: var(--color-text-tertiary);
+  }
+}
+
+/* Recording pulse — amber, calm, not frantic */
+@keyframes tarang-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+}
+.tarang-pulse {
+  animation: tarang-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tarang-pulse {
+    animation: none;
+  }
+}
