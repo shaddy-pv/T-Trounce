@@ -63,12 +63,14 @@ export interface AttemptDoc {
   audioSize?: number; // File size in bytes
   transcriptionStatus?: "pending" | "processing" | "completed" | "failed";
   durationSec: number;
+  targetDurationSec?: number; // Target prompt duration — used for completion%
   pronunciation: number;
   vocabulary: number;
   grammar: number;
   fillerCount: number;
   pauseCount: number;
   feedback: string;
+  teacherFeedback?: string;
   waveform: WaveformSegment[];
   createdAt: Date;
 }

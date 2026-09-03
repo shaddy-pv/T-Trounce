@@ -13,6 +13,7 @@ import { useState, useRef, useEffect } from "react";
 import { Waveform } from "@/components/tarang/Waveform";
 import { fetchAttemptByIdFn } from "@/server/data";
 import { useUser } from "@/lib/auth";
+import { FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
 import type { AttemptResult } from "@/types";
 
 export const Route = createFileRoute("/result/$attemptId")({
@@ -88,15 +89,10 @@ function ResultPage() {
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
 
-  const scores = [
-    { label: "Pronunciation", value: result.pronunciation },
-    { label: "Vocabulary", value: result.vocabulary },
-    { label: "Grammar", value: result.grammar },
-  ];
-  const lowest = scores.reduce((a, b) => (a.value <= b.value ? a : b));
+
 
   const transcriptWords = (result.transcript || "").split(/(\s+)/);
-  const fillerKeywords = new Set(["um", "uh", "matlab", "like", "actually", "er", "ah"]);
+  const fillerKeywords = FILLER_KEYWORDS;
 
   // Determine retake target route
   const retakeTo = result.assignmentId
@@ -277,54 +273,37 @@ function ResultPage() {
           </div>
         </section>
 
-        {/* Three scores */}
-        <section className="mt-5 px-5">
-          <div className="grid grid-cols-3 divide-x divide-[#2E2A26] rounded-[12px] border border-hairline bg-ink-900">
-            {scores.map((s) => (
-              <div key={s.label} className="px-3 py-4 text-center">
-                <p className="num text-[10px] uppercase tracking-[0.14em] text-tertiary-warm">
-                  {s.label.slice(0, 4)}
-                </p>
-                <p
-                  className={
-                    "num mt-1 text-[24px] leading-none " +
-                    (s.value < 50
-                      ? "text-[#C1503B]"
-                      : s.value < 70
-                        ? "text-[#E2A33C]"
-                        : "text-primary-warm")
-                  }
-                >
-                  {s.value}
-                  <span className="num text-[13px] text-tertiary-warm">%</span>
-                </p>
-              </div>
-            ))}
-          </div>
 
-          <p className="mt-3 text-[12px]">
-            <span className="num uppercase tracking-[0.14em] text-tertiary-warm">
-              Primary Coaching Area ·{" "}
-            </span>
-            <span className="text-[#E2A33C]">{lowest.label}</span>
-          </p>
-        </section>
 
-        {/* Feedback */}
+
+
+        {/* Teacher Feedback Card */}
         <section className="mt-5 px-5">
           <div className="rounded-[12px] border border-hairline bg-ink-900 p-4">
             <p className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
-              Acoustic Diagnostic Feedback
+              Teacher Feedback
             </p>
-            <p className="mt-2 text-[14px] leading-[1.55] text-primary-warm">{result.feedback}</p>
+            {result.teacherFeedback ? (
+              <p className="mt-2 text-[14px] leading-[1.55] text-primary-warm">
+                {result.teacherFeedback}
+              </p>
+            ) : (
+              <p className="mt-2 text-[13px] leading-[1.55] text-tertiary-warm italic">
+                Teacher will review your recording and provide feedback on this submission soon.
+              </p>
+            )}
           </div>
         </section>
 
         {/* Action Buttons */}
         <section className="mt-8 flex flex-col gap-3 px-5">
+          {/* replace:true prevents the retake→record→result loop from stacking history entries.
+              Back button will always return to /practice (where the student started), not a
+              previous result page. */}
           <Link
             to={retakeTo as "/practice"}
             params={retakeParams as Record<string, string>}
+            replace
             className="flex w-full items-center justify-center gap-2 rounded-[12px] border border-[#3FB8AF]/40 bg-[#3FB8AF]/10 py-3.5 text-[14px] font-semibold text-[#3FB8AF] transition hover:bg-[#3FB8AF]/20"
           >
             <RotateCcw size={16} />

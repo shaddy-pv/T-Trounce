@@ -89,6 +89,12 @@ function AssignmentsPage() {
     setIsSubmitting(true);
     setFormError(null);
 
+    // Safely parse dueDate to ISO string only if valid, otherwise undefined
+    const parsedDueDate =
+      dueDate && dueDate.trim().length > 0 && !isNaN(new Date(dueDate).getTime())
+        ? new Date(dueDate).toISOString()
+        : undefined;
+
     try {
       const created = (await createAssignmentFn({
         data: {
@@ -101,7 +107,7 @@ function AssignmentsPage() {
           targetBatch,
           teacherId: currentUser?.userId || "teacher-1",
           teacherName: currentUser?.name || "Faculty",
-          dueDate,
+          dueDate: parsedDueDate,
         },
       })) as AssignmentPublic;
 
@@ -114,6 +120,7 @@ function AssignmentsPage() {
       setTitle("");
       setInstructions("");
       setPrompt("");
+      setDueDate("");
       await router.invalidate();
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : "Failed to create homework assignment");
@@ -279,7 +286,16 @@ function AssignmentsPage() {
                 <div className="mt-4 flex items-center justify-between border-t border-hairline pt-3 text-[12px] text-tertiary-warm">
                   <span className="flex items-center gap-1.5">
                     <Calendar size={13} />
-                    Due: {a.dueDate || "Not set"}
+                    Due:{" "}
+                    {a.dueDate && !isNaN(new Date(a.dueDate).getTime())
+                      ? new Date(a.dueDate).toLocaleString("en-US", {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })
+                      : "Not set"}
                   </span>
                   <button
                     onClick={() => handleDeleteAssignment(a.id, a.title)}

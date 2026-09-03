@@ -13,6 +13,7 @@ import { AuthService, type SessionPayload } from "./services/auth.service";
 import { UserService, type UserPublic } from "./services/user.service";
 import { AssignmentService, type AssignmentPublic } from "./services/assignment.service";
 import { MessageService } from "./services/message.service";
+import { TranscriptionService } from "./services/transcription.service";
 
 import { LoginInputSchema } from "./validators/auth.validator";
 import { CreateUserInputSchema, DeleteUserInputSchema } from "./validators/user.validator";
@@ -278,6 +279,24 @@ export const fetchAttemptByIdFn = createServerFn({ method: "GET" })
   });
 
 /**
+ * Server Function: Save Teacher Feedback on student attempt (Protected: Faculty/Admin)
+ */
+export const saveTeacherFeedbackFn = createServerFn({ method: "POST" })
+  .middleware([teacherOnlyMiddleware])
+  .validator((input: unknown) =>
+    z
+      .object({
+        attemptId: z.string().min(1),
+        feedback: z.string().min(1),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }): Promise<{ success: boolean }> => {
+    const success = await AttemptService.saveTeacherFeedback(data.attemptId, data.feedback);
+    return { success };
+  });
+
+/**
  * Server Function: Update student status (Protected: Faculty/Admin)
  */
 export const updateStudentStatusFn = createServerFn({ method: "POST" })
@@ -335,3 +354,32 @@ export const markMessageReadFn = createServerFn({ method: "POST" })
     const success = await MessageService.markMessageRead(data.messageId);
     return { success };
   });
+
+/**
+ * Server Function: Stream-transcribe a real-time audio chunk from live microphone stream
+ */
+export const streamTranscribeChunkFn = createServerFn({ method: "POST" })
+  .middleware([authenticatedMiddleware])
+  .validator((input: unknown) => {
+    return z
+      .object({
+        audioBase64: z.string(),
+        mimeType: z.string().default("audio/wav"),
+        promptContext: z.string().optional(),
+        sequence: z.number().default(0),
+        isFinal: z.boolean().default(false),
+      })
+      .parse(input);
+  })
+  .handler(async ({ data }): Promise<{ text: string; confidence: number; isFinal: boolean }> => {
+    const cleanBase64 = data.audioBase64.replace(/^data:[^;]+;base64,/, "");
+    const buffer = Buffer.from(cleanBase64, "base64");
+    return await TranscriptionService.transcribeChunk(
+      buffer,
+      data.mimeType,
+      data.promptContext,
+      data.sequence,
+    );
+  });
+
+

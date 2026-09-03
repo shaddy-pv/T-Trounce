@@ -1,7 +1,7 @@
 import { MongoClient, Db } from "mongodb";
 import { env } from "@/config/env";
-import { modules, studentRoster } from "@/lib/tarang-data";
-import type { ModuleDoc, StudentDoc, BatchDoc } from "./schemas";
+import { modules } from "@/lib/tarang-data";
+import type { ModuleDoc, BatchDoc, UserDoc, StudentDoc } from "./schemas";
 
 declare global {
   var _mongoClient: MongoClient | undefined;
@@ -62,37 +62,32 @@ export async function autoSeedDatabase(db: Db) {
       await modulesCol.insertMany(moduleDocs);
     }
 
+    // Clean up legacy mock dummy students that are not registered in the users collection
+    const usersCol = db.collection<UserDoc>("users");
+    const realUsers = await usersCol.find({}).toArray();
+    const realUserIds = new Set(realUsers.map((u) => u.id));
+    const realEmails = new Set(realUsers.map((u) => u.email.toLowerCase()));
+
     const studentsCol = db.collection<StudentDoc>("students");
-    const studentCount = await studentsCol.countDocuments();
-    if (studentCount === 0) {
-      const studentDocs: StudentDoc[] = studentRoster.map((s) => ({
-        id: s.id,
-        name: s.name,
-        status: s.status,
-        focus: s.focus,
-        lastActive: s.lastActive,
-        scorePct: s.scorePct,
-        trendPct: s.trendPct,
-        waveform: s.waveform,
-        inactiveDays: s.inactiveDays,
-        flagReason: s.flagReason,
-        batchId: "batch-class-xa",
-        updatedAt: new Date(),
-      }));
-      await studentsCol.insertMany(studentDocs);
+    // Remove any student doc where id is neither a real user ID nor a real email
+    const allStudents = await studentsCol.find({}).toArray();
+    for (const st of allStudents) {
+      if (!realUserIds.has(st.id) && !realEmails.has(st.id.toLowerCase())) {
+        await studentsCol.deleteOne({ _id: st._id });
+      }
     }
 
     const batchesCol = db.collection<BatchDoc>("batches");
     const batchCount = await batchesCol.countDocuments();
     if (batchCount === 0) {
       await batchesCol.insertOne({
-        id: "batch-class-xa",
+        id: "summer-morning",
         season: "summer",
         time: "morning",
-        name: "Class X-A",
+        name: "Summer — Morning Batch",
         institution: "Sharma Coaching, Patna",
-        teacherName: "Mrs. Mehta",
-        studentCount: studentRoster.length,
+        teacherName: "Mr. Sharma",
+        studentCount: 0,
         createdAt: new Date(),
       });
     }
@@ -100,3 +95,4 @@ export async function autoSeedDatabase(db: Db) {
     console.warn("[MongoDB Auto-Seed Warning]", (err as Error).message);
   }
 }
+

@@ -19,6 +19,7 @@ export const AttemptResultSchema = z.object({
   audioSize: z.number().optional(),
   transcriptionStatus: z.enum(["pending", "processing", "completed", "failed"]).optional(),
   durationSec: z.number().nonnegative(),
+  targetDurationSec: z.number().nonnegative().optional(),
   pronunciation: z.number().min(0).max(100),
   vocabulary: z.number().min(0).max(100),
   grammar: z.number().min(0).max(100),

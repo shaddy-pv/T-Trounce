@@ -39,19 +39,21 @@ export class AttemptService {
           assignmentId: doc.assignmentId,
           assignmentTitle: doc.assignmentTitle,
           prompt: doc.prompt,
-          transcript: doc.transcript || "Spoken response recorded by student.",
+          transcript: doc.transcript || "",
           audioId: doc.audioId,
           audioUrl: doc.audioUrl,
           audioMimeType: doc.audioMimeType,
           audioSize: doc.audioSize,
           transcriptionStatus: doc.transcriptionStatus || "completed",
           durationSec: doc.durationSec,
+          targetDurationSec: doc.targetDurationSec,
           pronunciation: doc.pronunciation,
           vocabulary: doc.vocabulary,
           grammar: doc.grammar,
           fillerCount: doc.fillerCount,
           pauseCount: doc.pauseCount,
           feedback: doc.feedback,
+          teacherFeedback: doc.teacherFeedback,
           waveform: doc.waveform,
           createdAt: doc.createdAt
             ? new Date(doc.createdAt).toISOString()
@@ -148,13 +150,14 @@ export class AttemptService {
           assignmentId: payload.assignmentId || payload.result.assignmentId,
           assignmentTitle: payload.result.assignmentTitle,
           prompt: payload.result.prompt,
-          transcript: transcript || `Spoken response on "${payload.result.prompt}"`,
+          transcript: transcript || "",
           audioId,
           audioUrl: finalAudioUrl,
           audioMimeType,
           audioSize,
           transcriptionStatus,
           durationSec: payload.result.durationSec,
+          targetDurationSec: payload.result.targetDurationSec,
           pronunciation: payload.result.pronunciation,
           vocabulary: payload.result.vocabulary,
           grammar: payload.result.grammar,
@@ -167,17 +170,52 @@ export class AttemptService {
 
         await db.collection<AttemptDoc>("attempts").insertOne(attemptDoc);
 
-        // Mark module completed if moduleId
-        if (payload.moduleId && payload.moduleId.startsWith("module-")) {
-          await db
-            .collection<ModuleDoc>("modules")
-            .updateOne({ id: payload.moduleId }, { $set: { completed: true } });
-        }
+        // Compute completion percentage score based on recorded duration vs target duration (same as student dashboard)
+        const avgScore =
+          payload.result.targetDurationSec && payload.result.targetDurationSec > 0
+            ? Math.min(
+                100,
+                Math.round((payload.result.durationSec / payload.result.targetDurationSec) * 100),
+              )
+            : Math.round(
+                (payload.result.pronunciation +
+                  payload.result.vocabulary +
+                  payload.result.grammar) /
+                  3,
+              );
 
-        // Compute overall score
-        const avgScore = Math.round(
-          (payload.result.pronunciation + payload.result.vocabulary + payload.result.grammar) / 3,
-        );
+        // Derive the weakest metric to show as "focus" area for the teacher
+        const { pronunciation, vocabulary, grammar } = payload.result;
+        let focus = "—";
+        const minScore = Math.min(pronunciation, vocabulary, grammar);
+        if (minScore === pronunciation) focus = "Pronunciation";
+        else if (minScore === vocabulary) focus = "Vocabulary";
+        else focus = "Grammar";
+
+        // Compute trendPct from previous attempt's completion score (if one exists)
+        const prevAttempt = await db
+          .collection<AttemptDoc>("attempts")
+          .findOne(
+            { studentId: payload.studentId, id: { $ne: payload.result.id } },
+            { sort: { createdAt: -1 } },
+          );
+        let prevScore = avgScore;
+        if (prevAttempt) {
+          if (prevAttempt.targetDurationSec && prevAttempt.targetDurationSec > 0) {
+            prevScore = Math.min(
+              100,
+              Math.round((prevAttempt.durationSec / prevAttempt.targetDurationSec) * 100),
+            );
+          } else {
+            prevScore = Math.round(
+              ((prevAttempt.pronunciation ?? 70) +
+                (prevAttempt.vocabulary ?? 70) +
+                (prevAttempt.grammar ?? 70)) /
+                3,
+            );
+          }
+        }
+        const trendPct = avgScore - prevScore;
 
         // Check if student doc exists in students collection; if not, sync from users collection
         const studentExists = await db
@@ -196,10 +234,10 @@ export class AttemptService {
             id: payload.studentId,
             name: studentName,
             status: "on-track",
-            focus: "Introductory module practice",
+            focus,
             lastActive: "Today",
             scorePct: avgScore,
-            trendPct: 0,
+            trendPct,
             waveform:
               payload.result.waveform.length > 0
                 ? payload.result.waveform
@@ -210,18 +248,33 @@ export class AttemptService {
             updatedAt: new Date(),
           });
         } else {
+          // Build flagReason from real data: inactivity days + current score
+          const inactiveDays = 0; // just submitted so always 0 here
+          const flagReason =
+            avgScore < 50
+              ? `${focus} ${avgScore}% · Score low`
+              : trendPct <= -10
+                ? `Score down ${Math.abs(trendPct)}%`
+                : inactiveDays > 4
+                  ? `Inactive ${inactiveDays}d`
+                  : undefined;
+
           await db.collection<StudentDoc>("students").updateOne(
             { id: payload.studentId },
             {
               $set: {
                 lastActive: "Today",
                 scorePct: avgScore,
+                trendPct,
+                focus,
+                ...(flagReason !== undefined ? { flagReason } : {}),
                 waveform: payload.result.waveform,
                 updatedAt: new Date(),
               },
             },
           );
         }
+
 
         return { success: true, id: payload.result.id, audioUrl: finalAudioUrl };
       }
@@ -247,19 +300,21 @@ export class AttemptService {
             assignmentId: doc.assignmentId,
             assignmentTitle: doc.assignmentTitle,
             prompt: doc.prompt,
-            transcript: doc.transcript || "Spoken response recorded by student.",
+            transcript: doc.transcript || "",
             audioId: doc.audioId,
             audioUrl: doc.audioUrl,
             audioMimeType: doc.audioMimeType,
             audioSize: doc.audioSize,
             transcriptionStatus: doc.transcriptionStatus || "completed",
             durationSec: doc.durationSec,
+          targetDurationSec: doc.targetDurationSec,
             pronunciation: doc.pronunciation,
             vocabulary: doc.vocabulary,
             grammar: doc.grammar,
             fillerCount: doc.fillerCount,
             pauseCount: doc.pauseCount,
             feedback: doc.feedback,
+            teacherFeedback: doc.teacherFeedback,
             waveform: doc.waveform,
             createdAt: doc.createdAt
               ? new Date(doc.createdAt).toISOString()
@@ -271,5 +326,33 @@ export class AttemptService {
       console.error("[AttemptService.getAttemptById Error]", err);
     }
     throw new Error(`Attempt with ID "${attemptId}" was not found.`);
+  }
+
+  /**
+   * Save or update teacher feedback on an attempt (and sync to all attempts of that assignment for the student)
+   */
+  static async saveTeacherFeedback(attemptId: string, feedback: string): Promise<boolean> {
+    try {
+      const db = await getDb();
+      if (db) {
+        const attempt = await db.collection<AttemptDoc>("attempts").findOne({ id: attemptId });
+        if (attempt) {
+          await db.collection<AttemptDoc>("attempts").updateOne(
+            { id: attemptId },
+            { $set: { teacherFeedback: feedback } },
+          );
+          if (attempt.assignmentId) {
+            await db.collection<AttemptDoc>("attempts").updateMany(
+              { studentId: attempt.studentId, assignmentId: attempt.assignmentId },
+              { $set: { teacherFeedback: feedback } },
+            );
+          }
+          return true;
+        }
+      }
+    } catch (err) {
+      console.error("[AttemptService.saveTeacherFeedback Error]", err);
+    }
+    return false;
   }
 }

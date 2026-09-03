@@ -10,7 +10,7 @@ import {
   sendDirectMessageFn,
 } from "@/server/data";
 import { useUser } from "@/lib/auth";
-import { BookOpen, Calendar, Sparkles, MessageSquare, Check, Send } from "lucide-react";
+import { BookOpen, Calendar, Sparkles, MessageSquare, Check, Send, Clock } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useRouter } from "@tanstack/react-router";
 
@@ -32,9 +32,19 @@ export const Route = createFileRoute("/practice/")({
   },
   loader: async ({ context }) => {
     const studentId = context.session?.userId;
+    const studentSession = context.session?.sessionSeason;
+    const studentBatch = context.session?.batchTime;
+    const studentBatchId = context.session?.batchId;
+
     const [modules, assignments, messages, attempts] = await Promise.all([
       fetchModulesFn(),
-      fetchAssignmentsFn(),
+      fetchAssignmentsFn({
+        data: {
+          session: studentSession,
+          batch: studentBatch,
+          batchId: studentBatchId,
+        },
+      }),
       studentId ? fetchStudentMessagesFn({ data: studentId }) : Promise.resolve([]),
       studentId ? fetchStudentAttemptsFn({ data: studentId }) : Promise.resolve([]),
     ]);
@@ -60,16 +70,32 @@ function PracticeHubBody() {
   const [msgs, setMsgs] = useState(messages || []);
   const [replyText, setReplyText] = useState("");
   const [isReplying, setIsReplying] = useState(false);
-  const completedCount = useMemo(() => {
+
+  // Count completed modules this week (real, from actual attempts)
+  const completedModulesCount = useMemo(() => {
     const completedModIds = new Set(
       attempts?.filter((att) => att.moduleId).map((att) => att.moduleId),
     );
-    return modules.filter((m) => m.completed || completedModIds.has(m.id)).length;
+    return modules.filter((m) => completedModIds.has(m.id)).length;
   }, [modules, attempts]);
 
+  // Count completed assignments this week (from actual attempts)
+  const completedAssignmentsCount = useMemo(() => {
+    const completedAssignIds = new Set(
+      attempts?.filter((att) => att.assignmentId).map((att) => att.assignmentId),
+    );
+    return assignments.filter((a) => completedAssignIds.has(a.id)).length;
+  }, [assignments, attempts]);
+
+  // Total items to complete = actual assigned homework + available modules
+  const totalCount = modules.length + assignments.length;
+  const completedCount = completedModulesCount + completedAssignmentsCount;
+
+  // Track FIRST (earliest) attempt per assignment — for submitted date display
   const attemptsByAssignment = useMemo(() => {
     const map = new Map<string, (typeof attempts)[0]>();
-    attempts?.forEach((att) => {
+    // attempts are sorted newest-first from server, so iterate in reverse to keep earliest
+    [...(attempts ?? [])].reverse().forEach((att) => {
       if (att.assignmentId) map.set(att.assignmentId, att);
     });
     return map;
@@ -77,13 +103,13 @@ function PracticeHubBody() {
 
   const attemptsByModule = useMemo(() => {
     const map = new Map<string, (typeof attempts)[0]>();
-    attempts?.forEach((att) => {
+    [...(attempts ?? [])].reverse().forEach((att) => {
       if (att.moduleId) map.set(att.moduleId, att);
     });
     return map;
   }, [attempts]);
 
-  // Calculate 7-day streak based on attempt timestamps
+  // Calculate 7-day streak based on attempt timestamps with grace period
   const { streakDays, streakGraph } = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -91,7 +117,7 @@ function PracticeHubBody() {
     let streakCount = 0;
 
     if (attempts && attempts.length > 0) {
-      // Map attempts to their midnight date string to count unique days
+      // Map attempts to their midnight date timestamp to count unique days
       const activeDays = new Set(
         attempts.map((a) => {
           const d = new Date(a.createdAt || Date.now());
@@ -109,8 +135,15 @@ function PracticeHubBody() {
         }
       }
 
-      // Compute streak backwards from today
+      // Check if student recorded today
+      const hasRecordedToday = activeDays.has(today.getTime());
+
+      // If student hasn't recorded today yet, count backward from yesterday to preserve active streak
       const curr = new Date(today);
+      if (!hasRecordedToday) {
+        curr.setDate(curr.getDate() - 1);
+      }
+
       while (activeDays.has(curr.getTime())) {
         streakCount++;
         curr.setDate(curr.getDate() - 1);
@@ -173,7 +206,7 @@ function PracticeHubBody() {
           <div className="text-right">
             <p className="num text-[12px] uppercase tracking-wider text-tertiary-warm">this week</p>
             <p className="num mt-1 text-[14px] text-secondary-warm">
-              {completedCount} / {modules.length} completed
+              {completedCount} / {totalCount} completed
             </p>
           </div>
         </div>
@@ -276,9 +309,10 @@ function PracticeHubBody() {
 
           <div className="mt-3 flex flex-col gap-3">
             {assignments.map((a) => {
-              const isLate = a.dueDate ? new Date(a.dueDate).getTime() < Date.now() : false;
-              const formattedDate = a.dueDate
-                ? new Date(a.dueDate).toLocaleString("en-US", {
+              const isDueValid = !!a.dueDate && !isNaN(new Date(a.dueDate).getTime());
+              const isLate = isDueValid ? new Date(a.dueDate!).getTime() < Date.now() : false;
+              const dueDateFormatted = isDueValid
+                ? new Date(a.dueDate!).toLocaleString("en-US", {
                     weekday: "short",
                     month: "short",
                     day: "numeric",
@@ -289,11 +323,24 @@ function PracticeHubBody() {
 
               const submission = attemptsByAssignment.get(a.id);
               const isDone = !!submission;
-              const overallScore = submission
-                ? Math.round(
-                    (submission.pronunciation + submission.vocabulary + submission.grammar) / 3,
-                  )
-                : null;
+
+              // Completion % = how much of the target duration the student recorded, capped at 100%
+              const completionPct =
+                isDone && submission && a.durationSec > 0
+                  ? Math.min(100, Math.round((submission.durationSec / a.durationSec) * 100))
+                  : null;
+
+              // First submission date from createdAt (attempts are sorted earliest-first in map)
+              const submittedDateFormatted =
+                isDone && submission?.createdAt
+                  ? new Date(submission.createdAt).toLocaleString("en-US", {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })
+                  : null;
 
               return (
                 <div
@@ -301,20 +348,25 @@ function PracticeHubBody() {
                   className={`rounded-[12px] border p-4 transition ${
                     isDone
                       ? "border-[#3FB8AF]/50 bg-ink-900 shadow-sm"
-                      : "border-[#3FB8AF]/30 bg-ink-900/90 hover:border-[#3FB8AF]"
+                      : isLate
+                        ? "border-[#E2A33C] ring-1 ring-[#E2A33C]/40 bg-ink-900/95 shadow-md shadow-[#E2A33C]/10"
+                        : "border-[#3FB8AF]/30 bg-ink-900/90 hover:border-[#3FB8AF]"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="num text-[11px] uppercase tracking-wider text-[#3FB8AF]">
+                      <span className={`num text-[11px] uppercase tracking-wider ${isLate && !isDone ? "text-[#E2A33C]" : "text-[#3FB8AF]"}`}>
                         {a.targetSession} · {a.targetBatch} batch
                       </span>
-                      {isDone && (
+                      {isDone ? (
                         <span className="inline-flex items-center gap-1 rounded bg-[#3FB8AF]/20 px-2 py-0.5 num text-[11px] font-semibold text-[#3FB8AF]">
-                          <Check size={11} /> Done{" "}
-                          {overallScore !== null ? `· ${overallScore}%` : ""}
+                          <Check size={11} /> Done{completionPct !== null ? ` · ${completionPct}%` : ""}
                         </span>
-                      )}
+                      ) : isLate ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-[#E2A33C]/20 px-2 py-0.5 num text-[11px] font-semibold text-[#E2A33C]">
+                          <Clock size={11} /> Overdue
+                        </span>
+                      ) : null}
                     </div>
                     <span className="num text-[11px] text-tertiary-warm">
                       {a.difficulty} · {a.durationSec}s
@@ -333,21 +385,35 @@ function PracticeHubBody() {
 
                   <div className="mt-3 flex items-center justify-between border-t border-hairline pt-2 text-[12px]">
                     <span
-                      className={`flex items-center gap-1.5 ${isLate && !isDone ? "text-[#C1503B]" : "text-tertiary-warm"}`}
+                      className={`flex items-center gap-1.5 ${isLate && !isDone ? "text-[#E2A33C] font-medium" : "text-tertiary-warm"}`}
                     >
                       <Calendar size={13} />
-                      {isDone ? "Submitted" : isLate ? "Late: " : "Due: "} {formattedDate}
+                      {isDone
+                        ? submittedDateFormatted
+                          ? `Submitted ${submittedDateFormatted}`
+                          : "Submitted"
+                        : isLate
+                          ? `Past Due: ${dueDateFormatted}`
+                          : `Due: ${dueDateFormatted}`}
                     </span>
 
                     <Link
                       to="/practice/assignment/$assignmentId"
                       params={{ assignmentId: a.id }}
                       className={`inline-flex items-center gap-1.5 font-medium hover:underline ${
-                        isDone ? "text-[#3FB8AF]" : "text-[#3FB8AF]"
+                        isDone
+                          ? "text-[#3FB8AF]"
+                          : isLate
+                            ? "text-[#E2A33C]"
+                            : "text-[#3FB8AF]"
                       }`}
                     >
                       <Sparkles size={13} />
-                      {isDone ? "Listen & Review (or Retake) →" : "Record Homework →"}
+                      {isDone
+                        ? "Listen & Review (or Retake) →"
+                        : isLate
+                          ? "Record Homework (Late Submission) →"
+                          : "Record Homework →"}
                     </Link>
                   </div>
                 </div>
@@ -366,13 +432,12 @@ function PracticeHubBody() {
       <ul className="mt-3 flex flex-col gap-3">
         {modules.map((m) => {
           const modSubmission = attemptsByModule.get(m.id);
-          const isDone = !!modSubmission || m.completed;
-          const score = modSubmission
-            ? Math.round(
-                (modSubmission.pronunciation + modSubmission.vocabulary + modSubmission.grammar) /
-                  3,
-              )
-            : null;
+          const isDone = !!modSubmission;
+          // Completion % = how much of the target duration the student recorded, capped at 100%
+          const completionPct =
+            isDone && modSubmission && m.durationSec > 0
+              ? Math.min(100, Math.round((modSubmission.durationSec / m.durationSec) * 100))
+              : null;
 
           return (
             <li key={m.id}>
@@ -391,7 +456,7 @@ function PracticeHubBody() {
                       <p className="text-[15px] text-primary-warm">{m.title}</p>
                       {isDone && (
                         <span className="inline-flex items-center gap-1 rounded bg-[#3FB8AF]/15 px-2 py-0.5 num text-[10px] font-semibold text-[#3FB8AF]">
-                          <Check size={10} /> Done {score !== null ? `· ${score}%` : ""}
+                          <Check size={10} /> Done{completionPct !== null ? ` · ${completionPct}%` : ""}
                         </span>
                       )}
                     </div>

@@ -9,16 +9,20 @@ import {
   Copy,
   Check,
   Award,
+  Send,
 } from "lucide-react";
 import { Waveform } from "@/components/tarang/Waveform";
+import { saveTeacherFeedbackFn } from "@/server/data";
 import type { AttemptResult } from "@/types";
 
 export function AudioTranscriptEvaluator({
   attempt,
   index,
+  isLate,
 }: {
   attempt: AttemptResult;
   index: number;
+  isLate?: boolean;
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -30,6 +34,35 @@ export function AudioTranscriptEvaluator({
   const [copied, setCopied] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Teacher feedback state
+  const [feedbackText, setFeedbackText] = useState(attempt.teacherFeedback || "");
+  const [isSavingFeedback, setIsSavingFeedback] = useState(false);
+  const [feedbackSavedToast, setFeedbackSavedToast] = useState(false);
+
+  // Sync state if attempt changes
+  useEffect(() => {
+    setFeedbackText(attempt.teacherFeedback || "");
+  }, [attempt.id, attempt.teacherFeedback]);
+
+  const handleSaveFeedback = async () => {
+    if (!feedbackText.trim() || !attempt.id) return;
+    setIsSavingFeedback(true);
+    try {
+      await saveTeacherFeedbackFn({
+        data: {
+          attemptId: attempt.id,
+          feedback: feedbackText.trim(),
+        },
+      });
+      setFeedbackSavedToast(true);
+      setTimeout(() => setFeedbackSavedToast(false), 3000);
+    } catch (err) {
+      console.error("Failed to save teacher feedback:", err);
+    } finally {
+      setIsSavingFeedback(false);
+    }
+  };
 
   // Sync duration with prop if updated
   useEffect(() => {
@@ -138,12 +171,21 @@ export function AudioTranscriptEvaluator({
     "literally",
   ]);
 
-  const overallScore = Math.round(
-    (attempt.pronunciation + attempt.vocabulary + attempt.grammar) / 3,
-  );
+  const overallScore =
+    attempt.targetDurationSec && attempt.targetDurationSec > 0
+      ? Math.min(100, Math.round((attempt.durationSec / attempt.targetDurationSec) * 100))
+      : Math.round(
+          (attempt.pronunciation + attempt.vocabulary + attempt.grammar) / 3,
+        );
 
   return (
-    <div className="rounded-[14px] border border-hairline bg-ink-900 p-5 transition-all hover:border-[#9C9388]/60 shadow-sm">
+    <div
+      className={`rounded-[14px] border p-5 transition-all shadow-sm ${
+        isLate
+          ? "border-[#E2A33C] ring-1 ring-[#E2A33C]/40 bg-ink-900 shadow-md shadow-[#E2A33C]/10"
+          : "border-hairline bg-ink-900 hover:border-[#9C9388]/60"
+      }`}
+    >
       {/* Native HTML5 audio element */}
       {attempt.audioUrl && (
         <audio
@@ -180,6 +222,11 @@ export function AudioTranscriptEvaluator({
             <span className="inline-flex items-center gap-1 rounded bg-[#3FB8AF]/15 px-2.5 py-0.5 num text-[11px] font-semibold text-[#3FB8AF]">
               Attempt #{index + 1}
             </span>
+            {isLate && (
+              <span className="inline-flex items-center gap-1 rounded bg-[#E2A33C]/20 px-2.5 py-0.5 num text-[11px] font-semibold text-[#E2A33C]">
+                Late Submission
+              </span>
+            )}
             {attempt.assignmentId && (
               <span
                 className="inline-flex items-center gap-1 rounded bg-[#E2A33C]/15 px-2.5 py-0.5 num text-[11px] font-medium text-[#E2A33C]"
@@ -349,42 +396,44 @@ export function AudioTranscriptEvaluator({
         </div>
       </div>
 
-      {/* Metric Breakdown */}
-      <div className="mt-4 grid grid-cols-3 gap-3">
-        <div className="rounded-[8px] border border-hairline bg-ink-950 p-3 text-center">
-          <p className="num text-[10px] uppercase tracking-wider text-tertiary-warm">
-            Pronunciation
-          </p>
-          <p className="num mt-1 text-[18px] font-semibold text-primary-warm">
-            {attempt.pronunciation}%
-          </p>
+      {/* Teacher Feedback Card */}
+      <div className="mt-5 rounded-[10px] border border-[#3FB8AF]/30 bg-[#3FB8AF]/5 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <MessageSquare size={14} className="text-[#3FB8AF]" />
+            <span className="num text-[11px] uppercase tracking-wider font-semibold text-primary-warm">
+              Teacher Feedback
+            </span>
+          </div>
+          {feedbackSavedToast && (
+            <span className="num inline-flex items-center gap-1 text-[11px] font-medium text-[#3FB8AF]">
+              <Check size={12} /> Feedback saved to student dashboard
+            </span>
+          )}
         </div>
-        <div className="rounded-[8px] border border-hairline bg-ink-950 p-3 text-center">
-          <p className="num text-[10px] uppercase tracking-wider text-tertiary-warm">Vocabulary</p>
-          <p className="num mt-1 text-[18px] font-semibold text-primary-warm">
-            {attempt.vocabulary}%
-          </p>
-        </div>
-        <div className="rounded-[8px] border border-hairline bg-ink-950 p-3 text-center">
-          <p className="num text-[10px] uppercase tracking-wider text-tertiary-warm">
-            Grammar & Flow
-          </p>
-          <p className="num mt-1 text-[18px] font-semibold text-primary-warm">{attempt.grammar}%</p>
+
+        <p className="mt-1 text-[12px] text-secondary-warm">
+          Write feedback for this recording. The student will see this note directly on their homework screen.
+        </p>
+
+        <div className="mt-3 flex flex-col sm:flex-row gap-2">
+          <textarea
+            rows={2}
+            value={feedbackText}
+            onChange={(e) => setFeedbackText(e.target.value)}
+            placeholder="e.g. Great pace and articulation! Try pausing briefly before introducing your second point."
+            className="flex-1 rounded-[8px] border border-hairline bg-ink-950 p-3 text-[13px] text-primary-warm placeholder:text-tertiary-warm focus:border-[#3FB8AF] focus:outline-none resize-none"
+          />
+          <button
+            onClick={handleSaveFeedback}
+            disabled={isSavingFeedback || !feedbackText.trim()}
+            className="inline-flex items-center justify-center gap-1.5 rounded-[8px] bg-[#3FB8AF] px-4 py-2 text-[13px] font-semibold text-[#100E0C] transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 self-end sm:self-auto"
+          >
+            <Send size={13} />
+            {isSavingFeedback ? "Saving..." : "Save Feedback"}
+          </button>
         </div>
       </div>
-
-      {/* AI & Coach Diagnostic Feedback */}
-      {attempt.feedback && (
-        <div className="mt-3.5 flex items-start gap-2.5 rounded-[8px] border border-[#3FB8AF]/30 bg-[#3FB8AF]/5 p-3.5 text-[12px] text-secondary-warm">
-          <MessageSquare size={15} className="shrink-0 text-[#3FB8AF] mt-0.5" />
-          <div>
-            <span className="font-semibold text-primary-warm block mb-0.5">
-              Acoustic Signal Diagnostic:
-            </span>
-            <p>{attempt.feedback}</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

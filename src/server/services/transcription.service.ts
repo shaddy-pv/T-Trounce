@@ -8,21 +8,112 @@ export interface TranscriptionResult {
 }
 
 const COMMON_FILLERS = new Set([
+  // Unambiguous vocal hesitations (English)
   "um",
+  "umm",
+  "ummm",
   "uh",
-  "matlab",
-  "like",
-  "actually",
+  "uhh",
+  "uhm",
   "er",
+  "err",
   "ah",
+  "ahh",
   "hmm",
-  "basically",
-  "literally",
-  "you know",
-  "so yeah",
+  "hmmm",
+  // Unambiguous Hindi / Hinglish vocal stalls (no English word collisions)
+  "matlab",
+  "matlb",
+  "yaani",
+  "yani",
+  "samjhe",
+  "samjha",
+  "haina",
+  "hain-na",
 ]);
 
 export class TranscriptionService {
+  /**
+   * Transcribe an audio chunk in real time during continuous microphone streaming.
+   */
+  static async transcribeChunk(
+    audioBuffer: Buffer,
+    mimeType: string = "audio/wav",
+    promptContext?: string,
+    sequence: number = 0,
+  ): Promise<{ text: string; confidence: number; isFinal: boolean }> {
+    const geminiKey = process.env.GEMINI_API_KEY;
+    const openaiKey = process.env.OPENAI_API_KEY;
+
+    // 1. Try Google Gemini Flash Multimodal Streaming Chunk Transcription
+    if (geminiKey) {
+      try {
+        const base64Audio = audioBuffer.toString("base64");
+        const cleanMime = mimeType.split(";")[0] || "audio/wav";
+
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    {
+                      text: `Transcribe the spoken speech in this continuous audio chunk snippet verbatim, including any spoken filler words (such as um, uh, matlab, hmm). Return only the recognized words as raw text with no markdown formatting. If silence or no speech is present, return an empty response.`,
+                    },
+                    {
+                      inline_data: {
+                        mime_type: cleanMime,
+                        data: base64Audio,
+                      },
+                    },
+                  ],
+                },
+              ],
+            }),
+          },
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+          return { text, confidence: 0.95, isFinal: true };
+        }
+      } catch (err) {
+        console.warn("[TranscriptionService.transcribeChunk] Gemini note:", err);
+      }
+    }
+
+    // 2. Try OpenAI Whisper Streaming Chunk Transcription
+    if (openaiKey) {
+      try {
+        const formData = new FormData();
+        const blob = new Blob([new Uint8Array(audioBuffer)], { type: mimeType });
+        formData.append("file", blob, `chunk-${sequence}.wav`);
+        formData.append("model", "whisper-1");
+        formData.append("language", "en");
+
+        const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${openaiKey}` },
+          body: formData,
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const text = data.text?.trim() || "";
+          return { text, confidence: 0.92, isFinal: true };
+        }
+      } catch (err) {
+        console.warn("[TranscriptionService.transcribeChunk] Whisper note:", err);
+      }
+    }
+
+    return { text: "", confidence: 0.8, isFinal: false };
+  }
+
   /**
    * Transcribe an audio buffer using configured AI transcription service or server acoustic analyzer.
    */
@@ -150,22 +241,12 @@ export class TranscriptionService {
       .trim();
 
     const byteSize = audioBuffer.length;
-    // Estimate spoken duration based on standard WebM audio bitrates (~32kbps)
     const estimatedSecs = Math.max(3, Math.round(byteSize / 4000));
-    const fillers = Math.min(4, Math.max(1, Math.floor(estimatedSecs / 10)));
     const pauses = Math.min(3, Math.max(1, Math.floor(estimatedSecs / 12)));
 
-    let transcript = "";
-    if (cleanPrompt) {
-      transcript = `Hello, speaking on this prompt: "${cleanPrompt}". I practiced my vocal pace and spoken articulation for this session.`;
-    } else {
-      transcript =
-        "Spoken response recorded and processed through Tarang acoustic signal analyzer.";
-    }
-
     return {
-      transcript,
-      fillerCount: fillers,
+      transcript: "",
+      fillerCount: 0,
       pauseCount: pauses,
       confidence: 0.85,
       status: "completed",

@@ -14,12 +14,14 @@ export interface AttemptResult {
   audioSize?: number;
   transcriptionStatus?: "pending" | "processing" | "completed" | "failed";
   durationSec: number;
+  targetDurationSec?: number; // Target prompt duration — used to compute completion%
   pronunciation: number;
   vocabulary: number;
   grammar: number;
   fillerCount: number;
   pauseCount: number;
   feedback: string;
+  teacherFeedback?: string;
   waveform: WaveformSegment[];
   createdAt?: string;
 }

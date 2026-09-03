@@ -21,6 +21,7 @@ dist-ssr
 # Environment Variables
 .env
 .env*.local
+prod
 
 # Wrangler / Cloudflare
 .wrangler/

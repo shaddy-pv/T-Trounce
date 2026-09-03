@@ -14,7 +14,7 @@ import {
 import { Waveform } from "@/components/tarang/Waveform";
 import { fetchModuleByIdFn, fetchStudentAttemptsFn, saveAttemptFn } from "@/server/data";
 import { useAudioRecorder } from "@/features/practice/hooks/useAudioRecorder";
-import { analyzeAudioSignal } from "@/features/practice/lib/audio-analyzer";
+import { analyzeAudioSignal, FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
 import { useUser } from "@/lib/auth";
 import type { Module } from "@/lib/tarang-data";
 import type { AttemptResult } from "@/types";
@@ -27,7 +27,7 @@ export const Route = createFileRoute("/practice/$moduleId")({
     params,
     context,
   }): Promise<{
-    mod: Module | null;
+    mod: any;
     existingAttempt: AttemptResult | null;
   }> => {
     const studentId = context.session?.userId;
@@ -35,44 +35,43 @@ export const Route = createFileRoute("/practice/$moduleId")({
       fetchModuleByIdFn({ data: params.moduleId }),
       studentId ? fetchStudentAttemptsFn({ data: studentId }) : Promise.resolve([]),
     ]);
-
-    const existingAttempt = attempts.find((att) => att.moduleId === params.moduleId) ?? null;
-
-    return { mod, existingAttempt };
+    const match = attempts.find((att) => att.moduleId === params.moduleId) ?? null;
+    return { mod, existingAttempt: match };
   },
   head: ({ loaderData }) => {
-    const m = (loaderData as { mod?: Module | null } | undefined)?.mod;
+    const m = (loaderData as { mod?: any } | undefined)?.mod;
     return {
       meta: [
-        { title: `${m?.title ?? "Practice"} · Tarang` },
-        {
-          name: "description",
-          content: m?.prompt ?? "Practice your spoken English with Tarang.",
-        },
+        { title: `${m?.title ?? "Practice Drill"} · Tarang` },
+        { name: "description", content: m?.prompt ?? "Speech practice module." },
       ],
     };
   },
-  component: RecordingSession,
+  component: PracticeModuleSession,
 });
 
-function RecordingSession() {
+function PracticeModuleSession() {
   const { moduleId } = Route.useParams();
   const loaderData = Route.useLoaderData() as {
-    mod?: Module | null;
-    existingAttempt?: AttemptResult | null;
+    mod?: any;
+    existingAttempt: AttemptResult | null;
   };
   const navigate = useNavigate();
   const user = useUser();
 
-  const mod: Module = loaderData?.mod ?? {
-    id: moduleId,
-    title: "Speaking Practice",
-    prompt: "Speak clearly on this prompt.",
-    difficulty: "Beginner",
-    durationSec: 45,
-  };
+  const mod: Module =
+    loaderData?.mod ||
+    ({
+      id: moduleId,
+      title: "Audio Signal Practice",
+      prompt: "Speak clearly with steady rhythm and optimal volume.",
+      difficulty: "Beginner",
+      durationSec: 45,
+    } as Module);
 
   const existingAttempt = loaderData?.existingAttempt ?? null;
+
+  // If user already has an attempt, start in "review" mode unless they choose to retake
   const [isRetaking, setIsRetaking] = useState(false);
 
   // Audio Playback state for existing completed attempt
@@ -81,8 +80,25 @@ function RecordingSession() {
   const [audioDuration, setAudioDuration] = useState(existingAttempt?.durationSec || 30);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
-  const { phase, formattedTime, stream, micError, transcript, startRecording, stopRecording } =
-    useAudioRecorder();
+  const {
+    phase,
+    formattedTime,
+    stream,
+    micError,
+    finalTranscript,
+    interimTranscript,
+    transcript,
+    volumeLevel,
+    liveFillerCount,
+    livePauseCount,
+    sttAvailable,
+    audioDevices,
+    selectedDeviceId,
+    setSelectedDeviceId,
+    startRecording,
+    stopRecording,
+    setPhase,
+  } = useAudioRecorder();
 
   // Auth guard
   useEffect(() => {
@@ -101,8 +117,7 @@ function RecordingSession() {
     const attemptId = `${moduleId}-${Date.now()}`;
 
     // Perform real acoustic signal analysis
-    const analysis = analyzeAudioSignal(samples, elapsed, mod.difficulty);
-    const cleanPrompt = mod.prompt.replace(/^[“"']|[”"']$/g, "").trim();
+    const analysis = analyzeAudioSignal(samples, elapsed, mod.difficulty, transcript);
 
     const fullResult = {
       id: attemptId,
@@ -112,6 +127,7 @@ function RecordingSession() {
       transcript: transcript ? transcript.trim() : "",
       audioUrl: audioUrl || undefined,
       durationSec: analysis.durationSec,
+      targetDurationSec: mod.durationSec,  // target duration of the prompt — for completion%
       pronunciation: analysis.pronunciation,
       vocabulary: analysis.vocabulary,
       grammar: analysis.grammar,
@@ -139,6 +155,7 @@ function RecordingSession() {
       navigate({
         to: "/result/$attemptId",
         params: { attemptId },
+        replace: true,  // swaps recording page in history — back goes to /practice, not a stale retake
       });
     }, 400);
   };
@@ -168,11 +185,7 @@ function RecordingSession() {
 
   // Completed Review Mode
   if (existingAttempt && !isRetaking) {
-    const overallScore = Math.round(
-      (existingAttempt.pronunciation + existingAttempt.vocabulary + existingAttempt.grammar) / 3,
-    );
     const words = (existingAttempt.transcript || "").split(/(\s+)/);
-    const fillerKeywords = new Set(["um", "uh", "matlab", "like", "actually", "er", "ah"]);
 
     return (
       <div className="min-h-screen bg-ink-950 text-primary-warm">
@@ -306,8 +319,27 @@ function RecordingSession() {
               </button>
             </div>
 
+            {/* Waveform */}
             <div className="mt-4 opacity-95">
               <Waveform mode="thumbnail" data={existingAttempt.waveform} height={32} />
+            </div>
+
+            {/* Waveform Color Legend */}
+            <div className="mt-2.5 flex items-center justify-between text-[11px] text-secondary-warm">
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-[#3FB8AF]" />
+                  clear
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-[#E2A33C]" />
+                  filler ({existingAttempt.fillerCount ?? 0})
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-[#6B645A]" />
+                  pause ({existingAttempt.pauseCount ?? 0})
+                </span>
+              </div>
             </div>
           </div>
 
@@ -319,76 +351,63 @@ function RecordingSession() {
                 Verbatim Spoken Transcript
               </span>
               <div className="flex items-center gap-2 num text-[11px] text-tertiary-warm">
-                <span>{existingAttempt.fillerCount ?? 0} fillers</span>
+                <span className="text-[#E2A33C]">{existingAttempt.fillerCount ?? 0} fillers</span>
                 <span>·</span>
                 <span>{existingAttempt.pauseCount ?? 0} pauses</span>
               </div>
             </div>
 
             <div className="mt-3 rounded-[8px] border border-hairline bg-ink-950 p-3.5 text-[13px] leading-relaxed text-primary-warm">
-              {words.map((word, i) => {
-                const clean = word.toLowerCase().replace(/[^a-z]/g, "");
-                const isFiller = fillerKeywords.has(clean);
-                if (isFiller) {
-                  return (
-                    <span
-                      key={i}
-                      className="rounded bg-[#E2A33C]/25 px-1 py-0.5 font-medium text-[#E2A33C]"
-                    >
-                      {word}
-                    </span>
-                  );
-                }
-                return <span key={i}>{word}</span>;
-              })}
+              {words.length > 0 && words[0].length > 0 ? (
+                words.map((word, i) => {
+                  const clean = word.toLowerCase().replace(/[^a-z]/g, "");
+                  const isFiller = FILLER_KEYWORDS.has(clean);
+                  if (isFiller) {
+                    return (
+                      <span
+                        key={i}
+                        className="rounded bg-[#E2A33C]/25 px-1 py-0.5 font-medium text-[#E2A33C]"
+                      >
+                        {word}
+                      </span>
+                    );
+                  }
+                  return <span key={i}>{word}</span>;
+                })
+              ) : (
+                <span className="italic text-tertiary-warm">
+                  Spoken recording captured and stored in MongoDB.
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Diagnostic Scores */}
-          <div className="mt-5 grid grid-cols-4 gap-2">
-            <div className="rounded-[8px] border border-hairline bg-ink-900 p-3 text-center">
-              <p className="num text-[10px] uppercase text-tertiary-warm">Overall</p>
-              <p className="num mt-1 text-[18px] font-bold text-[#3FB8AF]">{overallScore}%</p>
-            </div>
-            <div className="rounded-[8px] border border-hairline bg-ink-900 p-3 text-center">
-              <p className="num text-[10px] uppercase text-tertiary-warm">Pronounce</p>
-              <p className="num mt-1 text-[18px] font-semibold text-primary-warm">
-                {existingAttempt.pronunciation}%
-              </p>
-            </div>
-            <div className="rounded-[8px] border border-hairline bg-ink-900 p-3 text-center">
-              <p className="num text-[10px] uppercase text-tertiary-warm">Vocab</p>
-              <p className="num mt-1 text-[18px] font-semibold text-primary-warm">
-                {existingAttempt.vocabulary}%
-              </p>
-            </div>
-            <div className="rounded-[8px] border border-hairline bg-ink-900 p-3 text-center">
-              <p className="num text-[10px] uppercase text-tertiary-warm">Grammar</p>
-              <p className="num mt-1 text-[18px] font-semibold text-primary-warm">
-                {existingAttempt.grammar}%
-              </p>
-            </div>
-          </div>
 
-          {/* Coach Feedback */}
-          {existingAttempt.feedback && (
-            <div className="mt-4 rounded-[8px] border border-[#3FB8AF]/30 bg-[#3FB8AF]/5 p-3.5 text-[12px] text-secondary-warm">
-              <span className="font-semibold text-primary-warm block mb-1">Feedback:</span>
-              <p>{existingAttempt.feedback}</p>
-            </div>
-          )}
+
+          {/* Teacher Feedback Card */}
+          <div className="mt-4 rounded-[8px] border border-hairline bg-ink-900 p-3.5 text-[12px] text-secondary-warm">
+            <span className="font-semibold text-primary-warm block mb-1">Teacher Feedback:</span>
+            {existingAttempt.teacherFeedback ? (
+              <p className="text-primary-warm">{existingAttempt.teacherFeedback}</p>
+            ) : (
+              <p className="text-tertiary-warm italic">
+                Teacher will review your recording and provide feedback on this drill soon.
+              </p>
+            )}
+          </div>
 
           {/* Retake / Actions */}
           <div className="mt-8 flex flex-col gap-3 pb-8">
             <button
               onClick={() => {
                 if (audioPlayerRef.current) audioPlayerRef.current.pause();
+                setPhase("idle");
                 setIsRetaking(true);
               }}
-              className="flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#3FB8AF] py-3.5 text-[14px] font-semibold text-[#100E0C] transition hover:brightness-110 shadow-md shadow-[#3FB8AF]/20"
+              className="flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#3FB8AF] py-3.5 text-[14px] font-semibold text-[#100E0C] transition hover:brightness-110 shadow-md shadow-[#3FB8AF]/20 cursor-pointer"
             >
               <RotateCcw size={16} />
-              Retake Practice (Record New Attempt)
+              Retake Drill (Record New Attempt)
             </button>
             <Link
               to="/practice"
@@ -411,7 +430,7 @@ function RecordingSession() {
           {existingAttempt && isRetaking ? (
             <button
               onClick={() => setIsRetaking(false)}
-              className="inline-flex items-center gap-1.5 text-[14px] text-secondary-warm hover:text-primary-warm"
+              className="inline-flex items-center gap-1.5 text-[14px] text-secondary-warm hover:text-primary-warm cursor-pointer"
             >
               <ArrowLeft size={16} />
               Cancel Retake
@@ -437,7 +456,7 @@ function RecordingSession() {
         </header>
 
         {/* Prompt */}
-        <section className="px-6 pt-10">
+        <section className="px-6 pt-6">
           <div className="flex items-center justify-between">
             <p className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
               Prompt · {mod.difficulty}
@@ -456,16 +475,70 @@ function RecordingSession() {
           </p>
         </section>
 
-        {/* Live Waveform */}
-        <section className="mt-8 px-5">
+        {/* Microphone Device Picker (External Mic Support) */}
+        {phase === "idle" && (
+          <section className="mt-4 px-5">
+            <div className="rounded-[10px] border border-hairline bg-ink-900 p-3">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-tertiary-warm num">
+                  <Mic size={13} className="text-[#3FB8AF]" />
+                  Select Audio Input (Mic)
+                </span>
+                {audioDevices.length > 1 && (
+                  <span className="num text-[10px] text-[#3FB8AF]">
+                    {audioDevices.length} mics detected
+                  </span>
+                )}
+              </div>
+              <select
+                value={selectedDeviceId}
+                onChange={(e) => setSelectedDeviceId(e.target.value)}
+                className="mt-2 w-full rounded-[6px] border border-hairline bg-ink-950 px-2.5 py-1.5 text-[12px] text-primary-warm focus:border-[#3FB8AF] focus:outline-none"
+              >
+                {audioDevices.length === 0 ? (
+                  <option value="">Default System Microphone</option>
+                ) : (
+                  audioDevices.map((dev) => (
+                    <option key={dev.deviceId} value={dev.deviceId}>
+                      {dev.label}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+          </section>
+        )}
+
+        {/* Live Waveform & Input Meter */}
+        <section className="mt-6 px-5">
           <div className="rounded-[12px] border border-hairline bg-ink-900 p-5">
             {phase === "recording" ? (
-              <Waveform mode="live" stream={stream} height={140} />
+              <div className="space-y-3">
+                <Waveform mode="live" stream={stream} height={140} />
+                {/* Live Volume Meter Bar */}
+                <div className="flex items-center gap-2 pt-1 border-t border-hairline/60">
+                  <span className="num text-[10px] uppercase text-tertiary-warm">Signal</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-ink-950 overflow-hidden">
+                    <div
+                      className="h-full bg-[#3FB8AF] transition-all duration-75"
+                      style={{ width: `${Math.min(100, Math.max(4, volumeLevel * 100))}%` }}
+                    />
+                  </div>
+                  <span className="num text-[10px] text-[#3FB8AF]">
+                    {Math.round(volumeLevel * 100)}%
+                  </span>
+                </div>
+              </div>
             ) : (
-              <div className="flex h-[140px] items-center justify-center">
+              <div className="flex h-[140px] flex-col items-center justify-center text-center">
                 <p className="text-[13px] text-tertiary-warm">
-                  {micError ?? "Tap record when you are ready to speak"}
+                  {micError ?? "Tap record below when you are ready to speak"}
                 </p>
+                {micError && (
+                  <p className="mt-2 text-[11px] text-[#E2A33C]">
+                    Please allow microphone access in your browser settings.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -482,25 +555,53 @@ function RecordingSession() {
                 </span>
                 <span className="num text-[11px] text-tertiary-warm">real-time STT</span>
               </div>
-              <p className="mt-2 min-h-[44px] rounded-lg border border-hairline/60 bg-ink-950/80 p-3 text-[14px] leading-relaxed text-primary-warm">
-                {transcript ? (
-                  <span>“{transcript}”</span>
+              <p className="mt-2 min-h-[48px] rounded-lg border border-hairline/60 bg-ink-950/80 p-3 text-[14px] leading-relaxed text-primary-warm">
+                {sttAvailable === false ? (
+                  <span className="italic text-[#E2A33C]/80 text-[13px]">
+                    Live transcription is not supported in this browser. Use Chrome or Edge for real-time voice-to-text.
+                  </span>
+                ) : finalTranscript || interimTranscript ? (
+                  <span>
+                    {finalTranscript && <span>{finalTranscript}</span>}
+                    {interimTranscript && (
+                      <span className="ml-1 italic text-[#3FB8AF]/90">
+                        {interimTranscript}
+                      </span>
+                    )}
+                  </span>
                 ) : (
                   <span className="italic text-tertiary-warm">
-                    Listening to your voice... Speak your response clearly.
+                    Listening to your voice... Speak your response clearly into your microphone.
                   </span>
                 )}
               </p>
+
+              {/* Real-time live filler and pause counts */}
+              <div className="mt-2.5 flex items-center justify-between border-t border-hairline/40 pt-2 text-[11px] text-secondary-warm">
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-[#E2A33C]" />
+                    <span className="num font-semibold text-[#E2A33C]">{liveFillerCount}</span>{" "}
+                    fillers detected
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-[#6B645A]" />
+                    <span className="num font-semibold text-secondary-warm">{livePauseCount}</span>{" "}
+                    pauses
+                  </span>
+                </div>
+                <span className="num text-[10px] text-tertiary-warm">Live Voice Diagnostic</span>
+              </div>
             </div>
           </section>
         )}
 
         {/* Mic control */}
-        <section className="mt-auto px-5 pb-12 pt-8">
+        <section className="mt-auto px-5 pb-12 pt-6">
           {phase === "idle" && (
             <button
-              onClick={startRecording}
-              className="flex w-full items-center justify-center gap-2.5 rounded-[12px] bg-[#3FB8AF] py-4 text-[15px] font-semibold text-[#100E0C] transition hover:brightness-110 shadow-lg shadow-[#3FB8AF]/20"
+              onClick={() => startRecording()}
+              className="flex w-full items-center justify-center gap-2.5 rounded-[12px] bg-[#3FB8AF] py-4 text-[15px] font-semibold text-[#100E0C] transition hover:brightness-110 shadow-lg shadow-[#3FB8AF]/20 cursor-pointer"
             >
               <Mic size={18} />
               {isRetaking ? "Start New Recording" : "Start Recording"}
@@ -510,7 +611,7 @@ function RecordingSession() {
           {phase === "recording" && (
             <button
               onClick={handleStop}
-              className="flex w-full items-center justify-center gap-2.5 rounded-[12px] bg-[#C1503B] py-4 text-[15px] font-semibold text-primary-warm transition hover:brightness-110 shadow-lg shadow-[#C1503B]/20"
+              className="flex w-full items-center justify-center gap-2.5 rounded-[12px] bg-[#C1503B] py-4 text-[15px] font-semibold text-primary-warm transition hover:brightness-110 shadow-lg shadow-[#C1503B]/20 cursor-pointer"
             >
               <Square size={18} />
               Finish & Analyze

@@ -49,13 +49,21 @@ function Dashboard() {
   const flagged = filteredStudents.filter((s) => s.status === "flagged");
   const nudge = filteredStudents.filter((s) => s.status === "nudge");
   const onTrack = filteredStudents.filter((s) => s.status === "on-track");
-  const rest = [...nudge, ...onTrack];
+  // Non-flagged roster maintains most-recently-active on top
+  const rest = filteredStudents.filter((s) => s.status !== "flagged");
 
   const totalActiveToday = filteredStudents.filter((s) => s.lastActive === "Today").length;
 
+  // "Avg score · week" = average scorePct of students who recorded in the last 7 days only
+  const activeThisWeek = filteredStudents.filter((s) => {
+    const la = s.lastActive;
+    if (la === "Today" || la === "Yesterday") return true;
+    const match = la.match(/^(\d+)d ago$/);
+    return match ? parseInt(match[1], 10) <= 7 : false;
+  });
   const avgScore =
-    filteredStudents.length > 0
-      ? Math.round(filteredStudents.reduce((a, s) => a + s.scorePct, 0) / filteredStudents.length)
+    activeThisWeek.length > 0
+      ? Math.round(activeThisWeek.reduce((a, s) => a + s.scorePct, 0) / activeThisWeek.length)
       : 0;
 
   return (
@@ -153,11 +161,24 @@ function Dashboard() {
         avgScore={avgScore}
       />
 
-      {/* Flagged Alert Panel */}
-      <FlaggedAlertPanel flagged={flagged} totalCount={filteredStudents.length} />
+      {filteredStudents.length === 0 ? (
+        <div className="mt-16 flex flex-col items-center gap-3 text-center">
+          <p className="num text-[13px] uppercase tracking-[0.18em] text-tertiary-warm">
+            No student activity yet
+          </p>
+          <p className="text-[14px] text-secondary-warm max-w-sm">
+            Students will appear here once they record their first practice or homework submission.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Flagged Alert Panel */}
+          <FlaggedAlertPanel flagged={flagged} totalCount={filteredStudents.length} />
 
-      {/* Full Roster Channel Strips */}
-      <ChannelStripTable students={rest} />
+          {/* Full Roster Channel Strips */}
+          <ChannelStripTable students={rest} />
+        </>
+      )}
     </TeacherShell>
   );
 }
