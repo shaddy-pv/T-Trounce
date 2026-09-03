@@ -16,8 +16,7 @@ import { fetchModuleByIdFn, fetchStudentAttemptsFn, saveAttemptFn } from "@/serv
 import { useAudioRecorder } from "@/features/practice/hooks/useAudioRecorder";
 import { analyzeAudioSignal, FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
 import { useUser } from "@/lib/auth";
-import type { Module } from "@/lib/tarang-data";
-import type { AttemptResult } from "@/types";
+import type { AttemptResult, Module } from "@/types";
 
 export const Route = createFileRoute("/practice/$moduleId")({
   beforeLoad: ({ context }) => {
@@ -27,7 +26,7 @@ export const Route = createFileRoute("/practice/$moduleId")({
     params,
     context,
   }): Promise<{
-    mod: any;
+    mod: Module | null;
     existingAttempt: AttemptResult | null;
   }> => {
     const studentId = context.session?.userId;
@@ -36,10 +35,10 @@ export const Route = createFileRoute("/practice/$moduleId")({
       studentId ? fetchStudentAttemptsFn({ data: studentId }) : Promise.resolve([]),
     ]);
     const match = attempts.find((att) => att.moduleId === params.moduleId) ?? null;
-    return { mod, existingAttempt: match };
+    return { mod: (mod as Module | null) ?? null, existingAttempt: match };
   },
   head: ({ loaderData }) => {
-    const m = (loaderData as { mod?: any } | undefined)?.mod;
+    const m = (loaderData as { mod?: Module | null } | undefined)?.mod;
     return {
       meta: [
         { title: `${m?.title ?? "Practice Drill"} · Tarang` },
@@ -53,7 +52,7 @@ export const Route = createFileRoute("/practice/$moduleId")({
 function PracticeModuleSession() {
   const { moduleId } = Route.useParams();
   const loaderData = Route.useLoaderData() as {
-    mod?: any;
+    mod?: Module | null;
     existingAttempt: AttemptResult | null;
   };
   const navigate = useNavigate();
@@ -127,7 +126,7 @@ function PracticeModuleSession() {
       transcript: transcript ? transcript.trim() : "",
       audioUrl: audioUrl || undefined,
       durationSec: analysis.durationSec,
-      targetDurationSec: mod.durationSec,  // target duration of the prompt — for completion%
+      targetDurationSec: mod.durationSec, // target duration of the prompt — for completion%
       pronunciation: analysis.pronunciation,
       vocabulary: analysis.vocabulary,
       grammar: analysis.grammar,
@@ -155,7 +154,7 @@ function PracticeModuleSession() {
       navigate({
         to: "/result/$attemptId",
         params: { attemptId },
-        replace: true,  // swaps recording page in history — back goes to /practice, not a stale retake
+        replace: true, // swaps recording page in history — back goes to /practice, not a stale retake
       });
     }, 400);
   };
@@ -382,8 +381,6 @@ function PracticeModuleSession() {
             </div>
           </div>
 
-
-
           {/* Teacher Feedback Card */}
           <div className="mt-4 rounded-[8px] border border-hairline bg-ink-900 p-3.5 text-[12px] text-secondary-warm">
             <span className="font-semibold text-primary-warm block mb-1">Teacher Feedback:</span>
@@ -558,15 +555,14 @@ function PracticeModuleSession() {
               <p className="mt-2 min-h-[48px] rounded-lg border border-hairline/60 bg-ink-950/80 p-3 text-[14px] leading-relaxed text-primary-warm">
                 {sttAvailable === false ? (
                   <span className="italic text-[#E2A33C]/80 text-[13px]">
-                    Live transcription is not supported in this browser. Use Chrome or Edge for real-time voice-to-text.
+                    Live transcription is not supported in this browser. Use Chrome or Edge for
+                    real-time voice-to-text.
                   </span>
                 ) : finalTranscript || interimTranscript ? (
                   <span>
                     {finalTranscript && <span>{finalTranscript}</span>}
                     {interimTranscript && (
-                      <span className="ml-1 italic text-[#3FB8AF]/90">
-                        {interimTranscript}
-                      </span>
+                      <span className="ml-1 italic text-[#3FB8AF]/90">{interimTranscript}</span>
                     )}
                   </span>
                 ) : (
@@ -586,7 +582,9 @@ function PracticeModuleSession() {
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="size-2 rounded-full bg-[#6B645A]" />
-                    <span className="num font-semibold text-secondary-warm">{livePauseCount}</span>{" "}
+                    <span className="num font-semibold text-secondary-warm">
+                      {livePauseCount}
+                    </span>{" "}
                     pauses
                   </span>
                 </div>

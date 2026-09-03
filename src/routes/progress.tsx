@@ -2,7 +2,6 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { StudentShell } from "@/components/tarang/StudentShell";
 import { Waveform, type WaveformSegment } from "@/components/tarang/Waveform";
 import { fetchStudentAttemptsFn } from "@/server/data";
-import { useUser } from "@/lib/auth";
 import type { AttemptResult } from "@/types";
 
 export const Route = createFileRoute("/progress")({
@@ -26,8 +25,6 @@ export const Route = createFileRoute("/progress")({
 function ProgressPage() {
   const loaderData = Route.useLoaderData() as { attempts?: AttemptResult[] } | undefined;
   const attempts = loaderData?.attempts ?? [];
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const user = useUser();
 
   /**
    * Compute completion% the same way as the practice page "Done · X%" badge:

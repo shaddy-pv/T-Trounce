@@ -117,7 +117,10 @@ export function analyzeAudioSignal(
       }
     } else {
       consecutiveSilence = 0;
-      if (fillerIndices.has(barIndex) || (fillerCount > 0 && rawVal < hesitationThreshold && barIndex % 9 === 0)) {
+      if (
+        fillerIndices.has(barIndex) ||
+        (fillerCount > 0 && rawVal < hesitationThreshold && barIndex % 9 === 0)
+      ) {
         kind = "filler";
       } else {
         kind = "clear";
@@ -156,7 +159,12 @@ export function analyzeAudioSignal(
   );
   const grammar = Math.min(
     98,
-    Math.max(48, Math.round((70 + energyFactor * 0.5 - fillerPenalty * 0.4 - pausePenalty * 0.3) * diffMultiplier)),
+    Math.max(
+      48,
+      Math.round(
+        (70 + energyFactor * 0.5 - fillerPenalty * 0.4 - pausePenalty * 0.3) * diffMultiplier,
+      ),
+    ),
   );
 
   // 4. Generate Specific Actionable Feedback
@@ -166,7 +174,8 @@ export function analyzeAudioSignal(
   } else if (pauseCount > 3) {
     feedback = `${pauseCount} extended pauses detected. Maintain vocal momentum across sentence transitions.`;
   } else if (pronunciation >= 82 && vocabulary >= 78) {
-    feedback = "Strong vocal clarity and steady cadence! Your waveform shows clean, unbroken signal delivery.";
+    feedback =
+      "Strong vocal clarity and steady cadence! Your waveform shows clean, unbroken signal delivery.";
   } else {
     feedback = `Good attempt! Steady volume with ${fillerCount} filler word${fillerCount === 1 ? "" : "s"} and ${pauseCount} natural pause${pauseCount === 1 ? "" : "s"}.`;
   }
@@ -182,4 +191,3 @@ export function analyzeAudioSignal(
     waveform,
   };
 }
-

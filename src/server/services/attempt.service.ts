@@ -275,7 +275,6 @@ export class AttemptService {
           );
         }
 
-
         return { success: true, id: payload.result.id, audioUrl: finalAudioUrl };
       }
     } catch (err) {
@@ -307,7 +306,7 @@ export class AttemptService {
             audioSize: doc.audioSize,
             transcriptionStatus: doc.transcriptionStatus || "completed",
             durationSec: doc.durationSec,
-          targetDurationSec: doc.targetDurationSec,
+            targetDurationSec: doc.targetDurationSec,
             pronunciation: doc.pronunciation,
             vocabulary: doc.vocabulary,
             grammar: doc.grammar,
@@ -337,15 +336,16 @@ export class AttemptService {
       if (db) {
         const attempt = await db.collection<AttemptDoc>("attempts").findOne({ id: attemptId });
         if (attempt) {
-          await db.collection<AttemptDoc>("attempts").updateOne(
-            { id: attemptId },
-            { $set: { teacherFeedback: feedback } },
-          );
+          await db
+            .collection<AttemptDoc>("attempts")
+            .updateOne({ id: attemptId }, { $set: { teacherFeedback: feedback } });
           if (attempt.assignmentId) {
-            await db.collection<AttemptDoc>("attempts").updateMany(
-              { studentId: attempt.studentId, assignmentId: attempt.assignmentId },
-              { $set: { teacherFeedback: feedback } },
-            );
+            await db
+              .collection<AttemptDoc>("attempts")
+              .updateMany(
+                { studentId: attempt.studentId, assignmentId: attempt.assignmentId },
+                { $set: { teacherFeedback: feedback } },
+              );
           }
           return true;
         }

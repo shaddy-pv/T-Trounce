@@ -95,4 +95,3 @@ export async function autoSeedDatabase(db: Db) {
     console.warn("[MongoDB Auto-Seed Warning]", (err as Error).message);
   }
 }
-

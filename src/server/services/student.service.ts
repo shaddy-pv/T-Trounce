@@ -15,7 +15,9 @@ export class StudentService {
       const db = await getDb();
       if (db) {
         // Fetch registered student users from MongoDB
-        const userQuery: import("mongodb").Filter<import("../db/schemas").UserDoc> = { role: "student" };
+        const userQuery: import("mongodb").Filter<import("../db/schemas").UserDoc> = {
+          role: "student",
+        };
         if (filter?.session && filter.session !== "all") {
           userQuery.sessionSeason = filter.session as import("../db/schemas").SessionSeason;
         }
@@ -23,7 +25,10 @@ export class StudentService {
           userQuery.batchTime = filter.batch as import("../db/schemas").BatchTime;
         }
 
-        const studentUsers = await db.collection<import("../db/schemas").UserDoc>("users").find(userQuery).toArray();
+        const studentUsers = await db
+          .collection<import("../db/schemas").UserDoc>("users")
+          .find(userQuery)
+          .toArray();
 
         // Also fetch docs from students collection for any additional metadata or status updates
         const studentDocs = await db.collection<StudentDoc>("students").find({}).toArray();

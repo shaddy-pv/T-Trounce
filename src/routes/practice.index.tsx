@@ -355,12 +355,15 @@ function PracticeHubBody() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className={`num text-[11px] uppercase tracking-wider ${isLate && !isDone ? "text-[#E2A33C]" : "text-[#3FB8AF]"}`}>
+                      <span
+                        className={`num text-[11px] uppercase tracking-wider ${isLate && !isDone ? "text-[#E2A33C]" : "text-[#3FB8AF]"}`}
+                      >
                         {a.targetSession} · {a.targetBatch} batch
                       </span>
                       {isDone ? (
                         <span className="inline-flex items-center gap-1 rounded bg-[#3FB8AF]/20 px-2 py-0.5 num text-[11px] font-semibold text-[#3FB8AF]">
-                          <Check size={11} /> Done{completionPct !== null ? ` · ${completionPct}%` : ""}
+                          <Check size={11} /> Done
+                          {completionPct !== null ? ` · ${completionPct}%` : ""}
                         </span>
                       ) : isLate ? (
                         <span className="inline-flex items-center gap-1 rounded bg-[#E2A33C]/20 px-2 py-0.5 num text-[11px] font-semibold text-[#E2A33C]">
@@ -401,11 +404,7 @@ function PracticeHubBody() {
                       to="/practice/assignment/$assignmentId"
                       params={{ assignmentId: a.id }}
                       className={`inline-flex items-center gap-1.5 font-medium hover:underline ${
-                        isDone
-                          ? "text-[#3FB8AF]"
-                          : isLate
-                            ? "text-[#E2A33C]"
-                            : "text-[#3FB8AF]"
+                        isDone ? "text-[#3FB8AF]" : isLate ? "text-[#E2A33C]" : "text-[#3FB8AF]"
                       }`}
                     >
                       <Sparkles size={13} />
@@ -456,7 +455,8 @@ function PracticeHubBody() {
                       <p className="text-[15px] text-primary-warm">{m.title}</p>
                       {isDone && (
                         <span className="inline-flex items-center gap-1 rounded bg-[#3FB8AF]/15 px-2 py-0.5 num text-[10px] font-semibold text-[#3FB8AF]">
-                          <Check size={10} /> Done{completionPct !== null ? ` · ${completionPct}%` : ""}
+                          <Check size={10} /> Done
+                          {completionPct !== null ? ` · ${completionPct}%` : ""}
                         </span>
                       )}
                     </div>

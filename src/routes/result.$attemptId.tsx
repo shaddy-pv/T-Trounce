@@ -89,8 +89,6 @@ function ResultPage() {
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
 
-
-
   const transcriptWords = (result.transcript || "").split(/(\s+)/);
   const fillerKeywords = FILLER_KEYWORDS;
 
@@ -272,10 +270,6 @@ function ResultPage() {
             </div>
           </div>
         </section>
-
-
-
-
 
         {/* Teacher Feedback Card */}
         <section className="mt-5 px-5">

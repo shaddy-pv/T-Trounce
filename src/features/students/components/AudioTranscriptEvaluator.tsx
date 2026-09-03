@@ -174,9 +174,7 @@ export function AudioTranscriptEvaluator({
   const overallScore =
     attempt.targetDurationSec && attempt.targetDurationSec > 0
       ? Math.min(100, Math.round((attempt.durationSec / attempt.targetDurationSec) * 100))
-      : Math.round(
-          (attempt.pronunciation + attempt.vocabulary + attempt.grammar) / 3,
-        );
+      : Math.round((attempt.pronunciation + attempt.vocabulary + attempt.grammar) / 3);
 
   return (
     <div
@@ -413,7 +411,8 @@ export function AudioTranscriptEvaluator({
         </div>
 
         <p className="mt-1 text-[12px] text-secondary-warm">
-          Write feedback for this recording. The student will see this note directly on their homework screen.
+          Write feedback for this recording. The student will see this note directly on their
+          homework screen.
         </p>
 
         <div className="mt-3 flex flex-col sm:flex-row gap-2">

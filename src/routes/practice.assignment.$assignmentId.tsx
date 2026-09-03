@@ -138,7 +138,7 @@ function AssignmentRecordingSession() {
       transcript: transcript ? transcript.trim() : "",
       audioUrl: audioUrl || undefined,
       durationSec: analysis.durationSec,
-      targetDurationSec: a.durationSec,  // target duration of the prompt — for completion%
+      targetDurationSec: a.durationSec, // target duration of the prompt — for completion%
       pronunciation: analysis.pronunciation,
       vocabulary: analysis.vocabulary,
       grammar: analysis.grammar,
@@ -374,8 +374,6 @@ function AssignmentRecordingSession() {
             </div>
           </div>
 
-
-
           {/* Teacher Feedback Card */}
           <div className="mt-4 rounded-[8px] border border-hairline bg-ink-900 p-3.5 text-[12px] text-secondary-warm">
             <span className="font-semibold text-primary-warm block mb-1">Teacher Feedback:</span>
@@ -548,15 +546,14 @@ function AssignmentRecordingSession() {
               <p className="mt-2 min-h-[48px] rounded-lg border border-hairline/60 bg-ink-950/80 p-3 text-[14px] leading-relaxed text-primary-warm">
                 {sttAvailable === false ? (
                   <span className="italic text-[#E2A33C]/80 text-[13px]">
-                    Live transcription is not supported in this browser. Use Chrome or Edge for real-time voice-to-text.
+                    Live transcription is not supported in this browser. Use Chrome or Edge for
+                    real-time voice-to-text.
                   </span>
                 ) : finalTranscript || interimTranscript ? (
                   <span>
                     {finalTranscript && <span>{finalTranscript}</span>}
                     {interimTranscript && (
-                      <span className="ml-1 italic text-[#3FB8AF]/90">
-                        {interimTranscript}
-                      </span>
+                      <span className="ml-1 italic text-[#3FB8AF]/90">{interimTranscript}</span>
                     )}
                   </span>
                 ) : (
@@ -576,7 +573,9 @@ function AssignmentRecordingSession() {
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="size-2 rounded-full bg-[#6B645A]" />
-                    <span className="num font-semibold text-secondary-warm">{livePauseCount}</span>{" "}
+                    <span className="num font-semibold text-secondary-warm">
+                      {livePauseCount}
+                    </span>{" "}
                     pauses
                   </span>
                 </div>

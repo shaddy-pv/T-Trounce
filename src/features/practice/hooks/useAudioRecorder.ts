@@ -190,13 +190,21 @@ export function useAudioRecorder() {
       isRecordingRef.current = false;
       recognitionRunningRef.current = false;
       if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch { /* ignore */ }
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          /* ignore */
+        }
         recognitionRef.current = null;
       }
       if (samplerIntervalRef.current) window.clearInterval(samplerIntervalRef.current);
       if (volumeIntervalRef.current) window.clearInterval(volumeIntervalRef.current);
       if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-        try { audioContextRef.current.close(); } catch { /* ignore */ }
+        try {
+          audioContextRef.current.close();
+        } catch {
+          /* ignore */
+        }
       }
     };
   }, []);
@@ -242,7 +250,7 @@ export function useAudioRecorder() {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    recognition.lang = "en-IN";  // en-IN gives better Hinglish accuracy on Indian accents
+    recognition.lang = "en-IN"; // en-IN gives better Hinglish accuracy on Indian accents
 
     recognition.onstart = () => {
       recognitionRunningRef.current = true;
@@ -263,8 +271,7 @@ export function useAudioRecorder() {
 
       // Combine previous cumulative history + current session confirmed words
       const combinedFinal = (
-        (cumulativeFinalRef.current ? cumulativeFinalRef.current + " " : "") +
-        sessionFinal
+        (cumulativeFinalRef.current ? cumulativeFinalRef.current + " " : "") + sessionFinal
       ).trim();
 
       if (combinedFinal) {
@@ -289,8 +296,7 @@ export function useAudioRecorder() {
       const pendingInterim = interimTranscriptRef.current.trim();
       if (pendingInterim) {
         const rescued = (
-          (cumulativeFinalRef.current ? cumulativeFinalRef.current + " " : "") +
-          pendingInterim
+          (cumulativeFinalRef.current ? cumulativeFinalRef.current + " " : "") + pendingInterim
         ).trim();
         cumulativeFinalRef.current = rescued;
         finalTranscriptRef.current = rescued;
@@ -330,175 +336,172 @@ export function useAudioRecorder() {
     }
   }, []);
 
-  const startRecording = useCallback(
-    async () => {
-      isRecordingRef.current = true;
-      setMicError(null);
-      setElapsed(0);
-      setSamples([]);
-      setFinalTranscript("");
-      setInterimTranscript("");
-      finalTranscriptRef.current = "";
-      interimTranscriptRef.current = "";
-      cumulativeFinalRef.current = "";
-      recordedChunksRef.current = [];
+  const startRecording = useCallback(async () => {
+    isRecordingRef.current = true;
+    setMicError(null);
+    setElapsed(0);
+    setSamples([]);
+    setFinalTranscript("");
+    setInterimTranscript("");
+    finalTranscriptRef.current = "";
+    interimTranscriptRef.current = "";
+    cumulativeFinalRef.current = "";
+    recordedChunksRef.current = [];
 
-      // FIX: Start Speech Recognition IMMEDIATELY — before the getUserMedia await.
-      // Web Speech API uses its own internal audio pipeline (independent of getUserMedia),
-      // so recognition can begin capturing instantly without waiting for MediaRecorder setup.
-      // This eliminates the 1-2 second "late start" users reported.
-      startSpeechRecognition();
+    // FIX: Start Speech Recognition IMMEDIATELY — before the getUserMedia await.
+    // Web Speech API uses its own internal audio pipeline (independent of getUserMedia),
+    // so recognition can begin capturing instantly without waiting for MediaRecorder setup.
+    // This eliminates the 1-2 second "late start" users reported.
+    startSpeechRecognition();
 
-      try {
-        const audioConstraints: MediaTrackConstraints = {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        };
+    try {
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      };
 
-        if (selectedDeviceId) {
-          audioConstraints.deviceId = { exact: selectedDeviceId };
-        }
-
-        const rawStream = await navigator.mediaDevices.getUserMedia({
-          audio: audioConstraints,
-        });
-
-        // Update available device labels now that permission is granted
-        refreshAudioDevices();
-
-        // Audio Engineering DSP Pipeline: Noise filter, Vocal compressor, Gain boost
-        const AudioCtx =
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        const ctx = new AudioCtx();
-        if (ctx.state === "suspended") {
-          await ctx.resume();
-        }
-
-        const src = ctx.createMediaStreamSource(rawStream);
-
-        // (A) High-pass Filter: cuts 0-120Hz fan rumble, wind noise, AC hum
-        const highpass = ctx.createBiquadFilter();
-        highpass.type = "highpass";
-        highpass.frequency.setValueAtTime(120, ctx.currentTime);
-        highpass.Q.setValueAtTime(0.5, ctx.currentTime);
-
-        // (B) Low-pass Filter: cuts hiss/whine above 8kHz
-        const lowpass = ctx.createBiquadFilter();
-        lowpass.type = "lowpass";
-        lowpass.frequency.setValueAtTime(8000, ctx.currentTime);
-        lowpass.Q.setValueAtTime(0.5, ctx.currentTime);
-
-        // (C) Vocal Presence Boost (peaking EQ at 2.5kHz)
-        const presence = ctx.createBiquadFilter();
-        presence.type = "peaking";
-        presence.frequency.setValueAtTime(2500, ctx.currentTime);
-        presence.gain.setValueAtTime(5, ctx.currentTime);
-        presence.Q.setValueAtTime(1.2, ctx.currentTime);
-
-        // (D) Vocal Dynamics Compressor
-        const compressor = ctx.createDynamicsCompressor();
-        compressor.threshold.setValueAtTime(-32, ctx.currentTime);
-        compressor.knee.setValueAtTime(20, ctx.currentTime);
-        compressor.ratio.setValueAtTime(3, ctx.currentTime);
-        compressor.attack.setValueAtTime(0.005, ctx.currentTime);
-        compressor.release.setValueAtTime(0.3, ctx.currentTime);
-
-        // (E) Modest Gain Boost
-        const gainNode = ctx.createGain();
-        gainNode.gain.setValueAtTime(1.6, ctx.currentTime);
-
-        // (F) AnalyserNode for waveform and volume meter
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
-        analyser.smoothingTimeConstant = 0.8;
-
-        // (G) MediaStream Destination for recording
-        const dest = ctx.createMediaStreamDestination();
-
-        // Connect DSP chain (NO ScriptProcessorNode — deprecated)
-        src.connect(highpass);
-        highpass.connect(lowpass);
-        lowpass.connect(presence);
-        presence.connect(compressor);
-        compressor.connect(gainNode);
-        gainNode.connect(analyser);
-        gainNode.connect(dest);
-
-        const processedStream = dest.stream;
-        setStream(processedStream);
-
-        // Determine supported MIME type
-        let chosenMime = "audio/webm";
-        if (typeof MediaRecorder !== "undefined") {
-          if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
-            chosenMime = "audio/webm;codecs=opus";
-          } else if (MediaRecorder.isTypeSupported("audio/webm")) {
-            chosenMime = "audio/webm";
-          } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
-            chosenMime = "audio/mp4";
-          } else if (MediaRecorder.isTypeSupported("audio/ogg")) {
-            chosenMime = "audio/ogg";
-          }
-          mimeTypeRef.current = chosenMime;
-
-          try {
-            const mr = new MediaRecorder(processedStream, {
-              mimeType: chosenMime,
-              audioBitsPerSecond: 128000,
-            });
-            mr.ondataavailable = (e) => {
-              if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
-            };
-            mr.start(100);
-            mediaRecorderRef.current = mr;
-          } catch (err) {
-            console.warn("MediaRecorder fallback:", err);
-            const mr2 = new MediaRecorder(processedStream);
-            mr2.ondataavailable = (e) => {
-              if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
-            };
-            mr2.start(100);
-            mediaRecorderRef.current = mr2;
-          }
-        }
-
-        audioContextRef.current = ctx;
-        analyserRef.current = analyser;
-
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-        // Waveform sampler
-        samplerIntervalRef.current = window.setInterval(() => {
-          analyser.getByteFrequencyData(dataArray);
-          const sum = dataArray.reduce((a, b) => a + b, 0);
-          const rms = sum / dataArray.length / 255;
-          setSamples((prev) => [...prev, rms]);
-        }, ACOUSTIC_THRESHOLDS.sampleIntervalMs);
-
-        // Fast volume meter (50ms)
-        volumeIntervalRef.current = window.setInterval(() => {
-          if (analyserRef.current) {
-            analyserRef.current.getByteFrequencyData(dataArray);
-            const sum = dataArray.reduce((a, b) => a + b, 0);
-            const vol = Math.min(1, (sum / dataArray.length / 128) * 1.5);
-            setVolumeLevel(vol);
-          }
-        }, 50);
-
-        setPhase("recording");
-      } catch (err) {
-        console.warn("Microphone access unavailable or denied:", err);
-        setMicError("Microphone access denied — please check browser microphone permissions.");
-        samplerIntervalRef.current = window.setInterval(() => {
-          setSamples((prev) => [...prev, 0.2 + Math.random() * 0.5]);
-        }, ACOUSTIC_THRESHOLDS.sampleIntervalMs);
-        setPhase("recording");
+      if (selectedDeviceId) {
+        audioConstraints.deviceId = { exact: selectedDeviceId };
       }
-    },
-    [selectedDeviceId, refreshAudioDevices, startSpeechRecognition],
-  );
+
+      const rawStream = await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+      });
+
+      // Update available device labels now that permission is granted
+      refreshAudioDevices();
+
+      // Audio Engineering DSP Pipeline: Noise filter, Vocal compressor, Gain boost
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioCtx();
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+
+      const src = ctx.createMediaStreamSource(rawStream);
+
+      // (A) High-pass Filter: cuts 0-120Hz fan rumble, wind noise, AC hum
+      const highpass = ctx.createBiquadFilter();
+      highpass.type = "highpass";
+      highpass.frequency.setValueAtTime(120, ctx.currentTime);
+      highpass.Q.setValueAtTime(0.5, ctx.currentTime);
+
+      // (B) Low-pass Filter: cuts hiss/whine above 8kHz
+      const lowpass = ctx.createBiquadFilter();
+      lowpass.type = "lowpass";
+      lowpass.frequency.setValueAtTime(8000, ctx.currentTime);
+      lowpass.Q.setValueAtTime(0.5, ctx.currentTime);
+
+      // (C) Vocal Presence Boost (peaking EQ at 2.5kHz)
+      const presence = ctx.createBiquadFilter();
+      presence.type = "peaking";
+      presence.frequency.setValueAtTime(2500, ctx.currentTime);
+      presence.gain.setValueAtTime(5, ctx.currentTime);
+      presence.Q.setValueAtTime(1.2, ctx.currentTime);
+
+      // (D) Vocal Dynamics Compressor
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-32, ctx.currentTime);
+      compressor.knee.setValueAtTime(20, ctx.currentTime);
+      compressor.ratio.setValueAtTime(3, ctx.currentTime);
+      compressor.attack.setValueAtTime(0.005, ctx.currentTime);
+      compressor.release.setValueAtTime(0.3, ctx.currentTime);
+
+      // (E) Modest Gain Boost
+      const gainNode = ctx.createGain();
+      gainNode.gain.setValueAtTime(1.6, ctx.currentTime);
+
+      // (F) AnalyserNode for waveform and volume meter
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+
+      // (G) MediaStream Destination for recording
+      const dest = ctx.createMediaStreamDestination();
+
+      // Connect DSP chain (NO ScriptProcessorNode — deprecated)
+      src.connect(highpass);
+      highpass.connect(lowpass);
+      lowpass.connect(presence);
+      presence.connect(compressor);
+      compressor.connect(gainNode);
+      gainNode.connect(analyser);
+      gainNode.connect(dest);
+
+      const processedStream = dest.stream;
+      setStream(processedStream);
+
+      // Determine supported MIME type
+      let chosenMime = "audio/webm";
+      if (typeof MediaRecorder !== "undefined") {
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+          chosenMime = "audio/webm;codecs=opus";
+        } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+          chosenMime = "audio/webm";
+        } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+          chosenMime = "audio/mp4";
+        } else if (MediaRecorder.isTypeSupported("audio/ogg")) {
+          chosenMime = "audio/ogg";
+        }
+        mimeTypeRef.current = chosenMime;
+
+        try {
+          const mr = new MediaRecorder(processedStream, {
+            mimeType: chosenMime,
+            audioBitsPerSecond: 128000,
+          });
+          mr.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
+          };
+          mr.start(100);
+          mediaRecorderRef.current = mr;
+        } catch (err) {
+          console.warn("MediaRecorder fallback:", err);
+          const mr2 = new MediaRecorder(processedStream);
+          mr2.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) recordedChunksRef.current.push(e.data);
+          };
+          mr2.start(100);
+          mediaRecorderRef.current = mr2;
+        }
+      }
+
+      audioContextRef.current = ctx;
+      analyserRef.current = analyser;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      // Waveform sampler
+      samplerIntervalRef.current = window.setInterval(() => {
+        analyser.getByteFrequencyData(dataArray);
+        const sum = dataArray.reduce((a, b) => a + b, 0);
+        const rms = sum / dataArray.length / 255;
+        setSamples((prev) => [...prev, rms]);
+      }, ACOUSTIC_THRESHOLDS.sampleIntervalMs);
+
+      // Fast volume meter (50ms)
+      volumeIntervalRef.current = window.setInterval(() => {
+        if (analyserRef.current) {
+          analyserRef.current.getByteFrequencyData(dataArray);
+          const sum = dataArray.reduce((a, b) => a + b, 0);
+          const vol = Math.min(1, (sum / dataArray.length / 128) * 1.5);
+          setVolumeLevel(vol);
+        }
+      }, 50);
+
+      setPhase("recording");
+    } catch (err) {
+      console.warn("Microphone access unavailable or denied:", err);
+      setMicError("Microphone access denied — please check browser microphone permissions.");
+      samplerIntervalRef.current = window.setInterval(() => {
+        setSamples((prev) => [...prev, 0.2 + Math.random() * 0.5]);
+      }, ACOUSTIC_THRESHOLDS.sampleIntervalMs);
+      setPhase("recording");
+    }
+  }, [selectedDeviceId, refreshAudioDevices, startSpeechRecognition]);
 
   const stopRecording = useCallback(async (): Promise<{
     samples: number[];
@@ -511,7 +514,11 @@ export function useAudioRecorder() {
     // Stop Web Speech API
     recognitionRunningRef.current = false;
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch { /* ignore */ }
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        /* ignore */
+      }
       recognitionRef.current = null;
     }
     setInterimTranscript("");
@@ -533,7 +540,11 @@ export function useAudioRecorder() {
               : null,
           );
         };
-        try { mr.stop(); } catch { resolve(null); }
+        try {
+          mr.stop();
+        } catch {
+          resolve(null);
+        }
       } else if (recordedChunksRef.current.length > 0) {
         resolve(new Blob(recordedChunksRef.current, { type: mimeTypeRef.current || "audio/webm" }));
       } else {
@@ -560,7 +571,11 @@ export function useAudioRecorder() {
     }
 
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-      try { await audioContextRef.current.close(); } catch { /* ignore */ }
+      try {
+        await audioContextRef.current.close();
+      } catch {
+        /* ignore */
+      }
     }
 
     const trailingInterim = interimTranscriptRef.current ? " " + interimTranscriptRef.current : "";

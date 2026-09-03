@@ -71,7 +71,7 @@ export const Route = createFileRoute("/students/$id")({
 function StudentDetail() {
   const profile = Route.useLoaderData() as unknown as StudentProfileData | null;
   const student = profile?.student ?? null;
-  const rawAttempts = profile?.attempts ?? [];
+  const rawAttempts = useMemo(() => profile?.attempts ?? [], [profile?.attempts]);
   const homeworkStats = profile?.homeworkStats ?? {
     totalReceived: 0,
     completed: 0,
@@ -346,17 +346,21 @@ function StudentDetail() {
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className={`num text-[11px] uppercase tracking-wider ${isLateSubmission || isOverduePending ? "text-[#E2A33C]" : "text-[#3FB8AF]"}`}>
+                          <span
+                            className={`num text-[11px] uppercase tracking-wider ${isLateSubmission || isOverduePending ? "text-[#E2A33C]" : "text-[#3FB8AF]"}`}
+                          >
                             {hw.difficulty} · {hw.durationSec || 60}s
                           </span>
                           {isDone ? (
                             isLateSubmission ? (
                               <span className="inline-flex items-center gap-1 rounded bg-[#E2A33C]/20 px-2 py-0.5 num text-[10px] font-semibold text-[#E2A33C]">
-                                <Clock size={10} /> Late · {compScore !== null ? `${compScore}%` : "Done"}
+                                <Clock size={10} /> Late ·{" "}
+                                {compScore !== null ? `${compScore}%` : "Done"}
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 rounded bg-[#3FB8AF]/20 px-2 py-0.5 num text-[10px] font-semibold text-[#3FB8AF]">
-                                <Check size={10} /> Done{compScore !== null ? ` · ${compScore}%` : ""}
+                                <Check size={10} /> Done
+                                {compScore !== null ? ` · ${compScore}%` : ""}
                               </span>
                             )
                           ) : isOverduePending ? (
@@ -387,13 +391,12 @@ function StudentDetail() {
             <div className="space-y-4">
               {(() => {
                 const isCurrentDueValid =
-                  !!currentHomework?.dueDate &&
-                  !isNaN(new Date(currentHomework.dueDate).getTime());
+                  !!currentHomework?.dueDate && !isNaN(new Date(currentHomework.dueDate).getTime());
                 const isCurrentSubmissionLate = Boolean(
                   latestSubmission?.createdAt &&
-                    isCurrentDueValid &&
-                    new Date(latestSubmission.createdAt).getTime() >
-                      new Date(currentHomework.dueDate!).getTime(),
+                  isCurrentDueValid &&
+                  new Date(latestSubmission.createdAt).getTime() >
+                    new Date(currentHomework.dueDate!).getTime(),
                 );
 
                 return (
@@ -442,7 +445,8 @@ function StudentDetail() {
                           No submission recorded yet
                         </p>
                         <p className="text-[13px] text-secondary-warm max-w-sm mx-auto">
-                          {s.name} has not yet recorded their response for "{currentHomework.title}".
+                          {s.name} has not yet recorded their response for "{currentHomework.title}
+                          ".
                         </p>
                       </div>
                     )}
@@ -583,9 +587,7 @@ function StudentDetail() {
               ) : activeRetake ? (
                 <AudioTranscriptEvaluator
                   attempt={activeRetake}
-                  index={
-                    retakeSubmissions.findIndex((r) => r.id === activeRetake.id) + 1
-                  }
+                  index={retakeSubmissions.findIndex((r) => r.id === activeRetake.id) + 1}
                   isLate={
                     !!currentHomework?.dueDate &&
                     !isNaN(new Date(currentHomework.dueDate).getTime()) &&
