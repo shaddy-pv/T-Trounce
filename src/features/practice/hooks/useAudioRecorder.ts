@@ -124,6 +124,7 @@ export function useAudioRecorder() {
   const whisperChunkIntervalRef = useRef<number | null>(null);
   const whisperSeqRef = useRef<number>(0);
   const whisperChunkBlobsRef = useRef<Blob[]>([]);
+  const lastSentChunkCountRef = useRef<number>(0); // tracks how many chunks were already sent
 
   // Web Speech API refs
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
@@ -304,8 +305,18 @@ export function useAudioRecorder() {
     recognition.onend = () => {
       recognitionRunningRef.current = false;
 
+      // IMPORTANT: Check isRecordingRef FIRST — before any state mutations.
+      // If recording was stopped (stopRecording set this to false), exit immediately
+      // without touching transcript state. This prevents stale onend callbacks from
+      // overwriting freshly-cleared state when the user starts a retake quickly.
+      if (!isRecordingRef.current) {
+        recognitionRef.current = null;
+        return;
+      }
+
       // FIX: Chrome ends the session WITHOUT finalizing the last interim words when the
       // user pauses. Rescue any interim text by folding it into cumulative history now.
+      // (Only reached when recording is still active — mid-session restart path.)
       const pendingInterim = interimTranscriptRef.current.trim();
       if (pendingInterim) {
         const rescued = (
@@ -321,12 +332,6 @@ export function useAudioRecorder() {
         cumulativeFinalRef.current = finalTranscriptRef.current;
         interimTranscriptRef.current = "";
         setInterimTranscript("");
-      }
-
-      if (!isRecordingRef.current) {
-        // Recording was stopped — don't restart, just clear the ref
-        recognitionRef.current = null;
-        return;
       }
 
       // FIX: Restart the SAME recognition object via closure — no new instance creation,
@@ -363,6 +368,7 @@ export function useAudioRecorder() {
     serverWhisperRef.current = "";
     whisperSeqRef.current = 0;
     whisperChunkBlobsRef.current = [];
+    lastSentChunkCountRef.current = 0;
     recordedChunksRef.current = [];
 
     // FIX: Start Speech Recognition IMMEDIATELY — before the getUserMedia await.
@@ -516,12 +522,18 @@ export function useAudioRecorder() {
       // This runs INDEPENDENTLY of the Web Speech API — both are active.
       whisperChunkIntervalRef.current = window.setInterval(async () => {
         if (!isRecordingRef.current) return;
-        const currentChunks = [...recordedChunksRef.current];
-        if (currentChunks.length === 0) return;
-        const chunkBlob = new Blob(currentChunks, {
+        const allChunks = recordedChunksRef.current;
+        const lastSent = lastSentChunkCountRef.current;
+        // Only process chunks we haven't sent yet
+        const newChunks = allChunks.slice(lastSent);
+        if (newChunks.length === 0) return;
+        const chunkBlob = new Blob(newChunks, {
           type: mimeTypeRef.current || "audio/webm",
         });
         if (chunkBlob.size < 2000) return; // skip tiny/silent clips
+
+        // Mark these chunks as sent before the async call to avoid double-sending
+        lastSentChunkCountRef.current = allChunks.length;
 
         try {
           const reader = new FileReader();

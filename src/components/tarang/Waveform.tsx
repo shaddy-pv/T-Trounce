@@ -98,10 +98,17 @@ export function Waveform({
     };
     setup();
 
-    const tick = () => {
+    // Throttle: only push a new bar every BAR_INTERVAL_MS (80ms ≈ ~12 bars/sec)
+    // This makes the scroll speed feel like a real audio console.
+    const BAR_INTERVAL_MS = 80;
+    let lastBarTime = 0;
+    let smoothedAmp = 0; // exponential moving average
+
+    const tick = (now: number) => {
       const canvas = canvasRef.current;
       if (canvas) {
-        let amp = 0;
+        // Always compute the current raw amplitude for smoothing
+        let rawAmp = 0;
         if (analyser && frame) {
           analyser.getByteTimeDomainData(frame);
           let sum = 0;
@@ -109,13 +116,25 @@ export function Waveform({
             const v = (frame[i] - 128) / 128;
             sum += v * v;
           }
-          amp = Math.min(1, Math.sqrt(sum / frame.length) * 2.4);
+          rawAmp = Math.min(1, Math.sqrt(sum / frame.length) * 2.4);
         } else {
-          // idle shimmer so it never looks dead
-          amp = 0.08 + Math.random() * 0.06;
+          // idle shimmer
+          rawAmp = 0.08 + Math.random() * 0.06;
         }
-        liveBufferRef.current.push(amp);
-        if (liveBufferRef.current.length > bars) liveBufferRef.current.shift();
+
+        // Exponential smoothing — fast attack (0.4), slow decay (0.12)
+        // This means the bar jumps up quickly when you speak but falls
+        // back slowly when you pause, so it never looks "dead" instantly.
+        const alpha = rawAmp > smoothedAmp ? 0.4 : 0.12;
+        smoothedAmp = alpha * rawAmp + (1 - alpha) * smoothedAmp;
+
+        // Only push a new bar and scroll the waveform on the throttled interval
+        if (now - lastBarTime >= BAR_INTERVAL_MS) {
+          lastBarTime = now;
+          liveBufferRef.current.push(smoothedAmp);
+          if (liveBufferRef.current.length > bars) liveBufferRef.current.shift();
+        }
+
         drawLive(canvas, liveBufferRef.current, bars);
       }
       rafRef.current = requestAnimationFrame(tick);
