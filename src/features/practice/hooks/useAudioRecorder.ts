@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { ACOUSTIC_THRESHOLDS } from "@/config/constants";
 import { FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
+import { streamTranscribeChunkFn } from "@/server/data";
 
 export type RecorderPhase = "idle" | "recording" | "uploading";
 
@@ -117,6 +118,13 @@ export function useAudioRecorder() {
   const recordedChunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string>("audio/webm");
 
+  // FastWhisper server-side transcript (corrects Web Speech API accuracy)
+  const [serverWhisperTranscript, setServerWhisperTranscript] = useState("");
+  const serverWhisperRef = useRef<string>("");
+  const whisperChunkIntervalRef = useRef<number | null>(null);
+  const whisperSeqRef = useRef<number>(0);
+  const whisperChunkBlobsRef = useRef<Blob[]>([]);
+
   // Web Speech API refs
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const recognitionRunningRef = useRef<boolean>(false);
@@ -125,12 +133,16 @@ export function useAudioRecorder() {
   const cumulativeFinalRef = useRef<string>("");
 
   // Combined live transcript for filler counting
+  // Prefer FastWhisper server transcript if available (more accurate), else Web Speech API
   const transcript = useMemo(() => {
+    if (serverWhisperTranscript && serverWhisperTranscript.trim().length > 10) {
+      return serverWhisperTranscript.trim();
+    }
     const f = finalTranscript.trim();
     const i = interimTranscript.trim();
     if (f && i) return `${f} ${i}`;
     return f || i || "";
-  }, [finalTranscript, interimTranscript]);
+  }, [finalTranscript, interimTranscript, serverWhisperTranscript]);
 
   // Dynamic real-time filler word counter
   const liveFillerCount = useMemo(() => {
@@ -199,6 +211,7 @@ export function useAudioRecorder() {
       }
       if (samplerIntervalRef.current) window.clearInterval(samplerIntervalRef.current);
       if (volumeIntervalRef.current) window.clearInterval(volumeIntervalRef.current);
+      if (whisperChunkIntervalRef.current) window.clearInterval(whisperChunkIntervalRef.current);
       if (audioContextRef.current && audioContextRef.current.state !== "closed") {
         try {
           audioContextRef.current.close();
@@ -343,9 +356,13 @@ export function useAudioRecorder() {
     setSamples([]);
     setFinalTranscript("");
     setInterimTranscript("");
+    setServerWhisperTranscript("");
     finalTranscriptRef.current = "";
     interimTranscriptRef.current = "";
     cumulativeFinalRef.current = "";
+    serverWhisperRef.current = "";
+    whisperSeqRef.current = 0;
+    whisperChunkBlobsRef.current = [];
     recordedChunksRef.current = [];
 
     // FIX: Start Speech Recognition IMMEDIATELY — before the getUserMedia await.
@@ -492,6 +509,50 @@ export function useAudioRecorder() {
         }
       }, 50);
 
+      // ── FastWhisper chunk loop ────────────────────────────────────────────
+      // Every 4 seconds we snapshot the recorded chunks, send them to the
+      // server (which tries local Python sidecar → Gemini → OpenAI), and
+      // merge the result into serverWhisperTranscript.
+      // This runs INDEPENDENTLY of the Web Speech API — both are active.
+      whisperChunkIntervalRef.current = window.setInterval(async () => {
+        if (!isRecordingRef.current) return;
+        const currentChunks = [...recordedChunksRef.current];
+        if (currentChunks.length === 0) return;
+        const chunkBlob = new Blob(currentChunks, {
+          type: mimeTypeRef.current || "audio/webm",
+        });
+        if (chunkBlob.size < 2000) return; // skip tiny/silent clips
+
+        try {
+          const reader = new FileReader();
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(chunkBlob);
+          });
+
+          const seq = whisperSeqRef.current++;
+          const result = await streamTranscribeChunkFn({
+            data: {
+              audioBase64: dataUrl,
+              mimeType: mimeTypeRef.current || "audio/webm",
+              sequence: seq,
+            },
+          });
+
+          if (result.text && result.text.trim().length > 0 && isRecordingRef.current) {
+            const prev = serverWhisperRef.current;
+            const merged = prev ? `${prev} ${result.text.trim()}` : result.text.trim();
+            serverWhisperRef.current = merged;
+            setServerWhisperTranscript(merged);
+          }
+        } catch {
+          // Server call failed — sidecar not running or no API key
+          // Silently continue; Web Speech API remains the fallback display
+        }
+      }, 4000);
+      // ─────────────────────────────────────────────────────────────────────
+
       setPhase("recording");
     } catch (err) {
       console.warn("Microphone access unavailable or denied:", err);
@@ -510,6 +571,12 @@ export function useAudioRecorder() {
     transcript: string;
   }> => {
     isRecordingRef.current = false;
+
+    // Stop FastWhisper chunk loop
+    if (whisperChunkIntervalRef.current) {
+      window.clearInterval(whisperChunkIntervalRef.current);
+      whisperChunkIntervalRef.current = null;
+    }
 
     // Stop Web Speech API
     recognitionRunningRef.current = false;
@@ -580,7 +647,14 @@ export function useAudioRecorder() {
 
     const trailingInterim = interimTranscriptRef.current ? " " + interimTranscriptRef.current : "";
     const baseFinal = finalTranscriptRef.current || cumulativeFinalRef.current || "";
-    const resolvedTranscript = (baseFinal + trailingInterim).trim();
+    const webSpeechTranscript = (baseFinal + trailingInterim).trim();
+
+    // Prefer server-side FastWhisper transcript if meaningfully longer/richer
+    const serverTranscript = serverWhisperRef.current.trim();
+    const resolvedTranscript =
+      serverTranscript.length > webSpeechTranscript.length * 0.7 && serverTranscript.length > 10
+        ? serverTranscript
+        : webSpeechTranscript || serverTranscript;
 
     return { samples, elapsed, audioUrl, transcript: resolvedTranscript };
   }, [stream, samples, elapsed]);

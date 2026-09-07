@@ -37,3 +37,11 @@ prod
 *.njsproj
 *.sln
 *.sw?
+
+# Python sidecar (FastWhisper)
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.whisper_cache/

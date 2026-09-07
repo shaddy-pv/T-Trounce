@@ -4,8 +4,11 @@ export interface TranscriptionResult {
   pauseCount: number;
   confidence: number;
   status: "completed" | "failed";
-  engineUsed: "gemini" | "openai-whisper" | "acoustic-analyzer";
+  engineUsed: "local-whisper" | "gemini" | "openai-whisper" | "acoustic-analyzer";
 }
+
+/** URL of the optional FastWhisper Python sidecar */
+const WHISPER_SIDECAR_URL = process.env.WHISPER_SIDECAR_URL ?? "http://127.0.0.1:8765";
 
 const COMMON_FILLERS = new Set([
   // Unambiguous vocal hesitations (English)
@@ -34,7 +37,43 @@ const COMMON_FILLERS = new Set([
 
 export class TranscriptionService {
   /**
+   * Try the local FastWhisper sidecar first.
+   * Returns null if the sidecar is not reachable (not installed / not running).
+   * Aborts after `timeoutMs` ms so it fails fast and does not block the caller.
+   */
+  static async transcribeWithLocalWhisper(
+    audioBuffer: Buffer,
+    mimeType: string = "audio/wav",
+    timeoutMs: number = 5000,
+  ): Promise<{ text: string; confidence: number } | null> {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const base64Audio = audioBuffer.toString("base64");
+      const cleanMime = mimeType.split(";")[0] || "audio/wav";
+
+      const response = await fetch(`${WHISPER_SIDECAR_URL}/transcribe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audio_b64: base64Audio, mime: cleanMime }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (!response.ok) return null;
+      const data = (await response.json()) as { text?: string; confidence?: number };
+      const text = (data.text ?? "").trim();
+      if (!text) return null;
+      return { text, confidence: data.confidence ?? 0.95 };
+    } catch {
+      // Sidecar not running or timed out — silently fall through
+      return null;
+    }
+  }
+
+  /**
    * Transcribe an audio chunk in real time during continuous microphone streaming.
+   * Priority: local FastWhisper → Gemini → OpenAI Whisper
    */
   static async transcribeChunk(
     audioBuffer: Buffer,
@@ -44,6 +83,10 @@ export class TranscriptionService {
   ): Promise<{ text: string; confidence: number; isFinal: boolean }> {
     const geminiKey = process.env.GEMINI_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
+
+    // 0. Try local FastWhisper sidecar first (3 s timeout — fail fast)
+    const local = await this.transcribeWithLocalWhisper(audioBuffer, mimeType, 3000);
+    if (local) return { text: local.text, confidence: local.confidence, isFinal: true };
 
     // 1. Try Google Gemini Flash Multimodal Streaming Chunk Transcription
     if (geminiKey) {
@@ -124,6 +167,20 @@ export class TranscriptionService {
   ): Promise<TranscriptionResult> {
     const geminiKey = process.env.GEMINI_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
+
+    // 0. Try local FastWhisper sidecar (5 s timeout for full recording)
+    const local = await this.transcribeWithLocalWhisper(audioBuffer, mimeType, 5000);
+    if (local && local.text.length > 0) {
+      const fillers = this.countFillers(local.text);
+      return {
+        transcript: local.text,
+        fillerCount: fillers,
+        pauseCount: Math.max(1, Math.round(local.text.split(",").length - 1)),
+        confidence: local.confidence,
+        status: "completed",
+        engineUsed: "local-whisper",
+      };
+    }
 
     // 1. Try Google Gemini Multimodal Audio Transcription if key available
     if (geminiKey) {
