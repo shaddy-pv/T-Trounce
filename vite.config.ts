@@ -69,4 +69,10 @@ export default defineConfig({
     tailwindcss(),
     tsconfigPaths(),
   ],
+  preview: {
+    allowedHosts: true,
+  },
+  server: {
+    allowedHosts: true,
+  },
 });
