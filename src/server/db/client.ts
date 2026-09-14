@@ -75,12 +75,14 @@ export async function getDb(): Promise<Db | null> {
 
   try {
     if (!global._mongoClient) {
+      const isTestEnv =
+        process.env.NODE_ENV === "test" || Boolean(process.env.VITEST) || process.env.CI === "true";
       global._mongoClient = new MongoClient(env.MONGODB_URI, {
         maxPoolSize: 50,
         minPoolSize: 5,
         maxIdleTimeMS: 30000,
-        serverSelectionTimeoutMS: 5000,
-        connectTimeoutMS: 5000,
+        serverSelectionTimeoutMS: isTestEnv ? 1500 : 5000,
+        connectTimeoutMS: isTestEnv ? 1500 : 5000,
       });
       await global._mongoClient.connect();
     }

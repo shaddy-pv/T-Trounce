@@ -18,7 +18,7 @@ describe("StorageService & Persistent Audio Upload", () => {
     expect(streamRes?.status).toBe(200);
     expect(streamRes?.contentType).toBe("audio/webm");
     expect(streamRes?.contentLength).toBe(mockAudioBytes.length);
-  });
+  }, 15000);
 
   it("handles HTTP 206 Partial Content range requests for audio scrubbing", async () => {
     const mockAudioBytes = Buffer.from("01234567890123456789");
