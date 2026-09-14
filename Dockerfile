@@ -34,11 +34,13 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 WORKDIR /app
 
-# Copy application assets with trounce ownership
+# Copy application dependencies, configurations, and compiled distribution
 COPY --chown=trounce:nodejs --from=deps /app/node_modules ./node_modules
 COPY --chown=trounce:nodejs --from=builder /app/package.json ./package.json
+COPY --chown=trounce:nodejs --from=builder /app/tsconfig.json ./tsconfig.json
 COPY --chown=trounce:nodejs --from=builder /app/vite.config.ts ./vite.config.ts
 COPY --chown=trounce:nodejs --from=builder /app/dist ./dist
+COPY --chown=trounce:nodejs --from=builder /app/src ./src
 
 # Create storage directory and grant full ownership to trounce user across /app
 RUN mkdir -p /app/.storage/audio && \
