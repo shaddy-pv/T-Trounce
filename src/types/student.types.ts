@@ -2,7 +2,7 @@ import type { WaveformSegment } from "./audio.types";
 
 export type StudentStatus = "on-track" | "nudge" | "flagged";
 
-export type StudentFocusArea = "—" | "Vocab" | "Pron" | "Grammar" | "Fluency" | string;
+export type StudentFocusArea = "General" | "Vocab" | "Pron" | "Grammar" | "Fluency" | string;
 
 export interface StudentRow {
   id: string;
@@ -18,6 +18,21 @@ export interface StudentRow {
   sessionSeason?: string;
   batchTime?: string;
   batchId?: string;
+}
+
+export interface StudentWeeklyReport {
+  student: StudentRow;
+  attemptsThisWeek: number;
+  totalAttempts: number;
+  pronunciation: number;
+  vocabulary: number;
+  grammar: number;
+  scorePct: number;
+  trendPct: number;
+  waveform: WaveformSegment[];
+  trendText: string;
+  batchLabel: string;
+  hasActivity: boolean;
 }
 
 export interface BatchInfo {

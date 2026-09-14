@@ -47,10 +47,10 @@ export const Route = createFileRoute("/practice/assignment/$assignmentId")({
     const a = (loaderData as { assignment?: AssignmentPublic | null } | undefined)?.assignment;
     return {
       meta: [
-        { title: `${a?.title ?? "Homework Assignment"} · Tarang` },
+        { title: `${a?.title ?? "Homework Assignment"} · Trounce` },
         {
           name: "description",
-          content: a?.prompt ?? "Record your assignment answer with Tarang.",
+          content: a?.prompt ?? "Record your assignment answer with Trounce.",
         },
       ],
     };
@@ -112,7 +112,8 @@ function AssignmentRecordingSession() {
   // Auth guard
   useEffect(() => {
     if (user === null) navigate({ to: "/login", replace: true });
-    else if (user && user.role !== "student") navigate({ to: "/dashboard", replace: true });
+    else if (user && user.role !== "student" && !user.isAdmin && user.role !== "admin")
+      navigate({ to: "/dashboard", replace: true });
   }, [user, navigate]);
 
   const handleStop = async () => {
@@ -459,7 +460,7 @@ function AssignmentRecordingSession() {
           </div>
           <h1 className="display mt-3 text-[26px] leading-[1.2] text-primary-warm">“{a.prompt}”</h1>
           <p className="mt-3 text-[13px] text-secondary-warm">
-            Aim for ~{a.durationSec} seconds. Speak naturally — pause if you need to think.
+            Aim for ~{a.durationSec} seconds. Speak naturally. Pause if you need to think.
           </p>
         </section>
 

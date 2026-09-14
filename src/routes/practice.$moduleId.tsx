@@ -41,7 +41,7 @@ export const Route = createFileRoute("/practice/$moduleId")({
     const m = (loaderData as { mod?: Module | null } | undefined)?.mod;
     return {
       meta: [
-        { title: `${m?.title ?? "Practice Drill"} · Tarang` },
+        { title: `${m?.title ?? "Practice Drill"} · Trounce` },
         { name: "description", content: m?.prompt ?? "Speech practice module." },
       ],
     };
@@ -102,7 +102,8 @@ function PracticeModuleSession() {
   // Auth guard
   useEffect(() => {
     if (user === null) navigate({ to: "/login", replace: true });
-    else if (user && user.role !== "student") navigate({ to: "/dashboard", replace: true });
+    else if (user && user.role !== "student" && !user.isAdmin && user.role !== "admin")
+      navigate({ to: "/dashboard", replace: true });
   }, [user, navigate]);
 
   const handleStop = async () => {
@@ -468,7 +469,7 @@ function PracticeModuleSession() {
             “{mod.prompt}”
           </h1>
           <p className="mt-3 text-[13px] text-secondary-warm">
-            Aim for ~{mod.durationSec} seconds. Speak naturally — pause if you need to think.
+            Aim for ~{mod.durationSec} seconds. Speak naturally. Pause if you need to think.
           </p>
         </section>
 

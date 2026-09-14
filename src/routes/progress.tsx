@@ -7,7 +7,7 @@ import type { AttemptResult } from "@/types";
 export const Route = createFileRoute("/progress")({
   head: () => ({
     meta: [
-      { title: "Progress · Tarang" },
+      { title: "Progress · Trounce" },
       { name: "description", content: "Your speaking attempts over time." },
     ],
   }),
@@ -69,7 +69,7 @@ function ProgressPage() {
       <div className="px-5 pt-2 pb-10">
         <h1 className="display text-[28px]">Your portfolio</h1>
         <p className="mt-2 text-[13px] text-secondary-warm">
-          Attempts saved to your coaching profile — latest on top.
+          Attempts saved to your coaching profile (latest on top).
         </p>
 
         {history.length > 0 ? (

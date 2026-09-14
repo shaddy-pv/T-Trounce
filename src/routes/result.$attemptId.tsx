@@ -8,10 +8,14 @@ import {
   RotateCcw,
   Volume2,
   Sparkles,
+  Flag,
+  X,
+  Send,
+  HelpCircle,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Waveform } from "@/components/tarang/Waveform";
-import { fetchAttemptByIdFn } from "@/server/data";
+import { fetchAttemptByIdFn, createFlagFn } from "@/server/data";
 import { useUser } from "@/lib/auth";
 import { FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
 import type { AttemptResult } from "@/types";
@@ -28,7 +32,7 @@ export const Route = createFileRoute("/result/$attemptId")({
     const res = (loaderData as { result?: AttemptResult } | undefined)?.result;
     return {
       meta: [
-        { title: `Diagnostic Result · Tarang` },
+        { title: `Diagnostic Result · Trounce` },
         { name: "description", content: res?.feedback ?? "Your speaking attempt, broken down." },
       ],
     };
@@ -61,6 +65,35 @@ function ResultPage() {
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(result.durationSec || 30);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+
+  // Flag for Teacher Review state
+  const [flagModalOpen, setFlagModalOpen] = useState(false);
+  const [flagCategory, setFlagCategory] = useState("Pronunciation & Accent");
+  const [flagNote, setFlagNote] = useState("");
+  const [flagSubmitting, setFlagSubmitting] = useState(false);
+  const [isFlaggedSuccess, setIsFlaggedSuccess] = useState(Boolean(result.isFlagged));
+
+  const handleFlagSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (flagSubmitting) return;
+    setFlagSubmitting(true);
+    try {
+      await createFlagFn({
+        data: {
+          attemptId: result.id,
+          category: flagCategory,
+          studentNote: flagNote,
+          type: "student_request",
+        },
+      });
+      setIsFlaggedSuccess(true);
+      setFlagModalOpen(false);
+    } catch (err) {
+      console.error("Failed to flag attempt for teacher review:", err);
+    } finally {
+      setFlagSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (user === null) navigate({ to: "/login", replace: true });
@@ -289,6 +322,32 @@ function ResultPage() {
           </div>
         </section>
 
+        {/* Student Flag / Ask Teacher Section */}
+        <section className="mt-4 px-5">
+          {isFlaggedSuccess ? (
+            <div className="rounded-[12px] border border-[#E2A33C]/40 bg-[#E2A33C]/10 p-4">
+              <div className="flex items-center gap-2 text-[#E2A33C]">
+                <Flag size={15} />
+                <p className="num text-[11px] uppercase tracking-wider font-semibold">
+                  Flagged for Teacher Review
+                </p>
+              </div>
+              <p className="mt-1.5 text-[13px] text-primary-warm leading-relaxed">
+                Your question/flag has been sent to your teacher's console. They will review your
+                spoken audio and reply with feedback.
+              </p>
+            </div>
+          ) : (
+            <button
+              onClick={() => setFlagModalOpen(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-[12px] border border-hairline bg-ink-900 py-3 text-[13px] text-secondary-warm transition hover:border-[#E2A33C] hover:text-primary-warm cursor-pointer"
+            >
+              <Flag size={14} className="text-[#E2A33C]" />
+              Flag for Teacher Review / Ask for Help
+            </button>
+          )}
+        </section>
+
         {/* Action Buttons */}
         <section className="mt-8 flex flex-col gap-3 px-5">
           {/* replace:true prevents the retake→record→result loop from stacking history entries.
@@ -319,6 +378,76 @@ function ResultPage() {
             View Portfolio History
           </Link>
         </section>
+
+        {/* Flag Modal Dialog */}
+        {flagModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+            <div className="w-full max-w-[420px] rounded-[14px] border border-hairline bg-ink-900 p-6 shadow-xl">
+              <div className="flex items-center justify-between border-b border-hairline pb-3">
+                <div className="flex items-center gap-2 text-[#E2A33C]">
+                  <Flag size={16} />
+                  <h3 className="display text-[16px] text-primary-warm">Flag for Teacher Review</h3>
+                </div>
+                <button
+                  onClick={() => setFlagModalOpen(false)}
+                  className="rounded p-1 text-tertiary-warm hover:text-primary-warm cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleFlagSubmit} className="mt-4 space-y-4">
+                <div>
+                  <label className="num text-[11px] uppercase tracking-wider text-tertiary-warm">
+                    What would you like guidance on?
+                  </label>
+                  <select
+                    value={flagCategory}
+                    onChange={(e) => setFlagCategory(e.target.value)}
+                    className="mt-1.5 w-full rounded-[8px] border border-hairline bg-ink-950 px-3 py-2 text-[13px] text-primary-warm focus:border-[#3FB8AF] focus:outline-hidden cursor-pointer"
+                  >
+                    <option value="Pronunciation & Accent">Pronunciation & Accent</option>
+                    <option value="Fluency & Pausing">Fluency & Long Pauses</option>
+                    <option value="Grammar & Sentence Flow">Grammar & Sentence Flow</option>
+                    <option value="Whisper Transcript Discrepancy">Whisper Transcript Issue</option>
+                    <option value="General Teacher Guidance">General Teacher Guidance</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="num text-[11px] uppercase tracking-wider text-tertiary-warm">
+                    Optional Note to Teacher
+                  </label>
+                  <textarea
+                    value={flagNote}
+                    onChange={(e) => setFlagNote(e.target.value)}
+                    placeholder="e.g., I wasn't sure if my intonation sounded natural in the second half..."
+                    rows={3}
+                    className="mt-1.5 w-full rounded-[8px] border border-hairline bg-ink-950 p-3 text-[13px] text-primary-warm placeholder:text-tertiary-warm focus:border-[#3FB8AF] focus:outline-hidden resize-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setFlagModalOpen(false)}
+                    className="rounded-[8px] border border-hairline px-4 py-2 text-[13px] text-secondary-warm hover:bg-ink-850 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={flagSubmitting}
+                    className="inline-flex items-center gap-1.5 rounded-[8px] bg-[#E2A33C] px-4 py-2 text-[13px] font-semibold text-[#100E0C] hover:brightness-110 transition cursor-pointer disabled:opacity-50"
+                  >
+                    <Send size={13} />
+                    {flagSubmitting ? "Sending..." : "Submit Flag"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

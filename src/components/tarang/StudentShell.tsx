@@ -23,17 +23,27 @@ export function StudentShell({ children }: { children: ReactNode }) {
           <header className="flex items-center justify-between px-5 pt-6 pb-4">
             <Link to="/practice" className="flex items-center gap-2">
               <span className="size-2 rounded-full bg-[#3FB8AF]" />
-              <span className="display text-[16px] font-semibold tracking-wide">tarang</span>
+              <span className="display text-[16px] font-semibold tracking-wide">trounce</span>
             </Link>
-            <button
-              onClick={() => {
-                clearUser();
-                navigate({ to: "/login", replace: true });
-              }}
-              className="text-[12px] text-tertiary-warm hover:text-secondary-warm"
-            >
-              Sign out
-            </button>
+            <div className="flex items-center gap-3">
+              {user?.isAdmin && (
+                <Link
+                  to="/dashboard"
+                  className="rounded border border-[#3FB8AF]/40 bg-[#3FB8AF]/15 px-2.5 py-1 text-[11px] font-medium text-[#3FB8AF] hover:bg-[#3FB8AF]/25 transition"
+                >
+                  Console ➜
+                </Link>
+              )}
+              <button
+                onClick={() => {
+                  clearUser();
+                  navigate({ to: "/login", replace: true });
+                }}
+                className="text-[12px] text-tertiary-warm hover:text-secondary-warm"
+              >
+                Sign out
+              </button>
+            </div>
           </header>
         )}
 

@@ -21,7 +21,7 @@ import {
 export const Route = createFileRoute("/users")({
   head: () => ({
     meta: [
-      { title: "User & Teacher Management · Tarang" },
+      { title: "User & Teacher Management · Trounce" },
       {
         name: "description",
         content:
@@ -276,8 +276,7 @@ function UsersManagementPage() {
                 </tr>
               ) : (
                 filteredUsers.map((u) => {
-                  const isCurrent = u.id === currentUser?.userId || u.email === currentUser?.email;
-                  const isSuperAdmin = u.role === "admin" || u.email === "shadanmd566@gmail.com";
+                  const isSuperAdmin = u.role === "admin";
 
                   const sessionLabel = u.sessionSeason
                     ? u.sessionSeason.charAt(0).toUpperCase() + u.sessionSeason.slice(1)
@@ -437,7 +436,7 @@ function UsersManagementPage() {
                   <input
                     type="email"
                     required
-                    placeholder="e.g. ramesh@tarang.in"
+                    placeholder="e.g. ramesh@trounce.in"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
                     className="mt-1.5 h-10 w-full rounded-[8px] border border-hairline bg-ink-900 px-3 text-[13px] text-primary-warm placeholder:text-tertiary-warm focus:border-[#3FB8AF] focus:outline-none"

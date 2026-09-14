@@ -14,7 +14,7 @@ export interface AttemptResult {
   audioSize?: number;
   transcriptionStatus?: "pending" | "processing" | "completed" | "failed";
   durationSec: number;
-  targetDurationSec?: number; // Target prompt duration — used to compute completion%
+  targetDurationSec?: number; // Target prompt duration (used to compute completion%)
   pronunciation: number;
   vocabulary: number;
   grammar: number;
@@ -22,6 +22,9 @@ export interface AttemptResult {
   pauseCount: number;
   feedback: string;
   teacherFeedback?: string;
+  isFlagged?: boolean;
+  flagReason?: string;
+  flagStatus?: "pending" | "resolved" | "dismissed";
   waveform: WaveformSegment[];
   createdAt?: string;
 }

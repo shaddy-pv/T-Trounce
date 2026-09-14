@@ -84,8 +84,8 @@ export class TranscriptionService {
     const geminiKey = process.env.GEMINI_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
 
-    // 0. Try local FastWhisper sidecar first (3 s timeout — fail fast)
-    const local = await this.transcribeWithLocalWhisper(audioBuffer, mimeType, 3000);
+    // 0. Try local FastWhisper sidecar first (6 s timeout — resilient for CPU inference)
+    const local = await this.transcribeWithLocalWhisper(audioBuffer, mimeType, 6000);
     if (local) return { text: local.text, confidence: local.confidence, isFinal: true };
 
     // 1. Try Google Gemini Flash Multimodal Streaming Chunk Transcription
@@ -168,8 +168,8 @@ export class TranscriptionService {
     const geminiKey = process.env.GEMINI_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
 
-    // 0. Try local FastWhisper sidecar (5 s timeout for full recording)
-    const local = await this.transcribeWithLocalWhisper(audioBuffer, mimeType, 5000);
+    // 0. Try local FastWhisper sidecar (10 s timeout for full recording on CPU)
+    const local = await this.transcribeWithLocalWhisper(audioBuffer, mimeType, 10000);
     if (local && local.text.length > 0) {
       const fillers = this.countFillers(local.text);
       return {

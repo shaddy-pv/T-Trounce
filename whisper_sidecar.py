@@ -26,7 +26,7 @@ import os
 import sys
 import tempfile
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,6 +40,7 @@ log = logging.getLogger("whisper_sidecar")
 # ──────────────────────────────────────────────
 MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base")
 DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
+HOST = os.environ.get("WHISPER_HOST", "0.0.0.0")
 PORT = int(os.environ.get("WHISPER_PORT", "8765"))
 LANG = os.environ.get("WHISPER_LANG", "en")
 
@@ -222,10 +223,11 @@ class WhisperHandler(BaseHTTPRequestHandler):
 # Entry point
 # ──────────────────────────────────────────────
 def main():
-    server = HTTPServer(("127.0.0.1", PORT), WhisperHandler)
-    log.info(f"Tarang WhisperSidecar listening on http://127.0.0.1:{PORT}")
+    server = ThreadingHTTPServer((HOST, PORT), WhisperHandler)
+    log.info(f"Trounce WhisperSidecar listening on http://{HOST}:{PORT}")
     log.info(f"  Model : {MODEL_SIZE}  |  Device : {DEVICE}  |  Lang : {LANG}")
-    log.info("  Health: http://127.0.0.1:{PORT}/health")
+    log.info(f"  Health: http://{HOST}:{PORT}/health")
+    log.info("  Concurrency: ThreadingHTTPServer enabled.")
     log.info("  Press Ctrl+C to stop.")
     try:
         server.serve_forever()

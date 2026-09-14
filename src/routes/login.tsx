@@ -6,7 +6,7 @@ import { Waveform, makeSampleWaveform } from "@/components/tarang/Waveform";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
-    meta: [{ title: "Sign in · Tarang" }, { name: "description", content: "Sign in to Tarang." }],
+    meta: [{ title: "Sign in · Trounce" }, { name: "description", content: "Sign in to Trounce." }],
   }),
   beforeLoad: ({ context }) => {
     if (context.session) {
@@ -46,7 +46,14 @@ function LoginPage() {
     try {
       const user = await login(cleanEmail, cleanPassword, role);
       navigate({
-        to: user.role === "teacher" || user.role === "admin" ? "/dashboard" : "/practice",
+        to:
+          user.role === "admin"
+            ? role === "student"
+              ? "/practice"
+              : "/dashboard"
+            : user.role === "teacher"
+              ? "/dashboard"
+              : "/practice",
         replace: true,
       });
     } catch {
@@ -61,7 +68,7 @@ function LoginPage() {
         <div className="flex flex-1 flex-col justify-between border-b border-hairline px-6 py-8 lg:border-b-0 lg:border-r lg:px-12 lg:py-12">
           <div className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-[#3FB8AF]" />
-            <span className="display text-[16px] font-semibold tracking-wide">tarang</span>
+            <span className="display text-[16px] font-semibold tracking-wide">trounce</span>
           </div>
 
           <div className="my-12 lg:my-0">
@@ -71,7 +78,7 @@ function LoginPage() {
               See your signal.
             </h1>
             <p className="mt-4 max-w-[36ch] text-[14px] text-secondary-warm">
-              A spoken-English coaching tool built around the one thing that matters — the sound of
+              A spoken-English coaching tool built around the one thing that matters: the sound of
               your voice, on a waveform.
             </p>
 
@@ -149,7 +156,7 @@ function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. name@tarang.in"
+              placeholder="e.g. name@trounce.in"
               autoCapitalize="none"
               autoComplete="email"
               className="mt-2 h-11 w-full rounded-[12px] border border-hairline bg-ink-900 px-3 text-[14px] text-primary-warm placeholder:text-tertiary-warm focus:outline-none focus:border-[#3FB8AF]"

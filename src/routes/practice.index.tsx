@@ -17,16 +17,20 @@ import { useRouter } from "@tanstack/react-router";
 export const Route = createFileRoute("/practice/")({
   head: () => ({
     meta: [
-      { title: "Practice · Tarang" },
+      { title: "Practice · Trounce" },
       {
         name: "description",
-        content: "Pick a prompt and record. Tarang shows your signal.",
+        content: "Pick a prompt and record. Trounce shows your signal.",
       },
     ],
   }),
   beforeLoad: ({ context }) => {
     if (!context.session) throw redirect({ to: "/login" });
-    if (context.session.role !== "student" && !context.session.isAdmin) {
+    if (
+      context.session.role !== "student" &&
+      !context.session.isAdmin &&
+      context.session.role !== "admin"
+    ) {
       throw redirect({ to: "/dashboard" });
     }
   },
@@ -197,7 +201,7 @@ function PracticeHubBody() {
       <div className="rounded-[12px] border border-hairline bg-ink-900 p-5">
         <div className="flex items-end justify-between">
           <div>
-            <p className="text-[13px] text-secondary-warm">Hi {firstName} — your streak</p>
+            <p className="text-[13px] text-secondary-warm">Hi {firstName}, your streak</p>
             <p className="display mt-2 num text-[56px] leading-none text-primary-warm">
               {streakDays}
               <span className="ml-2 num text-[16px] font-normal text-tertiary-warm">days</span>

@@ -5,7 +5,9 @@ import {
   teacherOnlyMiddleware,
   adminOnlyMiddleware,
   COOKIE_NAME,
+  LEGACY_COOKIE_NAME,
 } from "./middleware/auth.middleware";
+import { enforceRateLimit } from "./middleware/rate-limiter";
 import { ModuleService } from "./services/module.service";
 import { StudentService } from "./services/student.service";
 import { AttemptService } from "./services/attempt.service";
@@ -14,6 +16,7 @@ import { UserService, type UserPublic } from "./services/user.service";
 import { AssignmentService, type AssignmentPublic } from "./services/assignment.service";
 import { MessageService } from "./services/message.service";
 import { TranscriptionService } from "./services/transcription.service";
+import { FlagService } from "./services/flag.service";
 
 import { LoginInputSchema } from "./validators/auth.validator";
 import { CreateUserInputSchema, DeleteUserInputSchema } from "./validators/user.validator";
@@ -31,8 +34,20 @@ import {
   CreateMessageInputSchema,
   MarkMessageReadInputSchema,
 } from "./validators/message.validator";
+import {
+  CreateFlagInputSchema,
+  ResolveFlagInputSchema,
+  FlagFilterSchema,
+} from "./validators/flag.validator";
 import { z } from "zod";
-import type { Module, StudentRow, AttemptResult, DirectMessagePublic } from "@/types";
+import type {
+  Module,
+  StudentRow,
+  StudentWeeklyReport,
+  AttemptResult,
+  DirectMessagePublic,
+  FlagItem,
+} from "@/types";
 
 /**
  * Server Function: Authenticate user and issue secure HTTP-only session cookie
@@ -40,6 +55,14 @@ import type { Module, StudentRow, AttemptResult, DirectMessagePublic } from "@/t
 export const loginFn = createServerFn({ method: "POST" })
   .validator((input: unknown) => LoginInputSchema.parse(input))
   .handler(async ({ data }) => {
+    // In-memory rate limiting to prevent brute force credential attacks
+    enforceRateLimit(data.email.toLowerCase(), {
+      keyPrefix: "login",
+      maxRequests: 5,
+      windowMs: 60 * 1000,
+      errorMessage: "Too many login attempts. Please wait 1 minute before trying again.",
+    });
+
     const user = await AuthService.authenticateUserWithRole(
       data.email,
       data.passwordPlain,
@@ -74,6 +97,7 @@ export const loginFn = createServerFn({ method: "POST" })
  */
 export const logoutFn = createServerFn({ method: "POST" }).handler(async () => {
   deleteCookie(COOKIE_NAME);
+  deleteCookie(LEGACY_COOKIE_NAME);
   return { success: true };
 });
 
@@ -257,6 +281,14 @@ export const saveAttemptFn = createServerFn({ method: "POST" })
     // Enforce student's own ID
     const studentId = user.role === "student" ? user.userId : data.studentId || user.userId;
 
+    // In-memory rate limiting to protect audio processing against abuse
+    enforceRateLimit(studentId, {
+      keyPrefix: "attempt",
+      maxRequests: 30,
+      windowMs: 60 * 1000,
+      errorMessage: "Submission rate limit reached. Please wait a moment before submitting again.",
+    });
+
     return await AttemptService.saveAttempt({
       studentId,
       moduleId: data.moduleId,
@@ -380,4 +412,62 @@ export const streamTranscribeChunkFn = createServerFn({ method: "POST" })
       data.promptContext,
       data.sequence,
     );
+  });
+
+/**
+ * Server Function: Fetch real weekly student report (Protected: Faculty or Self)
+ */
+export const fetchStudentReportFn = createServerFn({ method: "GET" })
+  .middleware([authenticatedMiddleware])
+  .validator((input: unknown) => z.string().min(1).parse(input))
+  .handler(async ({ data: studentId, context }): Promise<StudentWeeklyReport | null> => {
+    const user = (context as { user: SessionPayload }).user;
+    const isFaculty = user.role === "teacher" || user.role === "admin" || user.isAdmin;
+    if (!isFaculty && user.userId !== studentId) {
+      throw new Error("Forbidden: You cannot access other students' reports.");
+    }
+    return await StudentService.getStudentWeeklyReport(studentId);
+  });
+
+/**
+ * Server Function: Create student flag or request for teacher review (Protected: Authenticated)
+ */
+export const createFlagFn = createServerFn({ method: "POST" })
+  .middleware([authenticatedMiddleware])
+  .validator((input: unknown) => CreateFlagInputSchema.parse(input))
+  .handler(async ({ data, context }): Promise<FlagItem> => {
+    const user = (context as { user: SessionPayload }).user;
+    const studentId = user.role === "student" ? user.userId : data.studentId || user.userId;
+    return await FlagService.createFlag({
+      ...data,
+      studentId,
+      studentName: user.name,
+      studentEmail: user.email,
+    });
+  });
+
+/**
+ * Server Function: Fetch flags for Teacher Console (Protected: Faculty/Admin)
+ */
+export const fetchFlagsFn = createServerFn({ method: "GET" })
+  .middleware([teacherOnlyMiddleware])
+  .validator((input: unknown) => FlagFilterSchema.parse(input))
+  .handler(async ({ data }): Promise<FlagItem[]> => {
+    return await FlagService.getFlags(data);
+  });
+
+/**
+ * Server Function: Resolve a flag with teacher feedback (Protected: Faculty/Admin)
+ */
+export const resolveFlagFn = createServerFn({ method: "POST" })
+  .middleware([teacherOnlyMiddleware])
+  .validator((input: unknown) => ResolveFlagInputSchema.parse(input))
+  .handler(async ({ data, context }): Promise<{ success: boolean }> => {
+    const user = (context as { user: SessionPayload }).user;
+    const success = await FlagService.resolveFlag({
+      ...data,
+      teacherId: user.userId,
+      teacherName: user.name,
+    });
+    return { success };
   });

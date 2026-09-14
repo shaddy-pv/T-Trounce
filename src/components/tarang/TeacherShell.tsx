@@ -14,7 +14,8 @@ export function TeacherShell({ children }: { children: ReactNode }) {
     { to: "/flags", label: "Flags" },
     { to: "/reports", label: "Reports" },
     { to: "/users", label: "Users & Teachers" },
-  ] as const;
+    ...(user?.isAdmin ? [{ to: "/practice", label: "Student View" }] : []),
+  ];
 
   return (
     <div className="min-h-screen bg-ink-950 text-primary-warm">
@@ -23,7 +24,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-8">
             <Link to="/dashboard" className="flex items-center gap-2">
               <span className="size-2 rounded-full bg-[#3FB8AF]" />
-              <span className="display text-[16px] font-semibold tracking-wide">tarang</span>
+              <span className="display text-[16px] font-semibold tracking-wide">trounce</span>
               <span className="num ml-2 text-[11px] uppercase tracking-wider text-tertiary-warm">
                 console
               </span>

@@ -1,17 +1,17 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useState } from "react";
-import { Send, Check, Printer } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Send, Check, Printer, Loader2 } from "lucide-react";
 import { TeacherShell } from "@/components/tarang/TeacherShell";
-import { fetchStudentRosterFn } from "@/server/data";
+import { fetchStudentRosterFn, fetchStudentReportFn } from "@/server/data";
 import { TButton } from "@/components/tarang/Button";
 import { StatusDot } from "@/components/tarang/StatusDot";
 import { ParentReportCard } from "@/features/reports/components/ParentReportCard";
 import { generateParentReportWhatsAppLink } from "@/features/reports/lib/whatsapp";
-import type { StudentRow } from "@/types";
+import type { StudentRow, StudentWeeklyReport } from "@/types";
 
 export const Route = createFileRoute("/reports")({
   head: () => ({
-    meta: [{ title: "Reports · Tarang" }],
+    meta: [{ title: "Reports · Trounce" }],
   }),
   beforeLoad: ({ context }) => {
     if (!context.session) throw redirect({ to: "/login" });
@@ -24,30 +24,67 @@ export const Route = createFileRoute("/reports")({
     }
   },
   loader: async () => {
-    return await fetchStudentRosterFn();
+    const studentRoster = await fetchStudentRosterFn();
+    let initialReport: StudentWeeklyReport | null = null;
+    if (studentRoster.length > 0) {
+      initialReport = await fetchStudentReportFn({ data: studentRoster[0].id });
+    }
+    return { studentRoster, initialReport };
   },
   component: ReportsPage,
 });
 
 function ReportsPage() {
-  const studentRoster = Route.useLoaderData();
+  const { studentRoster, initialReport } = Route.useLoaderData();
   const [selectedId, setSelectedId] = useState<string>(studentRoster[0]?.id ?? "");
   const [sentIds, setSentIds] = useState<string[]>([]);
+  const [reportCache, setReportCache] = useState<Record<string, StudentWeeklyReport>>(
+    initialReport && studentRoster[0] ? { [studentRoster[0].id]: initialReport } : {},
+  );
+  const [loadingReport, setLoadingReport] = useState(false);
+
   const s: StudentRow = studentRoster.find((x) => x.id === selectedId) ??
     studentRoster[0] ?? {
       id: "empty",
       name: "Student",
       status: "on-track",
-      focus: "—",
+      focus: "General",
       lastActive: "Today",
       scorePct: 75,
       trendPct: 2,
       waveform: [],
     };
 
+  const currentReport: StudentWeeklyReport | null =
+    reportCache[selectedId] || (selectedId === studentRoster[0]?.id ? initialReport : null);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    if (reportCache[selectedId]) return;
+
+    let isMounted = true;
+    setLoadingReport(true);
+    fetchStudentReportFn({ data: selectedId })
+      .then((rep) => {
+        if (isMounted && rep) {
+          setReportCache((prev) => ({ ...prev, [selectedId]: rep }));
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load student report:", err);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingReport(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedId, reportCache]);
+
   const sendWhatsApp = () => {
     setSentIds((arr) => [...new Set([...arr, s.id])]);
-    const url = generateParentReportWhatsAppLink(s);
+    const url = generateParentReportWhatsAppLink(s, currentReport);
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -63,7 +100,8 @@ function ReportsPage() {
         </p>
         <h1 className="display mt-2 text-[28px]">This week's signal</h1>
         <p className="mt-1 text-[13px] text-secondary-warm">
-          Pick a student. Preview is exactly what the parent receives on WhatsApp.
+          Pick a student. Preview is dynamically generated from authentic voice recordings and sent
+          to WhatsApp.
         </p>
       </div>
 
@@ -106,11 +144,19 @@ function ReportsPage() {
 
         {/* Preview pane */}
         <div>
-          <p className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
-            preview · what the parent sees
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
+              preview · what the parent sees
+            </p>
+            {loadingReport && (
+              <span className="inline-flex items-center gap-1.5 num text-[11px] text-tertiary-warm">
+                <Loader2 size={12} className="animate-spin text-[#3FB8AF]" />
+                aggregating weekly submissions...
+              </span>
+            )}
+          </div>
 
-          <ParentReportCard student={s} />
+          <ParentReportCard student={s} report={currentReport} />
 
           <div className="mt-4 flex items-center justify-center gap-3">
             <TButton variant="secondary" surface="console" size="md" onClick={printReport}>

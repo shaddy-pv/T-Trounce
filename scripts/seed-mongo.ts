@@ -91,107 +91,61 @@ async function main() {
     },
   ];
 
-  console.log("Seeding students collection with session and batch tags...");
+  console.log("Setting up students collection...");
   const studentsCol = db.collection("students");
   await studentsCol.deleteMany({});
-  await studentsCol.insertMany(
-    studentRoster.map((s, idx) => {
-      // Distribute students evenly across batches
-      const batchObj = allBatches[idx % allBatches.length];
-      return {
-        ...s,
-        sessionSeason: batchObj.season,
-        batchTime: batchObj.time,
-        batchId: batchObj.id,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-    }),
-  );
+  await studentsCol.insertOne({
+    id: "admin-shadan",
+    name: "Shadan (Admin)",
+    status: "on-track",
+    focus: "Fluency & Speech Mastery",
+    lastActive: "Today",
+    scorePct: 95,
+    trendPct: 5,
+    waveform: [],
+    sessionSeason: "summer",
+    batchTime: "morning",
+    batchId: "summer-morning",
+    updatedAt: new Date(),
+  });
   await studentsCol.createIndex({ id: 1 }, { unique: true });
   await studentsCol.createIndex({ batchId: 1, status: 1 });
   await studentsCol.createIndex({ sessionSeason: 1, batchTime: 1 });
 
-  console.log("Seeding batches collection with all 8 batches...");
+  console.log("Setting up batches collection with all 8 cohorts...");
   const batchesCol = db.collection("batches");
   await batchesCol.deleteMany({});
   await batchesCol.insertMany(
-    allBatches.map((b) => {
-      const count = studentRoster.filter(
-        (_, idx) => allBatches[idx % allBatches.length].id === b.id,
-      ).length;
-      return {
-        ...b,
-        studentCount: count,
-        createdAt: new Date(),
-      };
-    }),
+    allBatches.map((b) => ({
+      ...b,
+      studentCount: 0,
+      createdAt: new Date(),
+    })),
   );
   await batchesCol.createIndex({ id: 1 }, { unique: true });
   await batchesCol.createIndex({ season: 1, time: 1 });
 
-  console.log("Seeding users collection...");
+  console.log("Seeding real admin user...");
   const usersCol = db.collection("users");
   await usersCol.deleteMany({});
 
-  const defaultPasswordHash = await bcrypt.hash("password123", 10);
-  const adminPassword = process.env.ADMIN_INITIAL_PASSWORD || "Admin@Tarang2026!";
-  const adminEmail = process.env.ADMIN_EMAIL || "admin@tarang.in";
+  const adminPassword = process.env.ADMIN_INITIAL_PASSWORD || "ChangeMe123!";
+  const adminEmail = process.env.ADMIN_EMAIL || "admin@trounce.edu";
   const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
 
-  // 1. Create Admin Account (full permissions)
+  // Create Real Admin Account with full privileges
   await usersCol.insertOne({
-    id: "admin-1",
-    email: adminEmail,
-    username: "admin_master",
+    id: "admin-master",
+    email: adminEmail.toLowerCase(),
+    username: "admin",
     passwordHash: adminPasswordHash,
-    name: "System Administrator",
+    name: "Shadan (Admin)",
     role: "admin",
     sessionSeason: "summer",
     batchTime: "morning",
     batchId: "summer-morning",
     createdAt: new Date(),
   });
-
-  // 2. Create Teacher Account
-  await usersCol.insertOne({
-    id: "teacher-1",
-    email: "teacher@tarang.in",
-    username: "sharma_sir",
-    passwordHash: defaultPasswordHash,
-    name: "Mr. Sharma",
-    role: "teacher",
-    sessionSeason: "summer",
-    batchTime: "morning",
-    batchId: "summer-morning",
-    createdAt: new Date(),
-  });
-
-  // 3. Create Students corresponding to the roster
-  const studentUsers = studentRoster.map((s, idx) => {
-    const slug = s.name.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const email =
-      slug === "priyasharma"
-        ? "priya@tarang.in"
-        : slug === "amankumar"
-          ? "aman@tarang.in"
-          : `${slug}@tarang.in`;
-    const batchObj = allBatches[idx % allBatches.length];
-    return {
-      id: s.id,
-      email,
-      username: s.name.toLowerCase().replace(/\s+/g, "_"),
-      passwordHash: defaultPasswordHash,
-      name: s.name,
-      role: "student",
-      sessionSeason: batchObj.season,
-      batchTime: batchObj.time,
-      batchId: batchObj.id,
-      createdAt: new Date(),
-    };
-  });
-
-  await usersCol.insertMany(studentUsers);
   await usersCol.createIndex({ email: 1 }, { unique: true });
   await usersCol.createIndex({ username: 1 }, { sparse: true });
 
@@ -314,71 +268,25 @@ async function main() {
 
   await attemptsCol.insertMany([
     {
-      id: "attempt-priya-1",
-      studentId: "priya-s",
+      id: "attempt-admin-1",
+      studentId: "admin-shadan",
       moduleId: "module-1",
-      assignmentId: "hw-1",
-      prompt: "Introduce yourself in 60 seconds, mentioning your career goals.",
+      prompt: "Introduce yourself and describe your vision for Tarang.",
       transcript:
-        "Good morning everyone. My name is Priya Sharma from Patna. I completed my Bachelor of Computer Applications last year and I am currently preparing for tech consulting roles. I am working diligently on Tarang to eliminate hesitations and improve my pitch inflection.",
-      audioUrl: sampleAudioUri,
-      durationSec: 42,
-      pronunciation: 88,
-      vocabulary: 92,
-      grammar: 85,
-      fillerCount: 1,
-      pauseCount: 2,
-      feedback:
-        "Strong vowel resonance and confident delivery. Slightly elongated pause before 'consulting'. Keep practicing daily drills.",
-      waveform: Array.from({ length: 40 }, (_, i) => ({
-        v: 0.3 + Math.abs(Math.sin(i * 0.45)) * 0.6,
-        kind: i % 12 === 0 ? ("hesitation" as const) : ("clear" as const),
-      })),
-      createdAt: new Date(Date.now() - 3600 * 1000 * 4), // 4 hours ago
-    },
-    {
-      id: "attempt-priya-2",
-      studentId: "priya-s",
-      moduleId: "module-2",
-      prompt: "Describe your favorite hobby and why it inspires you.",
-      transcript:
-        "One of my absolute favorite activities is classical singing. When I practice raagas in the morning, it helps me control my breath cadence, which um actually helps my spoken English pacing as well.",
-      audioUrl: sampleAudioUri,
-      durationSec: 38,
-      pronunciation: 84,
-      vocabulary: 89,
-      grammar: 86,
-      fillerCount: 1,
-      pauseCount: 1,
-      feedback:
-        "Smooth pacing. Breath control is noticeably effective. Minor filler word 'um' detected at 0:18.",
-      waveform: Array.from({ length: 36 }, (_, i) => ({
-        v: 0.25 + Math.abs(Math.cos(i * 0.5)) * 0.65,
-        kind: i === 18 ? ("filler" as const) : ("clear" as const),
-      })),
-      createdAt: new Date(Date.now() - 86400 * 1000 * 2), // 2 days ago
-    },
-    {
-      id: "attempt-aman-1",
-      studentId: "aman-k",
-      moduleId: "module-1",
-      assignmentId: "hw-2",
-      prompt: "Explain how technology changes learning in tier-2 cities.",
-      transcript:
-        "Hello sir. Technology has completely transformed coaching in Bihar. Earlier we had to travel to Delhi for guidance, but now with mobile apps like Tarang, we can practice speaking daily right from our rooms.",
+        "Hello everyone, my name is Shadan. I am testing the full audio recording and phonetic evaluation pipeline on Tarang to ensure students achieve speech clarity.",
       audioUrl: sampleAudioUri,
       durationSec: 45,
-      pronunciation: 79,
-      vocabulary: 82,
-      grammar: 76,
-      fillerCount: 3,
-      pauseCount: 4,
-      feedback: "Good enthusiasm. Be mindful of ending consonants in 'transformed' and 'guidance'.",
-      waveform: Array.from({ length: 38 }, (_, i) => ({
-        v: 0.35 + Math.abs(Math.sin(i * 0.6)) * 0.55,
-        kind: i % 8 === 0 ? ("hesitation" as const) : ("clear" as const),
+      pronunciation: 95,
+      vocabulary: 92,
+      grammar: 94,
+      fillerCount: 0,
+      pauseCount: 1,
+      feedback: "Exceptional projection, unbroken rhythm, and confident phonetic cadence.",
+      waveform: Array.from({ length: 40 }, (_, i) => ({
+        v: 0.35 + Math.abs(Math.sin(i * 0.45)) * 0.6,
+        kind: "clear" as const,
       })),
-      createdAt: new Date(Date.now() - 3600 * 1000 * 12),
+      createdAt: new Date(),
     },
   ]);
   await attemptsCol.createIndex({ studentId: 1, createdAt: -1 });

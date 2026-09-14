@@ -568,7 +568,7 @@ export function useAudioRecorder() {
       setPhase("recording");
     } catch (err) {
       console.warn("Microphone access unavailable or denied:", err);
-      setMicError("Microphone access denied — please check browser microphone permissions.");
+      setMicError("Microphone access denied: please check browser microphone permissions.");
       samplerIntervalRef.current = window.setInterval(() => {
         setSamples((prev) => [...prev, 0.2 + Math.random() * 0.5]);
       }, ACOUSTIC_THRESHOLDS.sampleIntervalMs);

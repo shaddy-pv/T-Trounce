@@ -1,14 +1,14 @@
-# Signal Speak Studio
+# Trounce Studio
 
-Tarang — Frontend Design & Build Brief
+Trounce- Frontend Design & Build Brief
 
-Working name: Tarang (Hindi: wave/frequency) — fits the core metaphor (speech = signal) and the bilingual audience. Rename freely; if you rename, find/replace "Tarang" everywhere below.
+Application name: Trounce (formerly Tarang)- Spoken-English speech intelligence and practice studio.
 
 How to use this file: paste the whole thing into Claude Code, v0, Cursor, or a fresh Claude chat as the build prompt. It is written as a direct instruction to whichever AI builds the frontend. Section 10 is the literal kickoff prompt — everything above it is the reference the builder should follow while executing.
 
 1. Subject & Direction
 
-Tarang is a spoken-English coaching tool used inside Indian tier-2/3 coaching institutes. Two roles, one app: students record themselves speaking and get feedback; teachers monitor a batch and prove progress to parents. The product's own vocabulary — recording, transcript, pause, filler word, fluency, pronunciation — is the design's source material. Avoid borrowing the visual language of generic "AI SaaS" or "EdTech gradient" products. Borrow instead from audio engineering: waveforms, signal meters, channel strips, control rooms. Speaking clearly = strong signal. Hesitation, filler words, long pauses = noise. This is literal (it's real audio data), not a decorative metaphor.
+Trounce is a spoken-English coaching tool used inside Indian tier-2/3 coaching institutes. Two roles, one app: students record themselves speaking and get feedback; teachers monitor a batch and prove progress to parents. The product's own vocabulary — recording, transcript, pause, filler word, fluency, pronunciation — is the design's source material. Avoid borrowing the visual language of generic "AI SaaS" or "EdTech gradient" products. Borrow instead from audio engineering: waveforms, signal meters, channel strips, control rooms. Speaking clearly = strong signal. Hesitation, filler words, long pauses = noise. This is literal (it's real audio data), not a decorative metaphor.
 
 Single app, role-based routing (already decided): one design system, two layout personalities —
 

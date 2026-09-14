@@ -54,6 +54,9 @@ export class AttemptService {
           pauseCount: doc.pauseCount,
           feedback: doc.feedback,
           teacherFeedback: doc.teacherFeedback,
+          isFlagged: doc.isFlagged,
+          flagReason: doc.flagReason,
+          flagStatus: doc.flagStatus,
           waveform: doc.waveform,
           createdAt: doc.createdAt
             ? new Date(doc.createdAt).toISOString()
@@ -186,7 +189,7 @@ export class AttemptService {
 
         // Derive the weakest metric to show as "focus" area for the teacher
         const { pronunciation, vocabulary, grammar } = payload.result;
-        let focus = "—";
+        let focus = "General";
         const minScore = Math.min(pronunciation, vocabulary, grammar);
         if (minScore === pronunciation) focus = "Pronunciation";
         else if (minScore === vocabulary) focus = "Vocabulary";
@@ -222,18 +225,47 @@ export class AttemptService {
           .collection<StudentDoc>("students")
           .findOne({ id: payload.studentId });
 
-        if (!studentExists) {
-          const userDoc = await db.collection<UserDoc>("users").findOne({
-            $or: [{ id: payload.studentId }, { email: payload.studentId.toLowerCase() }],
+        const userDoc = await db.collection<UserDoc>("users").findOne({
+          $or: [{ id: payload.studentId }, { email: payload.studentId.toLowerCase() }],
+        });
+        const studentName = userDoc ? userDoc.name : studentExists?.name || payload.studentId;
+
+        // Auto-create performance flag if score is critically low (< 50%)
+        if (avgScore < 50) {
+          const existingOpenFlag = await db.collection("flags").findOne({
+            studentId: payload.studentId,
+            type: "low_score",
+            status: "pending",
           });
-          const studentName = userDoc ? userDoc.name : payload.studentId;
+          if (!existingOpenFlag) {
+            const { randomUUID } = await import("crypto");
+            await db.collection("flags").insertOne({
+              id: `flag-${Date.now()}-${randomUUID().slice(0, 6)}`,
+              studentId: payload.studentId,
+              studentName,
+              studentEmail: userDoc?.email,
+              attemptId: payload.result.id,
+              attemptPrompt: payload.result.prompt,
+              attemptDurationSec: payload.result.durationSec,
+              audioUrl: finalAudioUrl,
+              type: "low_score",
+              category: "Low Fluency Score",
+              studentNote: `Automated alert: Scored ${avgScore}% on "${payload.result.prompt?.substring(0, 40)}"`,
+              status: "pending",
+              scorePct: avgScore,
+              createdAt: new Date(),
+            });
+          }
+        }
+
+        if (!studentExists) {
           const sessionSeason = userDoc?.sessionSeason || "summer";
           const batchTime = userDoc?.batchTime || "morning";
 
           await db.collection<StudentDoc>("students").insertOne({
             id: payload.studentId,
             name: studentName,
-            status: "on-track",
+            status: avgScore < 50 ? "flagged" : "on-track",
             focus,
             lastActive: "Today",
             scorePct: avgScore,
@@ -245,19 +277,17 @@ export class AttemptService {
             sessionSeason,
             batchTime,
             batchId: `${sessionSeason}-${batchTime}`,
+            flagReason: avgScore < 50 ? `Low Score: ${avgScore}%` : undefined,
             updatedAt: new Date(),
           });
         } else {
-          // Build flagReason from real data: inactivity days + current score
-          const inactiveDays = 0; // just submitted so always 0 here
-          const flagReason =
-            avgScore < 50
-              ? `${focus} ${avgScore}% · Score low`
-              : trendPct <= -10
-                ? `Score down ${Math.abs(trendPct)}%`
-                : inactiveDays > 4
-                  ? `Inactive ${inactiveDays}d`
-                  : undefined;
+          // Build flagReason from real data
+          const isLowScore = avgScore < 50;
+          const flagReason = isLowScore
+            ? `${focus} ${avgScore}% · Low Score`
+            : trendPct <= -10
+              ? `Score down ${Math.abs(trendPct)}%`
+              : undefined;
 
           await db.collection<StudentDoc>("students").updateOne(
             { id: payload.studentId },
@@ -267,6 +297,7 @@ export class AttemptService {
                 scorePct: avgScore,
                 trendPct,
                 focus,
+                ...(isLowScore ? { status: "flagged" } : {}),
                 ...(flagReason !== undefined ? { flagReason } : {}),
                 waveform: payload.result.waveform,
                 updatedAt: new Date(),
@@ -314,6 +345,9 @@ export class AttemptService {
             pauseCount: doc.pauseCount,
             feedback: doc.feedback,
             teacherFeedback: doc.teacherFeedback,
+            isFlagged: doc.isFlagged,
+            flagReason: doc.flagReason,
+            flagStatus: doc.flagStatus,
             waveform: doc.waveform,
             createdAt: doc.createdAt
               ? new Date(doc.createdAt).toISOString()

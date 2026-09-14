@@ -21,7 +21,7 @@ import {
 export const Route = createFileRoute("/assignments")({
   head: () => ({
     meta: [
-      { title: "Homework & Assignments · Tarang" },
+      { title: "Homework & Assignments · Trounce" },
       {
         name: "description",
         content:

@@ -2,14 +2,15 @@ import { createMiddleware } from "@tanstack/react-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { AuthService, type SessionPayload } from "../services/auth.service";
 
-export const COOKIE_NAME = "tarang_session";
+export const COOKIE_NAME = "trounce_session";
+export const LEGACY_COOKIE_NAME = "tarang_session";
 
 /**
  * Middleware: Verifies session cookie and injects authenticated user into context.
  * Throws 401 if unauthenticated.
  */
 export const authenticatedMiddleware = createMiddleware().server(async ({ next }) => {
-  const token = getCookie(COOKIE_NAME);
+  const token = getCookie(COOKIE_NAME) || getCookie(LEGACY_COOKIE_NAME);
   if (!token) {
     throw new Error("Unauthorized: Please sign in to perform this action.");
   }

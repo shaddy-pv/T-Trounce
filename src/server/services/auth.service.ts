@@ -54,11 +54,11 @@ export class AuthService {
       return null;
     }
 
-    // Role verification
+    // Role verification: Administrator accounts have unrestricted access to all portals
     if (user.role === "admin") {
       return {
         ...user,
-        role: selectedRole === "student" ? "student" : "admin",
+        role: "admin",
       };
     }
 
@@ -74,13 +74,14 @@ export class AuthService {
    * Generates a signed JWT session token valid for 7 days.
    */
   static async createSessionToken(user: UserDoc): Promise<string> {
+    const isAdmin = user.role === "admin";
     const payload: SessionPayload = {
       userId: user.id,
       email: user.email,
       username: user.username,
       name: user.name,
       role: user.role,
-      isAdmin: user.role === "admin",
+      isAdmin,
       batchId: user.batchId,
       sessionSeason: user.sessionSeason,
       batchTime: user.batchTime,

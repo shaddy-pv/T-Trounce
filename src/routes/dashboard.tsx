@@ -10,10 +10,10 @@ import { Send, BookOpen, Layers } from "lucide-react";
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
     meta: [
-      { title: "Batch dashboard · Tarang" },
+      { title: "Batch dashboard · Trounce" },
       {
         name: "description",
-        content: "Batch overview as a channel-strip console — every student's signal at a glance.",
+        content: "Batch overview as a channel-strip console: every student's signal at a glance.",
       },
     ],
   }),

@@ -1,8 +1,8 @@
 /**
- * Tarang Application & Acoustic Constants
+ * Trounce Application & Acoustic Constants
  */
 export const APP_CONFIG = {
-  name: "Tarang",
+  name: "Trounce",
   tagline: "Speak. See your signal.",
   institution: "Sharma Coaching, Patna",
   defaultBatch: "Class X-A",

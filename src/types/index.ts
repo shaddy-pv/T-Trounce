@@ -3,3 +3,4 @@ export * from "./module.types";
 export * from "./student.types";
 export * from "./attempt.types";
 export * from "./message.types";
+export * from "./flag.types";

@@ -24,15 +24,18 @@ export interface AudioStreamResponse {
 // Local persistent filesystem cache directory
 const STORAGE_DIR = path.resolve(process.cwd(), ".storage", "audio");
 
-function ensureStorageDir() {
-  if (!fs.existsSync(STORAGE_DIR)) {
-    fs.mkdirSync(STORAGE_DIR, { recursive: true });
+async function ensureStorageDir() {
+  try {
+    await fs.promises.mkdir(STORAGE_DIR, { recursive: true });
+  } catch {
+    // directory exists or created concurrently
   }
 }
 
 export class StorageService {
   /**
-   * Save an audio recording (Buffer, Uint8Array, or base64 Data URI) to MongoDB GridFS + local persistent cache.
+   * Save an audio recording (Buffer, Uint8Array, or base64 Data URI) to persistent storage + MongoDB GridFS.
+   * Performs non-blocking asynchronous I/O to avoid freezing the Node.js event loop.
    */
   static async saveAudio(
     audioData: Buffer | Uint8Array | string,
@@ -64,16 +67,16 @@ export class StorageService {
     const audioId = `audio-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     const sanitizedFilename = `${audioId}-${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 
-    // 1. Cache to persistent local disk
+    // 1. Asynchronously cache to persistent local disk (non-blocking)
     try {
-      ensureStorageDir();
+      await ensureStorageDir();
       const localFilePath = path.join(STORAGE_DIR, `${audioId}.bin`);
-      fs.writeFileSync(localFilePath, buffer);
+      await fs.promises.writeFile(localFilePath, buffer);
     } catch (e) {
       console.warn("[StorageService] Local disk cache write note:", e);
     }
 
-    // 2. Persist to MongoDB GridFS
+    // 2. Persist to MongoDB GridFS for resilience across container restarts
     try {
       const db = await getDb();
       if (db) {
@@ -118,15 +121,13 @@ export class StorageService {
     let buffer: Buffer | null = null;
     let mimeType = "audio/webm";
 
-    // 1. Try local disk cache first for zero-latency streaming
+    // 1. Try local disk cache first with async non-blocking read for zero-latency streaming
     try {
-      ensureStorageDir();
+      await ensureStorageDir();
       const localFilePath = path.join(STORAGE_DIR, `${audioId}.bin`);
-      if (fs.existsSync(localFilePath)) {
-        buffer = fs.readFileSync(localFilePath);
-      }
+      buffer = await fs.promises.readFile(localFilePath);
     } catch {
-      // fallback to GridFS
+      // fallback to GridFS if not on local disk
     }
 
     // 2. Fallback to MongoDB GridFS if not in disk cache
@@ -148,10 +149,10 @@ export class StorageService {
               downloadStream.on("end", () => resolve(Buffer.concat(chunks)));
             });
 
-            // Cache to disk for subsequent requests
+            // Asynchronously cache to disk for subsequent requests
             try {
-              ensureStorageDir();
-              fs.writeFileSync(path.join(STORAGE_DIR, `${audioId}.bin`), buffer);
+              await ensureStorageDir();
+              await fs.promises.writeFile(path.join(STORAGE_DIR, `${audioId}.bin`), buffer);
             } catch {
               // ignore
             }
@@ -226,10 +227,12 @@ export class StorageService {
    */
   static async deleteAudio(audioId: string): Promise<boolean> {
     try {
-      ensureStorageDir();
+      await ensureStorageDir();
       const localFilePath = path.join(STORAGE_DIR, `${audioId}.bin`);
-      if (fs.existsSync(localFilePath)) {
-        fs.unlinkSync(localFilePath);
+      try {
+        await fs.promises.unlink(localFilePath);
+      } catch {
+        // file may already have been removed
       }
 
       const db = await getDb();

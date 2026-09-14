@@ -1,0 +1,62 @@
+# ==============================================================================
+# Trounce (Signal Speak Studio) — Multi-Container Production Composition
+# 100% Free / Self-Hostable Stack (Zero AWS or Paid Cloud Required)
+# ==============================================================================
+
+version: "3.8"
+
+services:
+  # 1. Main Web Application
+  trounce-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trounce_web
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://trounce-mongo:27017/trounce
+      - MONGODB_DB_NAME=trounce
+      - WHISPER_SIDECAR_URL=http://trounce-sidecar:8765
+      - SESSION_SECRET=${SESSION_SECRET:-change_this_to_a_random_32_char_secret_in_prod}
+      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:-ChangeMe123!}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@trounce.edu}
+    volumes:
+      - audio_storage:/app/.storage/audio
+    depends_on:
+      - trounce-mongo
+      - trounce-sidecar
+
+  # 2. Local AI Speech Recognition Sidecar (Offline FastWhisper)
+  trounce-sidecar:
+    build:
+      context: .
+      dockerfile: Dockerfile.sidecar
+    container_name: trounce_sidecar
+    restart: always
+    ports:
+      - "8765:8765"
+    environment:
+      - WHISPER_MODEL=base
+      - WHISPER_DEVICE=cpu
+      - WHISPER_HOST=0.0.0.0
+      - WHISPER_PORT=8765
+    volumes:
+      - whisper_cache:/root/.cache/huggingface
+
+  # 3. Persistent Database (MongoDB)
+  trounce-mongo:
+    image: mongo:6.0
+    container_name: trounce_mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+volumes:
+  audio_storage:
+  whisper_cache:
+  mongo_data:

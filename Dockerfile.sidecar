@@ -1,0 +1,28 @@
+# ==============================================================================
+# Trounce — FastWhisper Sidecar Dockerfile
+# Self-hosted, zero-cost, local offline speech inference
+# ==============================================================================
+
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    WHISPER_MODEL=base \
+    WHISPER_DEVICE=cpu \
+    WHISPER_HOST=0.0.0.0 \
+    WHISPER_PORT=8765
+
+WORKDIR /app
+
+# Install system ffmpeg required for decoding audio streams
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY whisper_sidecar.py ./
+
+EXPOSE 8765
+
+CMD ["python", "whisper_sidecar.py"]

@@ -54,7 +54,7 @@ export interface StudentRow {
   id: string;
   name: string;
   status: Status;
-  focus: "—" | "Vocab" | "Pron" | "Grammar" | "Fluency";
+  focus: "General" | "Vocab" | "Pron" | "Grammar" | "Fluency";
   lastActive: string;
   scorePct: number;
   trendPct: number; // negative = decline
@@ -91,7 +91,7 @@ export const studentRoster: StudentRow[] = [
     id: "aman-v",
     name: "Aman V.",
     status: "on-track",
-    focus: "—",
+    focus: "General",
     lastActive: "Today",
     scorePct: 82,
     trendPct: 4,
@@ -111,7 +111,7 @@ export const studentRoster: StudentRow[] = [
     id: "vikram-r",
     name: "Vikram R.",
     status: "on-track",
-    focus: "—",
+    focus: "General",
     lastActive: "Today",
     scorePct: 78,
     trendPct: 3,
@@ -131,7 +131,7 @@ export const studentRoster: StudentRow[] = [
     id: "kabir-d",
     name: "Kabir D.",
     status: "on-track",
-    focus: "—",
+    focus: "General",
     lastActive: "Today",
     scorePct: 86,
     trendPct: 6,
@@ -141,7 +141,7 @@ export const studentRoster: StudentRow[] = [
     id: "ishita-p",
     name: "Ishita P.",
     status: "on-track",
-    focus: "—",
+    focus: "General",
     lastActive: "Yesterday",
     scorePct: 74,
     trendPct: 2,
@@ -161,7 +161,7 @@ export const studentRoster: StudentRow[] = [
     id: "arjun-b",
     name: "Arjun B.",
     status: "on-track",
-    focus: "—",
+    focus: "General",
     lastActive: "Today",
     scorePct: 80,
     trendPct: 5,
@@ -202,7 +202,7 @@ export function sampleResult(id: string): AttemptResult {
     grammar: 81,
     fillerCount: fillers,
     pauseCount: pauses,
-    feedback: `${fillers} filler words in this attempt — try pausing instead of saying "umm".`,
+    feedback: `${fillers} filler words in this attempt: try pausing instead of saying "umm".`,
     waveform: wf,
     createdAt: new Date().toISOString(),
   };

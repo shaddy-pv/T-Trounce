@@ -82,13 +82,13 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { name: "theme-color", content: "#100E0C" },
-      { title: "Tarang — Speak. See your signal." },
+      { title: "Trounce · Speak. See your signal." },
       {
         name: "description",
         content:
-          "Tarang is a spoken-English coaching tool for Indian coaching institutes. Students record, see their waveform, and improve. Teachers monitor a batch and prove progress to parents.",
+          "Trounce is a spoken-English coaching tool for Indian coaching institutes. Students record, see their waveform, and improve. Teachers monitor a batch and prove progress to parents.",
       },
-      { property: "og:title", content: "Tarang — Speak. See your signal." },
+      { property: "og:title", content: "Trounce · Speak. See your signal." },
       {
         property: "og:description",
         content: "Spoken-English coaching for tier-2/3 coaching institutes. Waveforms, not vibes.",

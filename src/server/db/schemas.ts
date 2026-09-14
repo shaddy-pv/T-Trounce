@@ -63,7 +63,7 @@ export interface AttemptDoc {
   audioSize?: number; // File size in bytes
   transcriptionStatus?: "pending" | "processing" | "completed" | "failed";
   durationSec: number;
-  targetDurationSec?: number; // Target prompt duration — used for completion%
+  targetDurationSec?: number; // Target prompt duration (used for completion%)
   pronunciation: number;
   vocabulary: number;
   grammar: number;
@@ -71,6 +71,9 @@ export interface AttemptDoc {
   pauseCount: number;
   feedback: string;
   teacherFeedback?: string;
+  isFlagged?: boolean;
+  flagReason?: string;
+  flagStatus?: "pending" | "resolved" | "dismissed";
   waveform: WaveformSegment[];
   createdAt: Date;
 }
@@ -80,7 +83,7 @@ export interface BatchDoc {
   id: string; // e.g. "summer-morning"
   season: SessionSeason;
   time: BatchTime;
-  name: string; // e.g. "Summer — Morning Batch"
+  name: string; // e.g. "Summer · Morning Batch"
   institution: string;
   teacherId?: string;
   teacherName: string;
@@ -115,4 +118,25 @@ export interface DirectMessageDoc {
   read: boolean;
   senderRole?: "teacher" | "student";
   createdAt: Date;
+}
+
+export interface FlagDoc {
+  _id?: ObjectId;
+  id: string;
+  studentId: string;
+  studentName: string;
+  studentEmail?: string;
+  attemptId?: string;
+  attemptPrompt?: string;
+  attemptDurationSec?: number;
+  audioUrl?: string;
+  type: "student_request" | "low_score" | "severe_drop" | "inactivity";
+  category?: string;
+  studentNote?: string;
+  teacherFeedback?: string;
+  status: "pending" | "resolved" | "dismissed";
+  scorePct?: number;
+  createdAt: Date;
+  resolvedAt?: Date;
+  resolvedBy?: string;
 }

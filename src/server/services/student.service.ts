@@ -34,6 +34,13 @@ export class StudentService {
         const studentDocs = await db.collection<StudentDoc>("students").find({}).toArray();
         const studentDocsMap = new Map(studentDocs.map((s) => [s.id, s]));
 
+        // Fetch open pending flags
+        const pendingFlags = await db
+          .collection<import("../db/schemas").FlagDoc>("flags")
+          .find({ status: "pending" })
+          .toArray();
+        const pendingFlagsMap = new Map(pendingFlags.map((f) => [f.studentId, f]));
+
         const now = new Date();
         const results: StudentRow[] = [];
 
@@ -59,7 +66,7 @@ export class StudentService {
 
           let scorePct = 0;
           let trendPct = 0;
-          let focus = "—";
+          let focus = "General";
           let waveform = studentDoc?.waveform ?? [];
           let lastActive = "Never";
           let inactiveDays = 0;
@@ -118,15 +125,29 @@ export class StudentService {
             } else {
               lastActive = `${inactiveDays}d ago`;
             }
+          }
 
-            if (inactiveDays > 4) {
-              status = "flagged";
-              flagReason = `Inactive ${inactiveDays}d`;
-            } else if (inactiveDays > 2) {
-              status = "nudge";
-            } else {
-              status = "on-track";
-            }
+          // Evaluate status priority: Student Request Flag > Low Score (<50%) > Inactivity (>4d) > Nudge
+          const pendingFlag = pendingFlagsMap.get(user.id);
+          if (pendingFlag) {
+            status = "flagged";
+            flagReason = pendingFlag.category
+              ? `Help Request: ${pendingFlag.category}`
+              : "Needs Teacher Review";
+          } else if (attempts.length > 0 && scorePct < 50) {
+            status = "flagged";
+            flagReason = `Low Fluency: ${scorePct}%`;
+          } else if (attempts.length === 0) {
+            status = "nudge";
+            flagReason = "No recordings yet";
+          } else if (inactiveDays > 4) {
+            status = "flagged";
+            flagReason = `Inactive ${inactiveDays}d`;
+          } else if (inactiveDays > 2) {
+            status = "nudge";
+            flagReason = `Inactive ${inactiveDays}d`;
+          } else if (studentDoc?.status) {
+            status = studentDoc.status;
           }
 
           results.push({
@@ -146,8 +167,10 @@ export class StudentService {
           });
         }
 
-        // Sort: Most recently active students on top (e.g. Today -> Yesterday -> 2d ago -> Never)
+        // Sort: Flagged first, then most recently active
         results.sort((a, b) => {
+          if (a.status === "flagged" && b.status !== "flagged") return -1;
+          if (a.status !== "flagged" && b.status === "flagged") return 1;
           if (a.lastActive === "Never" && b.lastActive !== "Never") return 1;
           if (a.lastActive !== "Never" && b.lastActive === "Never") return -1;
           return (a.inactiveDays ?? 999) - (b.inactiveDays ?? 999);
@@ -159,6 +182,168 @@ export class StudentService {
       console.error("[StudentService.getRoster Error]", err);
     }
     return [];
+  }
+
+  /**
+   * Fetch authentic weekly report dossier with real attempts count and scores
+   */
+  static async getStudentWeeklyReport(
+    studentId: string,
+  ): Promise<import("@/types").StudentWeeklyReport | null> {
+    try {
+      const db = await getDb();
+      if (!db) return null;
+
+      const student = await this.getStudentById(studentId);
+      if (!student) return null;
+
+      const user = await db.collection<import("../db/schemas").UserDoc>("users").findOne({
+        $or: [{ id: studentId }, { email: studentId.toLowerCase() }],
+      });
+
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+      const searchIds = [studentId];
+      if (user?.email) searchIds.push(user.email.toLowerCase());
+      if (user?.id && !searchIds.includes(user.id)) searchIds.push(user.id);
+
+      // 1. Fetch all attempts by student
+      const allAttempts = await db
+        .collection<import("../db/schemas").AttemptDoc>("attempts")
+        .find({ studentId: { $in: searchIds } })
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      const totalAttempts = allAttempts.length;
+
+      // 2. Filter attempts recorded in last 7 days
+      const weeklyAttempts = allAttempts.filter((a) => {
+        if (!a.createdAt) return false;
+        return new Date(a.createdAt).getTime() >= sevenDaysAgo.getTime();
+      });
+
+      // 3. Filter attempts recorded in prior 7-day window (7 to 14 days ago) for real trend
+      const prevWeeklyAttempts = allAttempts.filter((a) => {
+        if (!a.createdAt) return false;
+        const time = new Date(a.createdAt).getTime();
+        return time >= fourteenDaysAgo.getTime() && time < sevenDaysAgo.getTime();
+      });
+
+      const attemptsThisWeek = weeklyAttempts.length;
+      const hasActivity = allAttempts.length > 0;
+
+      let pronunciation = 0;
+      let vocabulary = 0;
+      let grammar = 0;
+      let scorePct = 0;
+      let trendPct = student.trendPct || 0;
+      let waveform = student.waveform || [];
+
+      if (attemptsThisWeek > 0) {
+        pronunciation = Math.round(
+          weeklyAttempts.reduce((sum, a) => sum + (a.pronunciation ?? 70), 0) / attemptsThisWeek,
+        );
+        vocabulary = Math.round(
+          weeklyAttempts.reduce((sum, a) => sum + (a.vocabulary ?? 70), 0) / attemptsThisWeek,
+        );
+        grammar = Math.round(
+          weeklyAttempts.reduce((sum, a) => sum + (a.grammar ?? 70), 0) / attemptsThisWeek,
+        );
+        scorePct = Math.round(
+          weeklyAttempts.reduce((sum, a) => {
+            const sc =
+              a.targetDurationSec && a.targetDurationSec > 0
+                ? Math.min(100, Math.round((a.durationSec / a.targetDurationSec) * 100))
+                : Math.round(
+                    ((a.pronunciation ?? 70) + (a.vocabulary ?? 70) + (a.grammar ?? 70)) / 3,
+                  );
+            return sum + sc;
+          }, 0) / attemptsThisWeek,
+        );
+
+        if (weeklyAttempts[0]?.waveform && weeklyAttempts[0].waveform.length > 0) {
+          waveform = weeklyAttempts[0].waveform;
+        }
+
+        // Real trend calculation
+        if (prevWeeklyAttempts.length > 0) {
+          const prevScore = Math.round(
+            prevWeeklyAttempts.reduce((sum, a) => {
+              const sc =
+                a.targetDurationSec && a.targetDurationSec > 0
+                  ? Math.min(100, Math.round((a.durationSec / a.targetDurationSec) * 100))
+                  : Math.round(
+                      ((a.pronunciation ?? 70) + (a.vocabulary ?? 70) + (a.grammar ?? 70)) / 3,
+                    );
+              return sum + sc;
+            }, 0) / prevWeeklyAttempts.length,
+          );
+          trendPct = scorePct - prevScore;
+        } else if (allAttempts.length > attemptsThisWeek) {
+          const prev = allAttempts[attemptsThisWeek];
+          const prevScore =
+            prev.targetDurationSec && prev.targetDurationSec > 0
+              ? Math.min(100, Math.round((prev.durationSec / prev.targetDurationSec) * 100))
+              : Math.round(
+                  ((prev.pronunciation ?? 70) + (prev.vocabulary ?? 70) + (prev.grammar ?? 70)) / 3,
+                );
+          trendPct = scorePct - prevScore;
+        }
+      } else if (totalAttempts > 0) {
+        // Fallback to recent attempts if none recorded in current 7-day window
+        const latest = allAttempts[0];
+        pronunciation = latest.pronunciation ?? 70;
+        vocabulary = latest.vocabulary ?? 70;
+        grammar = latest.grammar ?? 70;
+        scorePct =
+          latest.targetDurationSec && latest.targetDurationSec > 0
+            ? Math.min(100, Math.round((latest.durationSec / latest.targetDurationSec) * 100))
+            : Math.round((pronunciation + vocabulary + grammar) / 3);
+        if (latest.waveform && latest.waveform.length > 0) {
+          waveform = latest.waveform;
+        }
+      }
+
+      // Generate dynamic batch label
+      const session = student.sessionSeason || "summer";
+      const batch = student.batchTime || "morning";
+      const sessionLabel = session.charAt(0).toUpperCase() + session.slice(1);
+      const batchLabel = batch.charAt(0).toUpperCase() + batch.slice(1);
+      const formattedBatch = `${sessionLabel} Session · ${batchLabel} Batch`;
+
+      // Authentic trend text without em-dash
+      const trendText =
+        attemptsThisWeek === 0
+          ? "No voice submissions recorded this week. Regular daily practice recommended."
+          : trendPct >= 0
+            ? `Score up ${trendPct}%, clear stretches are getting longer.`
+            : `Score down ${Math.abs(trendPct)}%, please encourage daily practice.`;
+
+      return {
+        student: {
+          ...student,
+          scorePct: scorePct || student.scorePct,
+          trendPct,
+          waveform,
+        },
+        attemptsThisWeek,
+        totalAttempts,
+        pronunciation,
+        vocabulary,
+        grammar,
+        scorePct,
+        trendPct,
+        waveform,
+        trendText,
+        batchLabel: formattedBatch,
+        hasActivity,
+      };
+    } catch (err) {
+      console.error("[StudentService.getStudentWeeklyReport Error]", err);
+      return null;
+    }
   }
 
   /**

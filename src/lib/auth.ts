@@ -4,7 +4,7 @@ import { useRouter } from "@tanstack/react-router";
 
 export type Role = "admin" | "teacher" | "student";
 
-export interface TarangUser {
+export interface TrounceUser {
   userId: string;
   email: string;
   username?: string;
@@ -16,9 +16,11 @@ export interface TarangUser {
   batchTime?: string;
 }
 
+export type TarangUser = TrounceUser;
+
 export function useUser() {
   const { session } = rootRoute.useRouteContext();
-  return session as TarangUser | null;
+  return session as TrounceUser | null;
 }
 
 export function clearUser() {

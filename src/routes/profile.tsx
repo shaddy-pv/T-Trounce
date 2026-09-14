@@ -5,7 +5,7 @@ import { TButton } from "@/components/tarang/Button";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
-    meta: [{ title: "Profile · Tarang" }],
+    meta: [{ title: "Profile · Trounce" }],
   }),
   beforeLoad: ({ context }) => {
     if (!context.session) throw redirect({ to: "/login" });

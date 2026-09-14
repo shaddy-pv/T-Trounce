@@ -62,7 +62,7 @@ export const Route = createFileRoute("/students/$id")({
   head: ({ loaderData }) => {
     const s = (loaderData as unknown as StudentProfileData | null)?.student;
     return {
-      meta: [{ title: `${s?.name ?? "Student Profile"} · Tarang` }],
+      meta: [{ title: `${s?.name ?? "Student Profile"} · Trounce` }],
     };
   },
   component: StudentDetail,
@@ -91,7 +91,7 @@ function StudentDetail() {
     id: "unknown",
     name: "Student",
     status: "on-track",
-    focus: "—",
+    focus: "General",
     lastActive: "Today",
     scorePct: 0,
     trendPct: 0,
@@ -147,13 +147,13 @@ function StudentDetail() {
 
   const sendParentReport = () => {
     const shareText = encodeURIComponent(
-      `*Tarang Spoken-English Academic Report for ${s.name}*\n` +
+      `*Trounce Spoken-English Academic Report for ${s.name}*\n` +
         `Session & Batch: ${sessionLabel} Season · ${batchLabel} Batch\n` +
         `Current Score: ${s.scorePct}% (${s.trendPct >= 0 ? "+" : ""}${s.trendPct}%)\n` +
         `Homework Received: ${homeworkStats.totalReceived} | Completed: ${homeworkStats.completed} | Pending: ${homeworkStats.pending}\n` +
         `Focus Area: ${s.focus}\n` +
         `Last Active: ${s.lastActive}\n\n` +
-        `Teacher Recommendation: Regular daily 5-minute speaking practice on Tarang.`,
+        `Teacher Recommendation: Regular daily 5-minute speaking practice on Trounce.`,
     );
     window.open(`https://api.whatsapp.com/send?text=${shareText}`, "_blank", "noopener,noreferrer");
     setReportSent(true);
