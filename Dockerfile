@@ -24,7 +24,6 @@ RUN npm run build
 
 # 3. Production runner stage
 FROM node:20-alpine AS runner
-WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -33,13 +32,18 @@ ENV PORT=3000
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 trounce
 
-# Ensure local storage directory exists with proper permissions
-RUN mkdir -p /app/.storage/audio && chown -R trounce:nodejs /app/.storage
+WORKDIR /app
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/vite.config.ts ./vite.config.ts
-COPY --from=builder /app/dist ./dist
+# Copy application assets with trounce ownership
+COPY --chown=trounce:nodejs --from=deps /app/node_modules ./node_modules
+COPY --chown=trounce:nodejs --from=builder /app/package.json ./package.json
+COPY --chown=trounce:nodejs --from=builder /app/vite.config.ts ./vite.config.ts
+COPY --chown=trounce:nodejs --from=builder /app/dist ./dist
+
+# Create storage directory and grant full ownership to trounce user across /app
+RUN mkdir -p /app/.storage/audio && \
+    chown -R trounce:nodejs /app && \
+    chmod -R 775 /app
 
 USER trounce
 
