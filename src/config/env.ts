@@ -10,8 +10,8 @@ const envSchema = z.object({
   MONGODB_URI: z.string().default("mongodb://127.0.0.1:27017/trounce"),
   MONGODB_DB_NAME: z.string().default("trounce"),
   SESSION_SECRET: z.string().min(16).default(DEFAULT_SECRET),
-  ADMIN_INITIAL_PASSWORD: z.string().default("ChangeMe123!"),
-  ADMIN_EMAIL: z.string().default("admin@trounce.edu"),
+  ADMIN_INITIAL_PASSWORD: z.string().default(""),
+  ADMIN_EMAIL: z.string().default(""),
   WHISPER_SIDECAR_URL: z.string().default("http://127.0.0.1:8765"),
   RATE_LIMIT_ENABLED: z
     .string()

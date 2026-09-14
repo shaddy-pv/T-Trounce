@@ -276,6 +276,7 @@ function UsersManagementPage() {
                 </tr>
               ) : (
                 filteredUsers.map((u) => {
+                  const isCurrent = u.id === currentUser?.userId || u.email === currentUser?.email;
                   const isSuperAdmin = u.role === "admin";
 
                   const sessionLabel = u.sessionSeason

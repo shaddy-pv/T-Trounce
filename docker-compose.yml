@@ -20,9 +20,9 @@ services:
       - MONGODB_URI=mongodb://trounce-mongo:27017/trounce
       - MONGODB_DB_NAME=trounce
       - WHISPER_SIDECAR_URL=http://trounce-sidecar:8765
-      - SESSION_SECRET=${SESSION_SECRET:-change_this_to_a_random_32_char_secret_in_prod}
-      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:-ChangeMe123!}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@trounce.edu}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
     volumes:
       - audio_storage:/app/.storage/audio
     depends_on:

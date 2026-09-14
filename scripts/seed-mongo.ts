@@ -129,25 +129,27 @@ async function main() {
   const usersCol = db.collection("users");
   await usersCol.deleteMany({});
 
-  const adminPassword = process.env.ADMIN_INITIAL_PASSWORD || "ChangeMe123!";
-  const adminEmail = process.env.ADMIN_EMAIL || "admin@trounce.edu";
-  const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
+  const adminPassword = process.env.ADMIN_INITIAL_PASSWORD || "";
+  const adminEmail = process.env.ADMIN_EMAIL || "";
+  if (adminPassword && adminEmail) {
+    const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
 
-  // Create Real Admin Account with full privileges
-  await usersCol.insertOne({
-    id: "admin-master",
-    email: adminEmail.toLowerCase(),
-    username: "admin",
-    passwordHash: adminPasswordHash,
-    name: "Shadan (Admin)",
-    role: "admin",
-    sessionSeason: "summer",
-    batchTime: "morning",
-    batchId: "summer-morning",
-    createdAt: new Date(),
-  });
-  await usersCol.createIndex({ email: 1 }, { unique: true });
-  await usersCol.createIndex({ username: 1 }, { sparse: true });
+    // Create Real Admin Account with full privileges
+    await usersCol.insertOne({
+      id: "admin-master",
+      email: adminEmail.toLowerCase(),
+      username: "admin",
+      passwordHash: adminPasswordHash,
+      name: "Shadan (Admin)",
+      role: "admin",
+      sessionSeason: "summer",
+      batchTime: "morning",
+      batchId: "summer-morning",
+      createdAt: new Date(),
+    });
+    await usersCol.createIndex({ email: 1 }, { unique: true });
+    await usersCol.createIndex({ username: 1 }, { sparse: true });
+  }
 
   console.log("Seeding assignments / homework collection...");
   const assignmentsCol = db.collection("assignments");
