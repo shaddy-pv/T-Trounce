@@ -7,7 +7,6 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Install build tools if needed
 RUN apk add --no-cache libc6-compat
 
 COPY package.json package-lock.json ./
@@ -39,12 +38,12 @@ RUN mkdir -p /app/.storage/audio && chown -R trounce:nodejs /app/.storage
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/vite.config.ts ./vite.config.ts
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/.output ./.output 2>/dev/null || true
-COPY --from=builder /app/public ./public 2>/dev/null || true
 
 USER trounce
 
 EXPOSE 3000
 
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "3000"]
+# Dynamically listen on $PORT provided by Render/PaaS or default to 3000
+CMD ["sh", "-c", "npx vite preview --host 0.0.0.0 --port ${PORT:-3000}"]
