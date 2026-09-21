@@ -1,0 +1,69 @@
+{
+  "name": "Trounce Teacher Console",
+  "short_name": "Trounce",
+  "description": "Spoken-English waveform audio console for teachers and coaching institutes.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#100E0C",
+  "theme_color": "#100E0C",
+  "orientation": "any",
+  "categories": ["education", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Teacher Dashboard",
+      "short_name": "Dashboard",
+      "description": "View student roster, fluency metrics, and cohort activity",
+      "url": "/dashboard",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Review Flags",
+      "short_name": "Flags",
+      "description": "Review urgent student alerts, low scores, and nudges",
+      "url": "/flags",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Assignments",
+      "short_name": "Assignments",
+      "description": "Create and inspect speaking assignments",
+      "url": "/assignments",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Progress Reports",
+      "short_name": "Reports",
+      "description": "Export proof of progress and CEFR level growth",
+      "url": "/reports",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}

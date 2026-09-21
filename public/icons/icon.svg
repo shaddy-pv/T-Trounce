@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="dotGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3FB8AF" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#3FB8AF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#55D8CF"/>
+      <stop offset="100%" stop-color="#3FB8AF"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#100E0C"/>
+  <circle cx="256" cy="112" r="56" fill="url(#dotGlow)"/>
+  <circle cx="256" cy="112" r="28" fill="#3FB8AF"/>
+  <g fill="url(#barGrad)">
+    <rect x="110" y="246" width="28" height="72" rx="14"/>
+    <rect x="154" y="214" width="28" height="136" rx="14"/>
+    <rect x="198" y="172" width="28" height="220" rx="14"/>
+    <rect x="242" y="152" width="28" height="260" rx="14"/>
+    <rect x="286" y="188" width="28" height="188" rx="14"/>
+    <rect x="330" y="224" width="28" height="116" rx="14"/>
+    <rect x="374" y="254" width="28" height="56" rx="14"/>
+  </g>
+</svg>

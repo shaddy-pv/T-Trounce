@@ -76,7 +76,51 @@ export default {
         }
       }
 
-      // 2. SSR Application Handler
+      // 2. Direct PWA Static Assets Endpoint (/manifest.webmanifest, /sw.js, /offline.html, /icons/*)
+      if (
+        url.pathname === "/manifest.webmanifest" ||
+        url.pathname === "/sw.js" ||
+        url.pathname === "/offline.html" ||
+        url.pathname.startsWith("/icons/")
+      ) {
+        const fs = await import("fs");
+        const path = await import("path");
+        const relPath = url.pathname.slice(1);
+        const publicPath = path.resolve(process.cwd(), "public", relPath);
+        const distClientPath = path.resolve(process.cwd(), "dist", "client", relPath);
+        const targetPath = fs.existsSync(publicPath)
+          ? publicPath
+          : fs.existsSync(distClientPath)
+            ? distClientPath
+            : null;
+
+        if (targetPath) {
+          const content = fs.readFileSync(targetPath);
+          let mime = "application/octet-stream";
+          if (url.pathname.endsWith(".webmanifest"))
+            mime = "application/manifest+json; charset=utf-8";
+          else if (url.pathname.endsWith(".js")) mime = "application/javascript; charset=utf-8";
+          else if (url.pathname.endsWith(".html")) mime = "text/html; charset=utf-8";
+          else if (url.pathname.endsWith(".png")) mime = "image/png";
+          else if (url.pathname.endsWith(".svg")) mime = "image/svg+xml";
+
+          const headers = new Headers({
+            "Content-Type": mime,
+            "Content-Length": String(content.length),
+          });
+
+          if (url.pathname === "/sw.js") {
+            headers.set("Service-Worker-Allowed", "/");
+            headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+          } else {
+            headers.set("Cache-Control", "public, max-age=86400");
+          }
+
+          return new Response(content, { status: 200, headers });
+        }
+      }
+
+      // 3. SSR Application Handler
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

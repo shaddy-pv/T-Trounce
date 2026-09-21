@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trounce · Offline Mode</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background-color: #100e0c;
+        color: #e6e1dc;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+      }
+      .card {
+        max-width: 440px;
+        width: 100%;
+        background: #171513;
+        border: 1px solid #2b2623;
+        border-radius: 16px;
+        padding: 36px 28px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .icon-wrapper {
+        position: relative;
+        width: 64px;
+        height: 64px;
+        border-radius: 16px;
+        background: #1f1c19;
+        border: 1px solid #36302b;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 24px;
+      }
+      .signal-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #e55353;
+        box-shadow: 0 0 12px rgba(229, 83, 83, 0.6);
+        animation: pulse 2s infinite ease-in-out;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 0.8;
+        }
+        50% {
+          transform: scale(1.3);
+          opacity: 1;
+        }
+      }
+      .tag {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #9c9388;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      h1 {
+        font-size: 22px;
+        font-weight: 600;
+        color: #ffffff;
+        margin-bottom: 12px;
+        letter-spacing: -0.01em;
+      }
+      p {
+        font-size: 14px;
+        line-height: 1.55;
+        color: #b5aca3;
+        margin-bottom: 28px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background-color: #3fb8af;
+        color: #100e0c;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 12px 24px;
+        border-radius: 10px;
+        border: none;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        width: 100%;
+      }
+      .btn:hover {
+        filter: brightness(1.12);
+        transform: translateY(-1px);
+      }
+      .status-text {
+        font-size: 12px;
+        color: #726a62;
+        margin-top: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="icon-wrapper">
+        <div id="dot" class="signal-dot"></div>
+      </div>
+      <div class="tag">Signal Disconnected</div>
+      <h1>You are currently offline</h1>
+      <p>
+        Trounce requires an active internet connection to load student dossiers, analyze audio
+        signals, and sync speaking evaluations.
+      </p>
+      <button class="btn" id="retryBtn" onclick="checkAndReload()">Check Signal & Reconnect</button>
+      <div class="status-text" id="statusMessage">Waiting for network signal...</div>
+    </div>
+
+    <script>
+      function checkAndReload() {
+        const btn = document.getElementById("retryBtn");
+        const status = document.getElementById("statusMessage");
+        btn.innerText = "Checking...";
+        if (navigator.onLine) {
+          status.innerText = "Signal restored! Reconnecting...";
+          status.style.color = "#3FB8AF";
+          setTimeout(() => window.location.reload(), 400);
+        } else {
+          setTimeout(() => {
+            btn.innerText = "Check Signal & Reconnect";
+            status.innerText = "Still offline. Please check your Wi-Fi or data connection.";
+            status.style.color = "#E55353";
+          }, 500);
+        }
+      }
+
+      window.addEventListener("online", () => {
+        const dot = document.getElementById("dot");
+        dot.style.background = "#3FB8AF";
+        dot.style.boxShadow = "0 0 12px rgba(63, 184, 175, 0.8)";
+        document.getElementById("statusMessage").innerText = "Connection restored! Reloading...";
+        setTimeout(() => window.location.reload(), 600);
+      });
+    </script>
+  </body>
+</html>
