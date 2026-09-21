@@ -2,6 +2,17 @@ import { getDb } from "../db/client";
 import type { StudentDoc } from "../db/schemas";
 import type { StudentRow, StudentStatus } from "@/types";
 
+interface RosterCacheEntry {
+  data: StudentRow[];
+  timestamp: number;
+}
+const rosterCache = new Map<string, RosterCacheEntry>();
+const ROSTER_CACHE_TTL_MS = 15 * 1000; // 15 seconds
+
+export function invalidateRosterCache(): void {
+  rosterCache.clear();
+}
+
 export class StudentService {
   /**
    * Fetch all batch students with optional session & batch filtering
@@ -11,6 +22,12 @@ export class StudentService {
     batch?: string;
     batchId?: string;
   }): Promise<StudentRow[]> {
+    const cacheKey = JSON.stringify(filter || {});
+    const cached = rosterCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < ROSTER_CACHE_TTL_MS) {
+      return cached.data;
+    }
+
     try {
       const db = await getDb();
       if (db) {
@@ -197,6 +214,7 @@ export class StudentService {
           return (a.inactiveDays ?? 999) - (b.inactiveDays ?? 999);
         });
 
+        rosterCache.set(cacheKey, { data: results, timestamp: Date.now() });
         return results;
       }
     } catch (err) {
@@ -565,6 +583,7 @@ export class StudentService {
             },
           },
         );
+        invalidateRosterCache();
         return true;
       }
     } catch (err) {

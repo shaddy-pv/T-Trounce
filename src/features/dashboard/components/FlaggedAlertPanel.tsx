@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import { StatusDot } from "@/components/tarang/StatusDot";
 import { Waveform } from "@/components/tarang/Waveform";
 import type { StudentRow } from "@/types";
@@ -11,6 +11,7 @@ export function FlaggedAlertPanel({
   totalCount: number;
 }) {
   const navigate = useNavigate();
+  const router = useRouter();
   if (flagged.length === 0) return null;
 
   return (
@@ -30,6 +31,9 @@ export function FlaggedAlertPanel({
               <tr
                 key={s.id}
                 onClick={() => navigate({ to: "/students/$id", params: { id: s.id } })}
+                onMouseEnter={() =>
+                  router.preloadRoute({ to: "/students/$id", params: { id: s.id } })
+                }
                 className={
                   "group cursor-pointer select-none transition-colors duration-150 hover:bg-[#C1503B]/[0.12] active:bg-[#C1503B]/[0.18] " +
                   (i > 0 ? "border-t border-[#C1503B]/20" : "")

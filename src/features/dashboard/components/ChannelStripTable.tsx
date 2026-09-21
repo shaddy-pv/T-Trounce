@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { StatusDot } from "@/components/tarang/StatusDot";
 import { Waveform } from "@/components/tarang/Waveform";
@@ -6,6 +6,7 @@ import type { StudentRow } from "@/types";
 
 export function ChannelStripTable({ students }: { students: StudentRow[] }) {
   const navigate = useNavigate();
+  const router = useRouter();
   return (
     <section className="mt-10">
       <div className="flex items-center justify-between">
@@ -43,6 +44,9 @@ export function ChannelStripTable({ students }: { students: StudentRow[] }) {
               <tr
                 key={s.id}
                 onClick={() => navigate({ to: "/students/$id", params: { id: s.id } })}
+                onMouseEnter={() =>
+                  router.preloadRoute({ to: "/students/$id", params: { id: s.id } })
+                }
                 className={
                   "cursor-pointer group transition hover:bg-ink-900 " +
                   (i > 0 ? "border-t border-hairline" : "")

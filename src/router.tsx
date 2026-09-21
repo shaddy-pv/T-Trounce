@@ -13,7 +13,12 @@ export const getRouter = () => {
       session: null, // Will be injected by root beforeLoad
     } as unknown as RouterContext,
     scrollRestoration: true,
-    defaultPreloadStaleTime: 0,
+    defaultPreload: "intent",
+    defaultPreloadDelay: 50,
+    defaultPreloadStaleTime: 60 * 1000,
+    defaultStaleTime: 60 * 1000,
+    defaultPendingMs: 50,
+    defaultPendingMinMs: 250,
   });
 
   return router;

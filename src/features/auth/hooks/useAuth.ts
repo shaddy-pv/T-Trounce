@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { loginFn, logoutFn } from "@/server/data";
 import { Route as rootRoute } from "@/routes/__root";
+import { invalidateSessionCache } from "@/lib/auth";
 
 export function useAuth() {
   const router = useRouter();
@@ -21,6 +22,7 @@ export function useAuth() {
             role,
           },
         });
+        invalidateSessionCache();
         await router.invalidate();
         return user;
       } catch (err: unknown) {
@@ -37,6 +39,7 @@ export function useAuth() {
   const logout = useCallback(async () => {
     setIsLoading(true);
     try {
+      invalidateSessionCache();
       await logoutFn();
       await router.invalidate();
     } finally {

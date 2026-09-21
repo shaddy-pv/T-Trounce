@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -68,7 +69,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
-import { getSessionFn } from "@/server/data";
+import { fetchSessionWithCache } from "@/lib/auth";
 import type { SessionPayload } from "@/server/services/auth.service";
 
 export interface RouterContext {
@@ -111,8 +112,8 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     ],
   }),
   beforeLoad: async () => {
-    // Execute the server function to get the session from HTTP-only cookie
-    const session = await getSessionFn();
+    // Retrieve session with in-memory caching to eliminate redundant blocking network calls during navigation
+    const session = await fetchSessionWithCache();
     return { session };
   },
   shellComponent: RootShell,
@@ -135,10 +136,25 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function NavigationProgressBar() {
+  const isLoading = useRouterState({ select: (s) => s.status === "pending" || s.isLoading });
+  if (!isLoading) return null;
+  return (
+    <div
+      role="progressbar"
+      aria-label="Loading page"
+      className="fixed top-0 left-0 right-0 z-[99999] h-[3px] bg-transparent pointer-events-none overflow-hidden"
+    >
+      <div className="h-full w-full bg-[#3FB8AF] shadow-[0_0_12px_#3FB8AF] animate-pulse" />
+    </div>
+  );
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
+      <NavigationProgressBar />
       <Outlet />
     </QueryClientProvider>
   );

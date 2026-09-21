@@ -4,6 +4,7 @@ import type { AttemptResult, SaveAttemptPayload } from "@/types";
 import { makeSampleWaveform } from "@/components/tarang/Waveform";
 import { StorageService } from "./storage.service";
 import { TranscriptionService } from "./transcription.service";
+import { invalidateRosterCache } from "./student.service";
 
 export class AttemptService {
   /**
@@ -334,6 +335,7 @@ export class AttemptService {
           );
         }
 
+        invalidateRosterCache();
         return { success: true, id: payload.result.id, audioUrl: finalAudioUrl };
       }
     } catch (err) {
@@ -475,6 +477,7 @@ export class AttemptService {
       },
     );
 
+    invalidateRosterCache();
     return await this.getAttemptById(attemptId);
   }
 }

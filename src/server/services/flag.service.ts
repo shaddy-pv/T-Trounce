@@ -2,6 +2,7 @@ import { getDb } from "../db/client";
 import type { FlagDoc, AttemptDoc, UserDoc, StudentDoc } from "../db/schemas";
 import type { FlagItem, CreateFlagInput, ResolveFlagInput } from "@/types";
 import { MessageService } from "./message.service";
+import { invalidateRosterCache } from "./student.service";
 import { randomUUID } from "crypto";
 
 export class FlagService {
@@ -102,6 +103,7 @@ export class FlagService {
       { upsert: false },
     );
 
+    invalidateRosterCache();
     return {
       id: flagDoc.id,
       studentId: flagDoc.studentId,
@@ -238,6 +240,7 @@ export class FlagService {
       );
     }
 
+    invalidateRosterCache();
     return true;
   }
 }
