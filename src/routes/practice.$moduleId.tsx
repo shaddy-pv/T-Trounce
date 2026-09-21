@@ -151,13 +151,11 @@ function PracticeModuleSession() {
       console.warn("Attempt save fallback:", err);
     }
 
-    window.setTimeout(() => {
-      navigate({
-        to: "/result/$attemptId",
-        params: { attemptId },
-        replace: true, // swaps recording page in history — back goes to /practice, not a stale retake
-      });
-    }, 400);
+    navigate({
+      to: "/result/$attemptId",
+      params: { attemptId },
+      replace: true,
+    });
   };
 
   const togglePlayback = () => {
@@ -304,19 +302,6 @@ function PracticeModuleSession() {
                   className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-ink-800 accent-[#3FB8AF]"
                 />
               </div>
-
-              <button
-                onClick={() => {
-                  if (audioPlayerRef.current) {
-                    audioPlayerRef.current.currentTime = 0;
-                    setAudioCurrentTime(0);
-                  }
-                }}
-                className="text-tertiary-warm hover:text-secondary-warm"
-                title="Reset audio"
-              >
-                <RotateCcw size={15} />
-              </button>
             </div>
 
             {/* Waveform */}
@@ -527,6 +512,16 @@ function PracticeModuleSession() {
                   </span>
                 </div>
               </div>
+            ) : phase === "uploading" ? (
+              <div className="flex h-[140px] flex-col items-center justify-center space-y-3 text-center">
+                <span className="size-7 animate-spin rounded-full border-2 border-[#3FB8AF] border-t-transparent" />
+                <p className="text-[14px] font-medium text-primary-warm">
+                  Finalizing acoustic diagnostic...
+                </p>
+                <p className="num text-[12px] text-secondary-warm">
+                  {formattedTime} recorded · calculating clarity and fluency
+                </p>
+              </div>
             ) : (
               <div className="flex h-[140px] flex-col items-center justify-center text-center">
                 <p className="text-[13px] text-tertiary-warm">
@@ -543,28 +538,32 @@ function PracticeModuleSession() {
         </section>
 
         {/* Real-time Live Speech-to-Text Transcript Display */}
-        {phase === "recording" && (
+        {(phase === "recording" || phase === "uploading") && (
           <section className="mt-4 px-5">
             <div className="rounded-[12px] border border-[#3FB8AF]/40 bg-ink-900/90 p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-2 text-[12px] font-semibold text-[#3FB8AF]">
-                  <span className="size-2 animate-pulse rounded-full bg-[#3FB8AF]" />
+                  <span
+                    className={`size-2 rounded-full bg-[#3FB8AF] ${phase === "recording" ? "animate-pulse" : ""}`}
+                  />
                   Live Speech Transcription:
                 </span>
                 <span className="num text-[11px] text-tertiary-warm">real-time STT</span>
               </div>
               <p className="mt-2 min-h-[48px] rounded-lg border border-hairline/60 bg-ink-950/80 p-3 text-[14px] leading-relaxed text-primary-warm">
-                {sttAvailable === false ? (
-                  <span className="italic text-[#E2A33C]/80 text-[13px]">
-                    Live transcription is not supported in this browser. Use Chrome or Edge for
-                    real-time voice-to-text.
-                  </span>
+                {transcript ? (
+                  <span>{transcript}</span>
                 ) : finalTranscript || interimTranscript ? (
                   <span>
                     {finalTranscript && <span>{finalTranscript}</span>}
                     {interimTranscript && (
                       <span className="ml-1 italic text-[#3FB8AF]/90">{interimTranscript}</span>
                     )}
+                  </span>
+                ) : sttAvailable === false ? (
+                  <span className="italic text-[#E2A33C]/80 text-[13px]">
+                    Live transcription is not supported in this browser. Use Chrome or Edge for
+                    real-time voice-to-text.
                   </span>
                 ) : (
                   <span className="italic text-tertiary-warm">

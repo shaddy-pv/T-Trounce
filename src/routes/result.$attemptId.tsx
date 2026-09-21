@@ -12,10 +12,13 @@ import {
   X,
   Send,
   HelpCircle,
+  Loader2,
+  Pencil,
+  Check,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Waveform } from "@/components/tarang/Waveform";
-import { fetchAttemptByIdFn, createFlagFn } from "@/server/data";
+import { fetchAttemptByIdFn, createFlagFn, updateAttemptTranscriptFn } from "@/server/data";
 import { useUser } from "@/lib/auth";
 import { FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
 import type { AttemptResult } from "@/types";
@@ -45,7 +48,7 @@ function ResultPage() {
   const user = useUser();
   const navigate = useNavigate();
 
-  const result: AttemptResult =
+  const initialResult: AttemptResult =
     loaderData?.result ??
     ({
       id: "attempt",
@@ -60,6 +63,49 @@ function ResultPage() {
       waveform: [],
     } as AttemptResult);
 
+  const [result, setResult] = useState<AttemptResult>(initialResult);
+
+  // Sync state if loaderData updates
+  useEffect(() => {
+    if (loaderData?.result) {
+      setResult(loaderData.result);
+      if (loaderData.result.durationSec) {
+        setAudioDuration(loaderData.result.durationSec);
+      }
+    }
+  }, [loaderData?.result]);
+
+  // Real-time poller: if background Whisper is still transcribing full audio, poll until completed
+  useEffect(() => {
+    if (result.transcriptionStatus === "completed") return;
+
+    let cancelled = false;
+    let pollCount = 0;
+    const interval = setInterval(async () => {
+      pollCount++;
+      if (pollCount > 15 || cancelled) {
+        clearInterval(interval);
+        return;
+      }
+      try {
+        const fresh = await fetchAttemptByIdFn({ data: result.id });
+        if (fresh && !cancelled) {
+          if (fresh.transcriptionStatus === "completed") {
+            setResult(fresh);
+            clearInterval(interval);
+          }
+        }
+      } catch {
+        /* ignore polling errors */
+      }
+    }, 1200);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [result.id, result.transcriptionStatus]);
+
   // Audio Playback state
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
@@ -72,6 +118,41 @@ function ResultPage() {
   const [flagNote, setFlagNote] = useState("");
   const [flagSubmitting, setFlagSubmitting] = useState(false);
   const [isFlaggedSuccess, setIsFlaggedSuccess] = useState(Boolean(result.isFlagged));
+
+  // Edit Transcript state
+  const [isEditingTranscript, setIsEditingTranscript] = useState(false);
+  const [editedTranscript, setEditedTranscript] = useState(result.transcript || "");
+  const [isSavingTranscript, setIsSavingTranscript] = useState(false);
+  const [transcriptSavedNotice, setTranscriptSavedNotice] = useState(false);
+
+  // Keep edited transcript in sync when result.transcript completes or updates
+  useEffect(() => {
+    if (!isEditingTranscript && result.transcript) {
+      setEditedTranscript(result.transcript);
+    }
+  }, [result.transcript, isEditingTranscript]);
+
+  const handleSaveTranscript = async () => {
+    const trimmed = editedTranscript.trim();
+    if (!trimmed || isSavingTranscript) return;
+    setIsSavingTranscript(true);
+    try {
+      const updated = await updateAttemptTranscriptFn({
+        data: {
+          attemptId: result.id,
+          transcript: trimmed,
+        },
+      });
+      setResult(updated);
+      setIsEditingTranscript(false);
+      setTranscriptSavedNotice(true);
+      setTimeout(() => setTranscriptSavedNotice(false), 4000);
+    } catch (err) {
+      console.error("Failed to update transcript:", err);
+    } finally {
+      setIsSavingTranscript(false);
+    }
+  };
 
   const handleFlagSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -238,19 +319,6 @@ function ResultPage() {
                 disabled={!result.audioUrl}
                 className="h-1.5 flex-1 cursor-pointer appearance-none rounded-lg bg-ink-800 accent-[#3FB8AF]"
               />
-
-              <button
-                onClick={() => {
-                  if (audioPlayerRef.current) {
-                    audioPlayerRef.current.currentTime = 0;
-                    setAudioCurrentTime(0);
-                  }
-                }}
-                className="text-tertiary-warm hover:text-secondary-warm"
-                title="Reset audio"
-              >
-                <RotateCcw size={15} />
-              </button>
             </div>
 
             {/* Waveform */}
@@ -280,27 +348,111 @@ function ResultPage() {
         {/* Spoken Transcript Box */}
         <section className="mt-5 px-5">
           <div className="rounded-[12px] border border-hairline bg-ink-900 p-4">
-            <div className="flex items-center gap-2 text-secondary-warm">
-              <Sparkles size={14} className="text-[#3FB8AF]" />
-              <p className="num text-[11px] uppercase tracking-[0.14em]">Spoken Transcript</p>
-            </div>
-            <div className="mt-2.5 rounded-[8px] border border-hairline bg-ink-950 p-3 text-[13px] leading-relaxed text-primary-warm">
-              {transcriptWords.map((word, i) => {
-                const clean = word.toLowerCase().replace(/[^a-z]/g, "");
-                const isFiller = fillerKeywords.has(clean);
-                if (isFiller) {
-                  return (
-                    <span
-                      key={i}
-                      className="rounded bg-[#E2A33C]/25 px-1 py-0.5 font-medium text-[#E2A33C]"
-                    >
-                      {word}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-secondary-warm">
+                <Sparkles size={14} className="text-[#3FB8AF]" />
+                <p className="num text-[11px] uppercase tracking-[0.14em]">Spoken Transcript</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {transcriptSavedNotice && (
+                  <span className="text-[11px] font-medium text-[#3FB8AF]">
+                    ✓ Updated & re-scored
+                  </span>
+                )}
+                {(!result.transcript || result.transcriptionStatus === "processing") &&
+                  !isEditingTranscript && (
+                    <span className="flex items-center gap-1.5 text-[11px] font-medium text-[#3FB8AF]">
+                      <Loader2 size={12} className="animate-spin" />
+                      Transcribing with Whisper...
                     </span>
-                  );
-                }
-                return <span key={i}>{word}</span>;
-              })}
+                  )}
+                {!isEditingTranscript && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditedTranscript(result.transcript || "");
+                      setIsEditingTranscript(true);
+                      setTranscriptSavedNotice(false);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md border border-hairline bg-ink-950 px-2 py-0.5 text-[11px] text-secondary-warm hover:border-[#3FB8AF] hover:text-[#3FB8AF] transition"
+                    title="Correct any misrecognized words or names"
+                  >
+                    <Pencil size={11} />
+                    Edit
+                  </button>
+                )}
+              </div>
             </div>
+
+            {isEditingTranscript ? (
+              <div className="mt-2.5 space-y-2.5">
+                <textarea
+                  value={editedTranscript}
+                  onChange={(e) => setEditedTranscript(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-[8px] border border-[#3FB8AF]/50 bg-ink-950 p-3 text-[13px] leading-relaxed text-primary-warm placeholder:text-tertiary-warm focus:outline-none focus:border-[#3FB8AF]"
+                  placeholder="Type or correct your spoken words here..."
+                />
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <span className="text-[11px] text-tertiary-warm">
+                    Correct any misheard words or names (e.g. Shadan). Your fluency metrics & filler count recalculate automatically.
+                  </span>
+                  <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingTranscript(false)}
+                      disabled={isSavingTranscript}
+                      className="rounded-[8px] border border-hairline px-2.5 py-1 text-[12px] text-secondary-warm hover:border-[#9C9388] transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveTranscript}
+                      disabled={isSavingTranscript || !editedTranscript.trim()}
+                      className="inline-flex items-center gap-1.5 rounded-[8px] bg-[#3FB8AF] px-3 py-1 text-[12px] font-medium text-ink-950 hover:bg-[#3FB8AF]/90 disabled:opacity-50 transition"
+                    >
+                      {isSavingTranscript ? (
+                        <>
+                          <Loader2 size={12} className="animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Check size={12} />
+                          Save Transcript
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-2.5 rounded-[8px] border border-hairline bg-ink-950 p-3 text-[13px] leading-relaxed text-primary-warm min-h-[48px]">
+                {result.transcript && result.transcript.trim().length > 0 ? (
+                  transcriptWords.map((word, i) => {
+                    const clean = word.toLowerCase().replace(/[^a-z]/g, "");
+                    const isFiller = fillerKeywords.has(clean);
+                    if (isFiller) {
+                      return (
+                        <span
+                          key={i}
+                          className="rounded bg-[#E2A33C]/25 px-1 py-0.5 font-medium text-[#E2A33C]"
+                        >
+                          {word}
+                        </span>
+                      );
+                    }
+                    return <span key={i}>{word}</span>;
+                  })
+                ) : (
+                  <div className="flex items-center gap-2 text-[12px] text-secondary-warm italic py-1">
+                    <Loader2 size={13} className="animate-spin text-[#3FB8AF]" />
+                    <span>Processing phonetic transcription from audio recording...</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
 

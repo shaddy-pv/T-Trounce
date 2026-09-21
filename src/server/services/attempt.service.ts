@@ -85,7 +85,7 @@ export class AttemptService {
         let transcript = payload.result.transcript?.trim() || "";
         let fillerCount = payload.result.fillerCount ?? 0;
         let pauseCount = payload.result.pauseCount ?? 0;
-        let transcriptionStatus: "completed" | "failed" = "completed";
+        let transcriptionStatus: "pending" | "processing" | "completed" | "failed" = "completed";
 
         // 1. If audio is provided as Base64 Data URI or binary string, store in GridFS / disk
         if (
@@ -109,38 +109,60 @@ export class AttemptService {
               `[AttemptService] Audio stored successfully at permanent URL: ${finalAudioUrl} (${audioSize} bytes)`,
             );
 
-            // 2. Server-side Transcription Pipeline
-            if (
-              !transcript ||
-              transcript.startsWith("Spoken response recorded by") ||
-              transcript.startsWith("Speech Practice")
-            ) {
-              const audioBufferRes = await StorageService.getAudioBuffer(audioId);
-              if (audioBufferRes) {
-                console.log(
-                  `[AttemptService] Running server transcription for audio ${audioId}...`,
-                );
-                const transRes = await TranscriptionService.transcribeAudio(
-                  audioBufferRes.buffer,
-                  audioBufferRes.mimeType,
-                  payload.result.prompt,
-                );
-                transcript = transRes.transcript;
-                fillerCount = transRes.fillerCount;
-                pauseCount = transRes.pauseCount;
-                transcriptionStatus = transRes.status;
-                console.log(
-                  `[AttemptService] Transcription generated (${transRes.engineUsed}): "${transcript.substring(0, 60)}..."`,
-                );
+            // 2. Full-Audio Server-side Transcription & Diagnostic Pipeline
+            // Even if live streaming provided a preliminary transcript, speech can finish before
+            // streaming chunks catch up. Always run Whisper on the full complete audio recording in the background
+            // so 100% of spoken words (including trailing sentences) are captured verbatim.
+            transcriptionStatus = "processing";
+            const capturedAttemptId = payload.result.id;
+            const promptContext = payload.result.prompt;
+            const currentAudioId = audioId;
+            const currentMime = audioMimeType;
+
+            void (async () => {
+              try {
+                if (currentAudioId) {
+                  const audioBufferRes = await StorageService.getAudioBuffer(currentAudioId);
+                  if (audioBufferRes && audioBufferRes.buffer.length > 2000) {
+                    console.log(`[AttemptService] Full-audio transcribing for attempt ${capturedAttemptId}...`);
+                    const transRes = await TranscriptionService.transcribeAudio(
+                      audioBufferRes.buffer,
+                      currentMime || audioBufferRes.mimeType,
+                      promptContext,
+                    );
+                    if (transRes.transcript && transRes.transcript.trim().length > 0) {
+                      const fullText = transRes.transcript.trim();
+                      const bgDb = await getDb();
+                      if (bgDb) {
+                        await bgDb.collection<AttemptDoc>("attempts").updateOne(
+                          { id: capturedAttemptId },
+                          {
+                            $set: {
+                              transcript: fullText,
+                              fillerCount: transRes.fillerCount,
+                              pauseCount: transRes.pauseCount,
+                              transcriptionStatus: "completed",
+                              updatedAt: new Date(),
+                            },
+                          },
+                        );
+                        console.log(`[AttemptService] Full-audio transcript saved for attempt ${capturedAttemptId}: "${fullText.slice(0, 80)}..."`);
+                      }
+                    } else {
+                      const bgDb = await getDb();
+                      if (bgDb) {
+                        await bgDb.collection<AttemptDoc>("attempts").updateOne(
+                          { id: capturedAttemptId },
+                          { $set: { transcriptionStatus: "completed" } },
+                        );
+                      }
+                    }
+                  }
+                }
+              } catch (bgErr) {
+                console.warn("[AttemptService] Background transcription note:", bgErr);
               }
-            } else {
-              // Real verbatim transcript captured from student's speech
-              fillerCount = TranscriptionService.countFillers(transcript);
-              transcriptionStatus = "completed";
-              console.log(
-                `[AttemptService] Using verbatim student speech transcript: "${transcript}"`,
-              );
-            }
+            })();
           } catch (storageErr) {
             console.error("[AttemptService] Audio persistence failed, falling back:", storageErr);
           }
@@ -388,5 +410,65 @@ export class AttemptService {
       console.error("[AttemptService.saveTeacherFeedback Error]", err);
     }
     return false;
+  }
+
+  /**
+   * Update student attempt transcript (allows students or teachers to correct transcription mismatches).
+   * Automatically recalculates filler words, vocabulary metrics, and speech feedback.
+   */
+  static async updateTranscript(
+    attemptId: string,
+    newTranscript: string,
+    requestingUserId: string,
+    isFaculty: boolean = false,
+  ): Promise<AttemptResult> {
+    const db = await getDb();
+    if (!db) throw new Error("Database service unavailable.");
+
+    const attempt = await db.collection<AttemptDoc>("attempts").findOne({ id: attemptId });
+    if (!attempt) throw new Error(`Attempt "${attemptId}" not found.`);
+
+    // Security authorization guard: student can only edit their own attempt, faculty can edit any
+    if (!isFaculty && attempt.studentId !== requestingUserId) {
+      throw new Error("Forbidden: You can only edit your own speaking attempt.");
+    }
+
+    const trimmed = newTranscript.trim();
+    if (!trimmed) throw new Error("Transcript cannot be empty.");
+
+    // Recalculate filler count based on corrected words
+    const fillerCount = TranscriptionService.countFillers(trimmed);
+
+    // Compute updated speech metrics
+    const words = trimmed.split(/\s+/).filter(Boolean);
+    const wordCount = words.length;
+
+    // Adjust vocabulary and grammar slightly based on word count / fluency
+    let vocabScore = attempt.vocabulary ?? 75;
+    if (wordCount > 10) {
+      const uniqueWords = new Set(words.map((w) => w.toLowerCase().replace(/[^a-z]/g, "")));
+      const diversity = uniqueWords.size / wordCount;
+      vocabScore = Math.min(98, Math.max(60, Math.round(55 + diversity * 40)));
+    }
+
+    // Pronunciation score adjustment: fewer fillers -> higher fluency score
+    const fillerPenalty = Math.min(25, fillerCount * 4);
+    const pronScore = Math.min(98, Math.max(50, 92 - fillerPenalty));
+
+    await db.collection<AttemptDoc>("attempts").updateOne(
+      { id: attemptId },
+      {
+        $set: {
+          transcript: trimmed,
+          fillerCount,
+          pronunciation: pronScore,
+          vocabulary: vocabScore,
+          transcriptionStatus: "completed",
+          updatedAt: new Date(),
+        },
+      },
+    );
+
+    return await this.getAttemptById(attemptId);
   }
 }

@@ -76,30 +76,27 @@ export class StorageService {
       console.warn("[StorageService] Local disk cache write note:", e);
     }
 
-    // 2. Persist to MongoDB GridFS for resilience across container restarts
-    try {
-      const db = await getDb();
-      if (db) {
-        const bucket = new GridFSBucket(db, { bucketName: "audio_recordings" });
-        const uploadStream = bucket.openUploadStream(sanitizedFilename, {
-          metadata: {
-            audioId,
-            mimeType,
-            originalFilename: filename,
-            size: buffer.length,
-            createdAt: new Date(),
-          },
-        });
-
-        await new Promise<void>((resolve, reject) => {
-          uploadStream.on("error", reject);
-          uploadStream.on("finish", () => resolve());
+    // 2. Persist to MongoDB GridFS in background for resilience across container restarts
+    void (async () => {
+      try {
+        const db = await getDb();
+        if (db) {
+          const bucket = new GridFSBucket(db, { bucketName: "audio_recordings" });
+          const uploadStream = bucket.openUploadStream(sanitizedFilename, {
+            metadata: {
+              audioId,
+              mimeType,
+              originalFilename: filename,
+              size: buffer.length,
+              createdAt: new Date(),
+            },
+          });
           uploadStream.end(buffer);
-        });
+        }
+      } catch (err) {
+        console.warn("[StorageService] GridFS background sync note:", err);
       }
-    } catch (err) {
-      console.warn("[StorageService] GridFS write note (local cache used):", err);
-    }
+    })();
 
     return {
       audioId,

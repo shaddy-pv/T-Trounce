@@ -25,7 +25,10 @@ import {
   DeleteAssignmentInputSchema,
   AssignmentFilterSchema,
 } from "./validators/assignment.validator";
-import { SaveAttemptInputSchema } from "./validators/attempt.validator";
+import {
+  SaveAttemptInputSchema,
+  UpdateAttemptTranscriptInputSchema,
+} from "./validators/attempt.validator";
 import {
   UpdateStudentStatusInputSchema,
   StudentRosterFilterSchema,
@@ -311,6 +314,23 @@ export const fetchAttemptByIdFn = createServerFn({ method: "GET" })
   });
 
 /**
+ * Server Function: Update student speaking attempt transcript (Protected: Authenticated Student/Faculty)
+ */
+export const updateAttemptTranscriptFn = createServerFn({ method: "POST" })
+  .middleware([authenticatedMiddleware])
+  .validator((input: unknown) => UpdateAttemptTranscriptInputSchema.parse(input))
+  .handler(async ({ data, context }): Promise<AttemptResult> => {
+    const user = (context as { user: SessionPayload }).user;
+    const isFaculty = user.role === "teacher" || user.role === "admin" || user.isAdmin;
+    return await AttemptService.updateTranscript(
+      data.attemptId,
+      data.transcript,
+      user.userId,
+      isFaculty,
+    );
+  });
+
+/**
  * Server Function: Save Teacher Feedback on student attempt (Protected: Faculty/Admin)
  */
 export const saveTeacherFeedbackFn = createServerFn({ method: "POST" })
@@ -404,7 +424,8 @@ export const streamTranscribeChunkFn = createServerFn({ method: "POST" })
       .parse(input);
   })
   .handler(async ({ data }): Promise<{ text: string; confidence: number; isFinal: boolean }> => {
-    const cleanBase64 = data.audioBase64.replace(/^data:[^;]+;base64,/, "");
+    const commaIdx = data.audioBase64.indexOf(",");
+    const cleanBase64 = commaIdx >= 0 ? data.audioBase64.slice(commaIdx + 1) : data.audioBase64;
     const buffer = Buffer.from(cleanBase64, "base64");
     return await TranscriptionService.transcribeChunk(
       buffer,

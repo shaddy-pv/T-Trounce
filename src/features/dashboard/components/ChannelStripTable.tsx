@@ -1,10 +1,11 @@
-import { Link } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { StatusDot } from "@/components/tarang/StatusDot";
 import { Waveform } from "@/components/tarang/Waveform";
 import type { StudentRow } from "@/types";
 
 export function ChannelStripTable({ students }: { students: StudentRow[] }) {
+  const navigate = useNavigate();
   return (
     <section className="mt-10">
       <div className="flex items-center justify-between">
@@ -41,21 +42,19 @@ export function ChannelStripTable({ students }: { students: StudentRow[] }) {
             {students.map((s, i) => (
               <tr
                 key={s.id}
+                onClick={() => navigate({ to: "/students/$id", params: { id: s.id } })}
                 className={
-                  "transition hover:bg-ink-900 " + (i > 0 ? "border-t border-hairline" : "")
+                  "cursor-pointer group transition hover:bg-ink-900 " +
+                  (i > 0 ? "border-t border-hairline" : "")
                 }
               >
                 <td className="px-3 py-3">
                   <StatusDot status={s.status} />
                 </td>
                 <td className="px-2 py-3">
-                  <Link
-                    to="/students/$id"
-                    params={{ id: s.id }}
-                    className="text-primary-warm hover:underline"
-                  >
+                  <span className="text-primary-warm group-hover:underline font-medium">
                     {s.name}
-                  </Link>
+                  </span>
                 </td>
                 <td className="px-2 py-3 w-[200px]">
                   <Waveform mode="thumbnail" data={s.waveform} height={20} />

@@ -4,6 +4,7 @@ import { CreateUserInputSchema, DeleteUserInputSchema } from "./user.validator";
 import { CreateAssignmentInputSchema } from "./assignment.validator";
 import { UpdateStudentStatusInputSchema } from "./student.validator";
 import { CreateMessageInputSchema } from "./message.validator";
+import { UpdateAttemptTranscriptInputSchema } from "./attempt.validator";
 
 describe("Zod Validator Schemas Unit Tests", () => {
   describe("LoginInputSchema", () => {
@@ -120,6 +121,24 @@ describe("Zod Validator Schemas Unit Tests", () => {
       const invalid = CreateMessageInputSchema.safeParse({
         studentId: "s-1",
         content: "",
+      });
+      expect(invalid.success).toBe(false);
+    });
+  });
+
+  describe("UpdateAttemptTranscriptInputSchema", () => {
+    it("should accept valid attemptId and corrected transcript", () => {
+      const valid = UpdateAttemptTranscriptInputSchema.safeParse({
+        attemptId: "attempt-123",
+        transcript: "Hello, my name is Shadan and I am practicing pronunciation.",
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it("should reject empty transcript", () => {
+      const invalid = UpdateAttemptTranscriptInputSchema.safeParse({
+        attemptId: "attempt-123",
+        transcript: "",
       });
       expect(invalid.success).toBe(false);
     });

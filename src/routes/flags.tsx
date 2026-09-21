@@ -110,9 +110,13 @@ function FlagsPage() {
         },
       });
       setNudgeSuccess((prev) => ({ ...prev, [studentId]: true }));
-      setTimeout(() => {
-        setNudgeSuccess((prev) => ({ ...prev, [studentId]: false }));
-      }, 3500);
+      setRoster((prev) =>
+        prev.map((s) =>
+          s.id === studentId
+            ? { ...s, flagReason: "Nudged today · Direct notification sent" }
+            : s,
+        ),
+      );
     } catch (err) {
       console.error("Failed to send nudge:", err);
     } finally {
@@ -339,10 +343,24 @@ function FlagsPage() {
                     <button
                       onClick={() => sendNudge(s.id, s.name)}
                       disabled={actingId === s.id}
-                      className="inline-flex items-center gap-1 num text-[12px] text-[#E2A33C] hover:underline cursor-pointer"
+                      className={
+                        "inline-flex items-center gap-1 num text-[12px] cursor-pointer transition " +
+                        (nudgeSuccess[s.id]
+                          ? "text-[#3FB8AF] font-medium"
+                          : "text-[#E2A33C] hover:underline")
+                      }
                     >
-                      <BellRing size={12} />
-                      {nudgeSuccess[s.id] ? "Sent!" : "Nudge"}
+                      {nudgeSuccess[s.id] ? (
+                        <>
+                          <Check size={12} />
+                          Nudged
+                        </>
+                      ) : (
+                        <>
+                          <BellRing size={12} />
+                          Nudge
+                        </>
+                      )}
                     </button>
                     <button
                       onClick={() => resolveStudentStatus(s.id)}
@@ -417,10 +435,24 @@ function FlagsPage() {
                     <button
                       onClick={() => sendNudge(s.id, s.name)}
                       disabled={actingId === s.id}
-                      className="inline-flex items-center gap-1 num text-[12px] text-[#E2A33C] hover:underline cursor-pointer"
+                      className={
+                        "inline-flex items-center gap-1 num text-[12px] cursor-pointer transition " +
+                        (nudgeSuccess[s.id]
+                          ? "text-[#3FB8AF] font-medium"
+                          : "text-[#E2A33C] hover:underline")
+                      }
                     >
-                      <BellRing size={12} />
-                      {nudgeSuccess[s.id] ? "Sent!" : "Send Nudge"}
+                      {nudgeSuccess[s.id] ? (
+                        <>
+                          <Check size={12} />
+                          Nudged Today
+                        </>
+                      ) : (
+                        <>
+                          <BellRing size={12} />
+                          Send Nudge
+                        </>
+                      )}
                     </button>
                     <button
                       onClick={() => resolveStudentStatus(s.id)}

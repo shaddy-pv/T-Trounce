@@ -50,8 +50,9 @@ LANG = os.environ.get("WHISPER_LANG", "en")
 try:
     from faster_whisper import WhisperModel  # type: ignore
 
-    log.info(f"Loading faster-whisper model: '{MODEL_SIZE}' on {DEVICE} ...")
-    _model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type="int8")
+    cpu_threads = int(os.environ.get("WHISPER_CPU_THREADS", min(4, os.cpu_count() or 1)))
+    log.info(f"Loading faster-whisper model: '{MODEL_SIZE}' on {DEVICE} (threads={cpu_threads}) ...")
+    _model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type="int8", cpu_threads=cpu_threads)
     log.info(f"Model '{MODEL_SIZE}' loaded and ready.")
 except ImportError:
     log.error(
@@ -68,7 +69,14 @@ _model_lock = threading.Lock()
 # ──────────────────────────────────────────────
 # Transcription helper
 # ──────────────────────────────────────────────
-def transcribe_audio_bytes(audio_bytes: bytes, mime: str = "audio/wav") -> dict:
+DEFAULT_INITIAL_PROMPT = (
+    "Spoken English speech coaching on Trounce. "
+    "Indian English speaker names: Shadan, Priya, Rahul, Sneha, Aman, Mr. Sharma. "
+    "Pronounce words clearly and verbatim including natural hesitations like um, uh, matlab."
+)
+
+
+def transcribe_audio_bytes(audio_bytes: bytes, mime: str = "audio/wav", prompt: str = "") -> dict:
     """
     Write audio bytes to a temp file, run faster-whisper, return transcript dict.
     Returns: { text: str, confidence: float, language: str }
@@ -90,16 +98,22 @@ def transcribe_audio_bytes(audio_bytes: bytes, mime: str = "audio/wav") -> dict:
         tmp.write(audio_bytes)
         tmp_path = tmp.name
 
+    initial_prompt = f"{DEFAULT_INITIAL_PROMPT} Context: {prompt}" if prompt else DEFAULT_INITIAL_PROMPT
+
     try:
         with _model_lock:
+            # beam_size=1 (greedy decoding) provides ultra-fast sub-second streaming inference on CPU
             segments, info = _model.transcribe(
                 tmp_path,
                 language=LANG,
-                beam_size=5,
+                beam_size=1,
+                best_of=1,
+                temperature=0.0,
+                initial_prompt=initial_prompt,
                 vad_filter=True,          # skip silent parts automatically
                 vad_parameters=dict(
-                    min_silence_duration_ms=300,
-                    speech_pad_ms=100,
+                    min_silence_duration_ms=250,
+                    speech_pad_ms=80,
                 ),
                 word_timestamps=False,
                 condition_on_previous_text=False,  # each chunk is independent
@@ -191,6 +205,7 @@ class WhisperHandler(BaseHTTPRequestHandler):
 
         audio_b64 = body.get("audio_b64", "")
         mime = body.get("mime", "audio/wav")
+        prompt = body.get("prompt", "")
 
         if not audio_b64:
             self._send_json({"text": "", "confidence": 0.0}, 200)
@@ -206,11 +221,11 @@ class WhisperHandler(BaseHTTPRequestHandler):
             return
 
         # Minimum size guard — skip very short/silent clips
-        if len(audio_bytes) < 1000:
+        if len(audio_bytes) < 2000:
             self._send_json({"text": "", "confidence": 0.0}, 200)
             return
 
-        result = transcribe_audio_bytes(audio_bytes, mime)
+        result = transcribe_audio_bytes(audio_bytes, mime, prompt)
         log.info(
             f'Chunk transcribed ({len(audio_bytes)//1024}KB): '
             f'"{result["text"][:60]}{"..." if len(result["text"]) > 60 else ""}" '

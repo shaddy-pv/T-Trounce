@@ -44,6 +44,31 @@ export class StudentService {
         const now = new Date();
         const results: StudentRow[] = [];
 
+        // Collect all student identifiers for a single batched indexed query
+        const studentSearchIds = new Set<string>();
+        for (const user of studentUsers) {
+          studentSearchIds.add(user.id);
+          if (user.email) studentSearchIds.add(user.email.toLowerCase());
+        }
+
+        // Single indexed batch query across all students (replaces 50+ sequential database roundtrips)
+        const allAttempts = await db
+          .collection<import("../db/schemas").AttemptDoc>("attempts")
+          .find({ studentId: { $in: Array.from(studentSearchIds) } })
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        // Group attempts by student identifier in memory
+        const attemptsByStudent = new Map<string, import("../db/schemas").AttemptDoc[]>();
+        for (const att of allAttempts) {
+          const sid = att.studentId;
+          const list = attemptsByStudent.get(sid) || [];
+          if (list.length < 2) {
+            list.push(att);
+            attemptsByStudent.set(sid, list);
+          }
+        }
+
         for (const user of studentUsers) {
           const studentDoc = studentDocsMap.get(user.id);
           const sessionSeason = user.sessionSeason || studentDoc?.sessionSeason || "summer";
@@ -54,15 +79,11 @@ export class StudentService {
             continue;
           }
 
-          // Fetch the student's latest attempts from MongoDB
-          const attempts = await db
-            .collection<import("../db/schemas").AttemptDoc>("attempts")
-            .find({
-              $or: [{ studentId: user.id }, { studentId: user.email.toLowerCase() }],
-            })
-            .sort({ createdAt: -1 })
-            .limit(2)
-            .toArray();
+          // Fetch the student's latest attempts from in-memory batch map
+          const attempts =
+            attemptsByStudent.get(user.id) ||
+            (user.email ? attemptsByStudent.get(user.email.toLowerCase()) : undefined) ||
+            [];
 
           let scorePct = 0;
           let trendPct = 0;

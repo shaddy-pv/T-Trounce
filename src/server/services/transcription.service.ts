@@ -45,6 +45,7 @@ export class TranscriptionService {
     audioBuffer: Buffer,
     mimeType: string = "audio/wav",
     timeoutMs: number = 5000,
+    promptContext?: string,
   ): Promise<{ text: string; confidence: number } | null> {
     try {
       const controller = new AbortController();
@@ -55,7 +56,11 @@ export class TranscriptionService {
       const response = await fetch(`${WHISPER_SIDECAR_URL}/transcribe`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audio_b64: base64Audio, mime: cleanMime }),
+        body: JSON.stringify({
+          audio_b64: base64Audio,
+          mime: cleanMime,
+          prompt: promptContext,
+        }),
         signal: controller.signal,
       });
       clearTimeout(timer);
@@ -84,8 +89,13 @@ export class TranscriptionService {
     const geminiKey = process.env.GEMINI_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
 
-    // 0. Try local FastWhisper sidecar first (6 s timeout — resilient for CPU inference)
-    const local = await this.transcribeWithLocalWhisper(audioBuffer, mimeType, 6000);
+    // 0. Try local FastWhisper sidecar first (3.5s timeout for rapid chunk streaming)
+    const local = await this.transcribeWithLocalWhisper(
+      audioBuffer,
+      mimeType,
+      3500,
+      promptContext,
+    );
     if (local) return { text: local.text, confidence: local.confidence, isFinal: true };
 
     // 1. Try Google Gemini Flash Multimodal Streaming Chunk Transcription
@@ -169,7 +179,12 @@ export class TranscriptionService {
     const openaiKey = process.env.OPENAI_API_KEY;
 
     // 0. Try local FastWhisper sidecar (10 s timeout for full recording on CPU)
-    const local = await this.transcribeWithLocalWhisper(audioBuffer, mimeType, 10000);
+    const local = await this.transcribeWithLocalWhisper(
+      audioBuffer,
+      mimeType,
+      10000,
+      promptContext,
+    );
     if (local && local.text.length > 0) {
       const fillers = this.countFillers(local.text);
       return {

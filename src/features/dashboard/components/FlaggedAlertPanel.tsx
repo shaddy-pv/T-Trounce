@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { StatusDot } from "@/components/tarang/StatusDot";
 import { Waveform } from "@/components/tarang/Waveform";
 import type { StudentRow } from "@/types";
@@ -10,6 +10,7 @@ export function FlaggedAlertPanel({
   flagged: StudentRow[];
   totalCount: number;
 }) {
+  const navigate = useNavigate();
   if (flagged.length === 0) return null;
 
   return (
@@ -28,37 +29,33 @@ export function FlaggedAlertPanel({
             {flagged.map((s, i) => (
               <tr
                 key={s.id}
+                onClick={() => navigate({ to: "/students/$id", params: { id: s.id } })}
                 className={
-                  "transition hover:bg-[#C1503B]/[0.08] " +
+                  "group cursor-pointer select-none transition-colors duration-150 hover:bg-[#C1503B]/[0.12] active:bg-[#C1503B]/[0.18] " +
                   (i > 0 ? "border-t border-[#C1503B]/20" : "")
                 }
+                title={`Click to open ${s.name}'s review dossier`}
               >
                 <td className="w-6 px-3 py-2.5">
                   <StatusDot status="flagged" />
                 </td>
                 <td className="px-2 py-2.5">
-                  <Link
-                    to="/students/$id"
-                    params={{ id: s.id }}
-                    className="font-medium text-primary-warm hover:underline"
-                  >
+                  <span className="font-medium text-primary-warm group-hover:text-white group-hover:underline transition-colors">
                     {s.name}
-                  </Link>
+                  </span>
                 </td>
                 <td className="px-2 py-2.5 w-[160px]">
                   <div className="opacity-90">
                     <Waveform mode="thumbnail" data={s.waveform} height={20} />
                   </div>
                 </td>
-                <td className="num px-2 py-2.5 text-secondary-warm">{s.flagReason}</td>
+                <td className="num px-2 py-2.5 text-secondary-warm group-hover:text-primary-warm transition-colors">
+                  {s.flagReason}
+                </td>
                 <td className="px-2 py-2.5 text-right">
-                  <Link
-                    to="/students/$id"
-                    params={{ id: s.id }}
-                    className="num text-[12px] text-[#3FB8AF] hover:underline"
-                  >
+                  <span className="num text-[12px] font-medium text-[#3FB8AF] group-hover:translate-x-0.5 group-hover:underline transition-transform inline-block">
                     Review →
-                  </Link>
+                  </span>
                 </td>
               </tr>
             ))}
@@ -68,3 +65,4 @@ export function FlaggedAlertPanel({
     </section>
   );
 }
+

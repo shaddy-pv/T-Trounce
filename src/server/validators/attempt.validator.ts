@@ -39,3 +39,11 @@ export const SaveAttemptInputSchema = z.object({
 });
 
 export type SaveAttemptInput = z.infer<typeof SaveAttemptInputSchema>;
+
+export const UpdateAttemptTranscriptInputSchema = z.object({
+  attemptId: z.string().min(1),
+  transcript: z.string().min(1),
+});
+
+export type UpdateAttemptTranscriptInput = z.infer<typeof UpdateAttemptTranscriptInputSchema>;
+
