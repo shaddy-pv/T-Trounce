@@ -690,9 +690,7 @@ export function useAudioRecorder() {
     // Prefer server-side FastWhisper transcript if present
     const serverTranscript = serverWhisperRef.current.trim();
     const resolvedTranscript =
-      serverTranscript.length > 0
-        ? serverTranscript
-        : webSpeechTranscript || serverTranscript;
+      serverTranscript.length > 0 ? serverTranscript : webSpeechTranscript || serverTranscript;
 
     return { samples, elapsed, audioUrl, transcript: resolvedTranscript };
   }, [stream, samples, elapsed]);

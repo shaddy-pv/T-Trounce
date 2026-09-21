@@ -82,9 +82,9 @@ export class AttemptService {
         let audioId = payload.result.audioId;
         let audioMimeType = payload.result.audioMimeType || "audio/webm";
         let audioSize = payload.result.audioSize || 0;
-        let transcript = payload.result.transcript?.trim() || "";
-        let fillerCount = payload.result.fillerCount ?? 0;
-        let pauseCount = payload.result.pauseCount ?? 0;
+        const transcript = payload.result.transcript?.trim() || "";
+        const fillerCount = payload.result.fillerCount ?? 0;
+        const pauseCount = payload.result.pauseCount ?? 0;
         let transcriptionStatus: "pending" | "processing" | "completed" | "failed" = "completed";
 
         // 1. If audio is provided as Base64 Data URI or binary string, store in GridFS / disk
@@ -124,7 +124,9 @@ export class AttemptService {
                 if (currentAudioId) {
                   const audioBufferRes = await StorageService.getAudioBuffer(currentAudioId);
                   if (audioBufferRes && audioBufferRes.buffer.length > 2000) {
-                    console.log(`[AttemptService] Full-audio transcribing for attempt ${capturedAttemptId}...`);
+                    console.log(
+                      `[AttemptService] Full-audio transcribing for attempt ${capturedAttemptId}...`,
+                    );
                     const transRes = await TranscriptionService.transcribeAudio(
                       audioBufferRes.buffer,
                       currentMime || audioBufferRes.mimeType,
@@ -146,15 +148,19 @@ export class AttemptService {
                             },
                           },
                         );
-                        console.log(`[AttemptService] Full-audio transcript saved for attempt ${capturedAttemptId}: "${fullText.slice(0, 80)}..."`);
+                        console.log(
+                          `[AttemptService] Full-audio transcript saved for attempt ${capturedAttemptId}: "${fullText.slice(0, 80)}..."`,
+                        );
                       }
                     } else {
                       const bgDb = await getDb();
                       if (bgDb) {
-                        await bgDb.collection<AttemptDoc>("attempts").updateOne(
-                          { id: capturedAttemptId },
-                          { $set: { transcriptionStatus: "completed" } },
-                        );
+                        await bgDb
+                          .collection<AttemptDoc>("attempts")
+                          .updateOne(
+                            { id: capturedAttemptId },
+                            { $set: { transcriptionStatus: "completed" } },
+                          );
                       }
                     }
                   }

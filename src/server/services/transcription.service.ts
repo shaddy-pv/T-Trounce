@@ -90,12 +90,7 @@ export class TranscriptionService {
     const openaiKey = process.env.OPENAI_API_KEY;
 
     // 0. Try local FastWhisper sidecar first (3.5s timeout for rapid chunk streaming)
-    const local = await this.transcribeWithLocalWhisper(
-      audioBuffer,
-      mimeType,
-      3500,
-      promptContext,
-    );
+    const local = await this.transcribeWithLocalWhisper(audioBuffer, mimeType, 3500, promptContext);
     if (local) return { text: local.text, confidence: local.confidence, isFinal: true };
 
     // 1. Try Google Gemini Flash Multimodal Streaming Chunk Transcription

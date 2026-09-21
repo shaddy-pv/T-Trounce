@@ -112,9 +112,7 @@ function FlagsPage() {
       setNudgeSuccess((prev) => ({ ...prev, [studentId]: true }));
       setRoster((prev) =>
         prev.map((s) =>
-          s.id === studentId
-            ? { ...s, flagReason: "Nudged today · Direct notification sent" }
-            : s,
+          s.id === studentId ? { ...s, flagReason: "Nudged today · Direct notification sent" } : s,
         ),
       );
     } catch (err) {

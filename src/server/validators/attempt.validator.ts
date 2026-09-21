@@ -46,4 +46,3 @@ export const UpdateAttemptTranscriptInputSchema = z.object({
 });
 
 export type UpdateAttemptTranscriptInput = z.infer<typeof UpdateAttemptTranscriptInputSchema>;
-

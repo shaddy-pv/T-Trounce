@@ -395,7 +395,8 @@ function ResultPage() {
                 />
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <span className="text-[11px] text-tertiary-warm">
-                    Correct any misheard words or names (e.g. Shadan). Your fluency metrics & filler count recalculate automatically.
+                    Correct any misheard words or names (e.g. Shadan). Your fluency metrics & filler
+                    count recalculate automatically.
                   </span>
                   <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                     <button
