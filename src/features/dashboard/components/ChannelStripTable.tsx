@@ -26,8 +26,8 @@ export function ChannelStripTable({ students }: { students: StudentRow[] }) {
         </div>
       </div>
 
-      <div className="mt-3 overflow-hidden rounded-[4px] border border-hairline">
-        <table className="w-full text-[13px]">
+      <div className="mt-3 overflow-x-auto rounded-[4px] border border-hairline">
+        <table className="w-full min-w-[640px] text-[13px]">
           <thead className="bg-ink-900">
             <tr className="num text-[10px] uppercase tracking-[0.14em] text-tertiary-warm">
               <th className="w-6 px-3 py-2 text-left"></th>

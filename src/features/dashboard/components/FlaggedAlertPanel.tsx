@@ -24,8 +24,8 @@ export function FlaggedAlertPanel({
           {flagged.length} of {totalCount}
         </span>
       </div>
-      <div className="mt-3 overflow-hidden rounded-[4px] border border-dashed border-[#C1503B]/60 bg-[#C1503B]/[0.04]">
-        <table className="w-full text-[13px]">
+      <div className="mt-3 overflow-x-auto rounded-[4px] border border-dashed border-[#C1503B]/60 bg-[#C1503B]/[0.04]">
+        <table className="w-full min-w-[560px] text-[13px]">
           <tbody>
             {flagged.map((s, i) => (
               <tr
