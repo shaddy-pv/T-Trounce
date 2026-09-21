@@ -1,4 +1,4 @@
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { useUser, clearUser } from "@/lib/auth";
 
@@ -6,7 +6,22 @@ import { useUser, clearUser } from "@/lib/auth";
 export function TeacherShell({ children }: { children: ReactNode }) {
   const user = useUser();
   const navigate = useNavigate();
+  const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  // Pre-warm teacher routes during browser idle time for 0ms transitions
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const timer = setTimeout(() => {
+        router.preloadRoute({ to: "/dashboard" }).catch(() => {});
+        router.preloadRoute({ to: "/assignments" }).catch(() => {});
+        router.preloadRoute({ to: "/flags" }).catch(() => {});
+        router.preloadRoute({ to: "/reports" }).catch(() => {});
+        router.preloadRoute({ to: "/users" }).catch(() => {});
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [router]);
 
   const nav = [
     { to: "/dashboard", label: "Dashboard" },

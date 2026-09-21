@@ -10,6 +10,7 @@ import {
   updateStudentStatusFn,
   sendDirectMessageFn,
 } from "@/server/data";
+import { cachedClientFetch, invalidateClientDataCache } from "@/lib/client-cache";
 import type { StudentRow, FlagItem } from "@/types";
 import {
   Check,
@@ -40,13 +41,32 @@ export const Route = createFileRoute("/flags")({
   },
   loader: async () => {
     const [studentRoster, activeFlags] = await Promise.all([
-      fetchStudentRosterFn(),
-      fetchFlagsFn({ data: { status: "pending" } }),
+      cachedClientFetch("student-roster", () => fetchStudentRosterFn()),
+      cachedClientFetch("flags-pending", () => fetchFlagsFn({ data: { status: "pending" } })),
     ]);
     return { studentRoster, activeFlags };
   },
+  pendingComponent: FlagsSkeleton,
   component: FlagsPage,
 });
+
+function FlagsSkeleton() {
+  return (
+    <TeacherShell>
+      <div className="space-y-6 animate-pulse">
+        <div className="flex justify-between items-end pb-6 border-b border-hairline">
+          <div>
+            <div className="h-3 w-32 bg-ink-900 rounded mb-2" />
+            <div className="h-8 w-48 bg-ink-900 rounded" />
+          </div>
+        </div>
+        <div className="h-28 bg-ink-900 rounded border border-hairline" />
+        <div className="h-44 bg-ink-900 rounded border border-hairline" />
+        <div className="h-64 bg-ink-900 rounded border border-hairline" />
+      </div>
+    </TeacherShell>
+  );
+}
 
 function FlagsPage() {
   const router = useRouter();
@@ -92,6 +112,7 @@ function FlagsPage() {
         },
       });
       setFlags((prev) => prev.filter((f) => f.id !== flagId));
+      invalidateClientDataCache("flags");
       router.invalidate();
     } catch (err) {
       console.error("Failed to resolve flag:", err);
@@ -131,6 +152,7 @@ function FlagsPage() {
           s.id === studentId ? { ...s, status: "on-track", flagReason: undefined } : s,
         ),
       );
+      invalidateClientDataCache("student-roster");
       router.invalidate();
     } finally {
       setActingId(null);

@@ -9,6 +9,7 @@ import {
   fetchStudentAttemptsFn,
   sendDirectMessageFn,
 } from "@/server/data";
+import { cachedClientFetch } from "@/lib/client-cache";
 import { useUser } from "@/lib/auth";
 import { BookOpen, Calendar, Sparkles, MessageSquare, Check, Send, Clock } from "lucide-react";
 import { useState, useMemo } from "react";
@@ -41,21 +42,47 @@ export const Route = createFileRoute("/practice/")({
     const studentBatchId = context.session?.batchId;
 
     const [modules, assignments, messages, attempts] = await Promise.all([
-      fetchModulesFn(),
-      fetchAssignmentsFn({
-        data: {
-          session: studentSession,
-          batch: studentBatch,
-          batchId: studentBatchId,
-        },
-      }),
-      studentId ? fetchStudentMessagesFn({ data: studentId }) : Promise.resolve([]),
-      studentId ? fetchStudentAttemptsFn({ data: studentId }) : Promise.resolve([]),
+      cachedClientFetch("modules", () => fetchModulesFn()),
+      cachedClientFetch(
+        `student-assignments-${studentSession}-${studentBatch}-${studentBatchId}`,
+        () =>
+          fetchAssignmentsFn({
+            data: {
+              session: studentSession,
+              batch: studentBatch,
+              batchId: studentBatchId,
+            },
+          }),
+      ),
+      studentId
+        ? cachedClientFetch(`student-messages-${studentId}`, () =>
+            fetchStudentMessagesFn({ data: studentId }),
+          )
+        : Promise.resolve([]),
+      studentId
+        ? cachedClientFetch(`student-attempts-${studentId}`, () =>
+            fetchStudentAttemptsFn({ data: studentId }),
+          )
+        : Promise.resolve([]),
     ]);
     return { modules, assignments, messages, attempts };
   },
+  pendingComponent: PracticeHubSkeleton,
   component: PracticeHub,
 });
+
+function PracticeHubSkeleton() {
+  return (
+    <StudentShell>
+      <div className="space-y-6 px-5 py-6 animate-pulse">
+        <div className="h-6 w-32 bg-ink-900 rounded" />
+        <div className="h-44 bg-ink-900 rounded-[12px] border border-hairline" />
+        <div className="h-32 bg-ink-900 rounded-[12px] border border-hairline" />
+        <div className="h-32 bg-ink-900 rounded-[12px] border border-hairline" />
+      </div>
+    </StudentShell>
+  );
+}
 
 function PracticeHub() {
   return (

@@ -2,6 +2,7 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { StudentShell } from "@/components/tarang/StudentShell";
 import { Waveform, type WaveformSegment } from "@/components/tarang/Waveform";
 import { fetchStudentAttemptsFn } from "@/server/data";
+import { cachedClientFetch } from "@/lib/client-cache";
 import type { AttemptResult } from "@/types";
 
 export const Route = createFileRoute("/progress")({
@@ -16,11 +17,28 @@ export const Route = createFileRoute("/progress")({
   },
   loader: async ({ context }): Promise<{ attempts: AttemptResult[] }> => {
     const studentId = context.session?.userId;
-    const attempts = studentId ? await fetchStudentAttemptsFn({ data: studentId }) : [];
+    const attempts = studentId
+      ? await cachedClientFetch(`student-attempts-${studentId}`, () =>
+          fetchStudentAttemptsFn({ data: studentId }),
+        )
+      : [];
     return { attempts };
   },
+  pendingComponent: ProgressSkeleton,
   component: ProgressPage,
 });
+
+function ProgressSkeleton() {
+  return (
+    <StudentShell>
+      <div className="space-y-6 px-5 py-6 animate-pulse">
+        <div className="h-6 w-32 bg-ink-900 rounded" />
+        <div className="h-32 bg-ink-900 rounded-[12px] border border-hairline" />
+        <div className="h-44 bg-ink-900 rounded-[12px] border border-hairline" />
+      </div>
+    </StudentShell>
+  );
+}
 
 function ProgressPage() {
   const loaderData = Route.useLoaderData() as { attempts?: AttemptResult[] } | undefined;

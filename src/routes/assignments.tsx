@@ -3,6 +3,7 @@ import { useState } from "react";
 import { TeacherShell } from "@/components/tarang/TeacherShell";
 import { TButton } from "@/components/tarang/Button";
 import { fetchAssignmentsFn, createAssignmentFn, deleteAssignmentFn } from "@/server/data";
+import { cachedClientFetch, invalidateClientDataCache } from "@/lib/client-cache";
 import type { AssignmentPublic } from "@/server/services/assignment.service";
 import { useUser } from "@/lib/auth";
 import {
@@ -40,11 +41,34 @@ export const Route = createFileRoute("/assignments")({
     }
   },
   loader: async () => {
-    const assignments = await fetchAssignmentsFn();
+    const assignments = await cachedClientFetch("assignments", () => fetchAssignmentsFn());
     return { assignments };
   },
+  pendingComponent: AssignmentsSkeleton,
   component: AssignmentsPage,
 });
+
+function AssignmentsSkeleton() {
+  return (
+    <TeacherShell>
+      <div className="space-y-6 animate-pulse">
+        <div className="flex justify-between items-end pb-6 border-b border-hairline">
+          <div>
+            <div className="h-3 w-32 bg-ink-900 rounded mb-2" />
+            <div className="h-8 w-64 bg-ink-900 rounded" />
+          </div>
+          <div className="h-10 w-36 bg-ink-900 rounded" />
+        </div>
+        <div className="h-16 bg-ink-900 rounded border border-hairline" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="h-44 bg-ink-900 rounded border border-hairline" />
+          <div className="h-44 bg-ink-900 rounded border border-hairline" />
+          <div className="h-44 bg-ink-900 rounded border border-hairline" />
+        </div>
+      </div>
+    </TeacherShell>
+  );
+}
 
 function AssignmentsPage() {
   const { assignments: initialAssignments } = Route.useLoaderData();
@@ -121,6 +145,7 @@ function AssignmentsPage() {
       setInstructions("");
       setPrompt("");
       setDueDate("");
+      invalidateClientDataCache("assignments");
       await router.invalidate();
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : "Failed to create homework assignment");
@@ -138,6 +163,7 @@ function AssignmentsPage() {
       await deleteAssignmentFn({ data: { id } });
       setAssignments(assignments.filter((a) => a.id !== id));
       setSuccessMessage(`Deleted assignment: ${assignmentTitle}`);
+      invalidateClientDataCache("assignments");
       await router.invalidate();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to delete assignment");

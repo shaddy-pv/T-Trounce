@@ -17,8 +17,8 @@ export const getRouter = () => {
     defaultPreloadDelay: 50,
     defaultPreloadStaleTime: 60 * 1000,
     defaultStaleTime: 60 * 1000,
-    defaultPendingMs: 50,
-    defaultPendingMinMs: 250,
+    defaultPendingMs: 0,
+    defaultPendingMinMs: 0,
   });
 
   return router;

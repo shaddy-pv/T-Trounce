@@ -16,6 +16,7 @@ import {
 import { TeacherShell } from "@/components/tarang/TeacherShell";
 import { StatusDot } from "@/components/tarang/StatusDot";
 import { fetchStudentProfileFn } from "@/server/data";
+import { cachedClientFetch } from "@/lib/client-cache";
 import { TButton } from "@/components/tarang/Button";
 import { DirectNoteModal } from "@/features/students/components/DirectNoteModal";
 import { AudioTranscriptEvaluator } from "@/features/students/components/AudioTranscriptEvaluator";
@@ -54,11 +55,12 @@ export const Route = createFileRoute("/students/$id")({
     }
   },
   loader: async ({ params }): Promise<StudentProfileData | null> => {
-    const profile = (await fetchStudentProfileFn({
-      data: params.id,
-    })) as unknown as StudentProfileData | null;
+    const profile = (await cachedClientFetch("student-profile-" + params.id, () =>
+      fetchStudentProfileFn({ data: params.id }),
+    )) as unknown as StudentProfileData | null;
     return profile;
   },
+  pendingComponent: StudentDossierSkeleton,
   head: ({ loaderData }) => {
     const s = (loaderData as unknown as StudentProfileData | null)?.student;
     return {
@@ -67,6 +69,27 @@ export const Route = createFileRoute("/students/$id")({
   },
   component: StudentDetail,
 });
+
+function StudentDossierSkeleton() {
+  return (
+    <TeacherShell>
+      <div className="space-y-6 animate-pulse">
+        <div className="h-4 w-28 bg-ink-900 rounded" />
+        <div className="flex justify-between items-start border-b border-hairline pb-6">
+          <div className="space-y-2">
+            <div className="h-8 w-64 bg-ink-900 rounded" />
+            <div className="h-4 w-48 bg-ink-900 rounded" />
+          </div>
+          <div className="h-10 w-32 bg-ink-900 rounded" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="h-72 bg-ink-900 rounded border border-hairline" />
+          <div className="md:col-span-2 h-72 bg-ink-900 rounded border border-hairline" />
+        </div>
+      </div>
+    </TeacherShell>
+  );
+}
 
 function StudentDetail() {
   const profile = Route.useLoaderData() as unknown as StudentProfileData | null;

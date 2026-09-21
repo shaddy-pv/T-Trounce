@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { Send, Check, Printer, Loader2 } from "lucide-react";
 import { TeacherShell } from "@/components/tarang/TeacherShell";
 import { fetchStudentRosterFn, fetchStudentReportFn } from "@/server/data";
+import { cachedClientFetch } from "@/lib/client-cache";
 import { TButton } from "@/components/tarang/Button";
 import { StatusDot } from "@/components/tarang/StatusDot";
 import { ParentReportCard } from "@/features/reports/components/ParentReportCard";
@@ -24,15 +25,37 @@ export const Route = createFileRoute("/reports")({
     }
   },
   loader: async () => {
-    const studentRoster = await fetchStudentRosterFn();
+    const studentRoster = await cachedClientFetch("student-roster", () => fetchStudentRosterFn());
     let initialReport: StudentWeeklyReport | null = null;
     if (studentRoster.length > 0) {
-      initialReport = await fetchStudentReportFn({ data: studentRoster[0].id });
+      initialReport = await cachedClientFetch("student-report-" + studentRoster[0].id, () =>
+        fetchStudentReportFn({ data: studentRoster[0].id }),
+      );
     }
     return { studentRoster, initialReport };
   },
+  pendingComponent: ReportsSkeleton,
   component: ReportsPage,
 });
+
+function ReportsSkeleton() {
+  return (
+    <TeacherShell>
+      <div className="space-y-6 animate-pulse">
+        <div className="flex justify-between items-end pb-6 border-b border-hairline">
+          <div>
+            <div className="h-3 w-32 bg-ink-900 rounded mb-2" />
+            <div className="h-8 w-64 bg-ink-900 rounded" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="h-96 bg-ink-900 rounded border border-hairline" />
+          <div className="md:col-span-2 h-96 bg-ink-900 rounded border border-hairline" />
+        </div>
+      </div>
+    </TeacherShell>
+  );
+}
 
 function ReportsPage() {
   const { studentRoster, initialReport } = Route.useLoaderData();

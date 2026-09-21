@@ -3,6 +3,7 @@ import { useState } from "react";
 import { TeacherShell } from "@/components/tarang/TeacherShell";
 import { TButton } from "@/components/tarang/Button";
 import { fetchUsersFn, createUserFn, deleteUserFn } from "@/server/data";
+import { cachedClientFetch, invalidateClientDataCache } from "@/lib/client-cache";
 import type { UserPublic } from "@/server/services/user.service";
 import { useUser } from "@/lib/auth";
 import {
@@ -40,11 +41,30 @@ export const Route = createFileRoute("/users")({
     }
   },
   loader: async () => {
-    const users = await fetchUsersFn();
+    const users = await cachedClientFetch("users", () => fetchUsersFn());
     return { users };
   },
+  pendingComponent: UsersSkeleton,
   component: UsersManagementPage,
 });
+
+function UsersSkeleton() {
+  return (
+    <TeacherShell>
+      <div className="space-y-6 animate-pulse">
+        <div className="flex justify-between items-end pb-6 border-b border-hairline">
+          <div>
+            <div className="h-3 w-32 bg-ink-900 rounded mb-2" />
+            <div className="h-8 w-64 bg-ink-900 rounded" />
+          </div>
+          <div className="h-10 w-36 bg-ink-900 rounded" />
+        </div>
+        <div className="h-14 bg-ink-900 rounded border border-hairline" />
+        <div className="h-96 bg-ink-900 rounded border border-hairline" />
+      </div>
+    </TeacherShell>
+  );
+}
 
 function UsersManagementPage() {
   const { users: initialUsers } = Route.useLoaderData();
@@ -121,6 +141,8 @@ function UsersManagementPage() {
       setNewName("");
       setNewEmail("");
       setNewPassword("");
+      invalidateClientDataCache("users");
+      invalidateClientDataCache("student-roster");
       await router.invalidate();
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : "Failed to create user");
@@ -138,6 +160,8 @@ function UsersManagementPage() {
       await deleteUserFn({ data: { userId } });
       setUsers(users.filter((u) => u.id !== userId));
       setSuccessMessage(`Deleted user ${userName}`);
+      invalidateClientDataCache("users");
+      invalidateClientDataCache("student-roster");
       await router.invalidate();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Failed to delete user");

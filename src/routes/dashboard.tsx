@@ -2,6 +2,7 @@ import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { TeacherShell } from "@/components/tarang/TeacherShell";
 import { fetchStudentRosterFn } from "@/server/data";
+import { cachedClientFetch } from "@/lib/client-cache";
 import { BatchMeters } from "@/features/dashboard/components/BatchMeters";
 import { FlaggedAlertPanel } from "@/features/dashboard/components/FlaggedAlertPanel";
 import { ChannelStripTable } from "@/features/dashboard/components/ChannelStripTable";
@@ -28,10 +29,37 @@ export const Route = createFileRoute("/dashboard")({
     }
   },
   loader: async () => {
-    return await fetchStudentRosterFn();
+    return await cachedClientFetch("student-roster", () => fetchStudentRosterFn());
   },
+  pendingComponent: DashboardSkeleton,
   component: Dashboard,
 });
+
+function DashboardSkeleton() {
+  return (
+    <TeacherShell>
+      <div className="space-y-6 animate-pulse">
+        <div className="flex justify-between items-end pb-6 border-b border-hairline">
+          <div>
+            <div className="h-3 w-32 bg-ink-900 rounded mb-2" />
+            <div className="h-8 w-64 bg-ink-900 rounded" />
+          </div>
+          <div className="flex gap-3">
+            <div className="h-10 w-32 bg-ink-900 rounded" />
+            <div className="h-10 w-36 bg-ink-900 rounded" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="h-24 bg-ink-900 rounded border border-hairline" />
+          <div className="h-24 bg-ink-900 rounded border border-hairline" />
+          <div className="h-24 bg-ink-900 rounded border border-hairline" />
+          <div className="h-24 bg-ink-900 rounded border border-hairline" />
+        </div>
+        <div className="h-64 bg-ink-900 rounded border border-hairline" />
+      </div>
+    </TeacherShell>
+  );
+}
 
 function Dashboard() {
   const allStudents = Route.useLoaderData();
