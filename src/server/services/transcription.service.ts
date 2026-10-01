@@ -8,7 +8,8 @@ export interface TranscriptionResult {
 }
 
 /** URL of the optional FastWhisper Python sidecar */
-const WHISPER_SIDECAR_URL = process.env.WHISPER_SIDECAR_URL ?? "http://127.0.0.1:8765";
+const rawSidecarUrl = (process.env.WHISPER_SIDECAR_URL ?? "http://127.0.0.1:8765").trim();
+const WHISPER_SIDECAR_URL = rawSidecarUrl.replace(/\/+$/, "");
 const IS_LOCAL_DEV =
   WHISPER_SIDECAR_URL.includes("127.0.0.1") || WHISPER_SIDECAR_URL.includes("localhost");
 
