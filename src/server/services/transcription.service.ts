@@ -9,6 +9,23 @@ export interface TranscriptionResult {
 
 /** URL of the optional FastWhisper Python sidecar */
 const WHISPER_SIDECAR_URL = process.env.WHISPER_SIDECAR_URL ?? "http://127.0.0.1:8765";
+const IS_LOCAL_DEV =
+  WHISPER_SIDECAR_URL.includes("127.0.0.1") || WHISPER_SIDECAR_URL.includes("localhost");
+
+/**
+ * Warms up the sidecar by hitting /health before sending large audio.
+ * On Render free tier, the container sleeps — this gives it time to wake.
+ */
+async function warmupSidecar(): Promise<void> {
+  if (IS_LOCAL_DEV) return; // local sidecar is always awake
+  try {
+    await fetch(`${WHISPER_SIDECAR_URL}/health`, {
+      signal: AbortSignal.timeout(55000),
+    });
+  } catch {
+    // ignore — warmup best-effort
+  }
+}
 
 const COMMON_FILLERS = new Set([
   // Unambiguous vocal hesitations (English)
@@ -76,9 +93,13 @@ export class TranscriptionService {
     }
   }
 
+  static async pingWarmup(): Promise<void> {
+    await warmupSidecar();
+  }
+
   /**
    * Transcribe an audio chunk in real time during continuous microphone streaming.
-   * Priority: local FastWhisper → Gemini → OpenAI Whisper
+   * Priority: FastWhisper sidecar (8s timeout) → Gemini → OpenAI Whisper
    */
   static async transcribeChunk(
     audioBuffer: Buffer,
@@ -89,8 +110,8 @@ export class TranscriptionService {
     const geminiKey = process.env.GEMINI_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
 
-    // 0. Try local FastWhisper sidecar first (3.5s timeout for rapid chunk streaming)
-    const local = await this.transcribeWithLocalWhisper(audioBuffer, mimeType, 3500, promptContext);
+    // 0. Try FastWhisper sidecar first (8s timeout for network round-trip & inference)
+    const local = await this.transcribeWithLocalWhisper(audioBuffer, mimeType, 8000, promptContext);
     if (local) return { text: local.text, confidence: local.confidence, isFinal: true };
 
     // 1. Try Google Gemini Flash Multimodal Streaming Chunk Transcription
@@ -164,6 +185,11 @@ export class TranscriptionService {
 
   /**
    * Transcribe an audio buffer using configured AI transcription service or server acoustic analyzer.
+   * Priority:
+   *   1. FastWhisper sidecar (local or remote Render URL)
+   *   2. Google Gemini Flash (if GEMINI_API_KEY configured)
+   *   3. OpenAI Whisper (if OPENAI_API_KEY configured)
+   *   4. Server Acoustic Analyzer fallback
    */
   static async transcribeAudio(
     audioBuffer: Buffer,
@@ -173,26 +199,30 @@ export class TranscriptionService {
     const geminiKey = process.env.GEMINI_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
 
-    // 0. Try local FastWhisper sidecar (10 s timeout for full recording on CPU)
-    const local = await this.transcribeWithLocalWhisper(
-      audioBuffer,
-      mimeType,
-      10000,
-      promptContext,
-    );
-    if (local && local.text.length > 0) {
-      const fillers = this.countFillers(local.text);
-      return {
-        transcript: local.text,
-        fillerCount: fillers,
-        pauseCount: Math.max(1, Math.round(local.text.split(",").length - 1)),
-        confidence: local.confidence,
-        status: "completed",
-        engineUsed: "local-whisper",
-      };
+    // 1. Try FastWhisper sidecar first (45s timeout for full audio transcription)
+    try {
+      const local = await this.transcribeWithLocalWhisper(
+        audioBuffer,
+        mimeType,
+        45000,
+        promptContext,
+      );
+      if (local && local.text.length > 0) {
+        const fillers = this.countFillers(local.text);
+        return {
+          transcript: local.text,
+          fillerCount: fillers,
+          pauseCount: Math.max(1, Math.round(local.text.split(",").length - 1)),
+          confidence: local.confidence,
+          status: "completed",
+          engineUsed: "local-whisper",
+        };
+      }
+    } catch (err) {
+      console.warn("[TranscriptionService] Whisper sidecar full-audio note:", err);
     }
 
-    // 1. Try Google Gemini Multimodal Audio Transcription if key available
+    // 2. Google Gemini Flash (if key is set)
     if (geminiKey) {
       try {
         const base64Audio = audioBuffer.toString("base64");
@@ -237,13 +267,16 @@ export class TranscriptionService {
               engineUsed: "gemini",
             };
           }
+        } else {
+          const errText = await response.text().catch(() => "");
+          console.warn("[TranscriptionService] Gemini API error:", response.status, errText);
         }
       } catch (err) {
         console.warn("[TranscriptionService] Gemini AI API note:", err);
       }
     }
 
-    // 2. Try OpenAI Whisper if key available
+    // 3. OpenAI Whisper (if key is set)
     if (openaiKey) {
       try {
         const formData = new FormData();
@@ -279,7 +312,7 @@ export class TranscriptionService {
       }
     }
 
-    // 3. Fallback: Server Acoustic Speech & Filler Transcription Engine
+    // 4. Acoustic Fallback: Analyzes audio cadence and length
     return this.generateAcousticTranscription(audioBuffer, promptContext);
   }
 

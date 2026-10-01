@@ -69,13 +69,6 @@ _model_lock = threading.Lock()
 # ──────────────────────────────────────────────
 # Transcription helper
 # ──────────────────────────────────────────────
-DEFAULT_INITIAL_PROMPT = (
-    "Spoken English speech coaching on Trounce. "
-    "Indian English speaker names: Shadan, Priya, Rahul, Sneha, Aman, Mr. Sharma. "
-    "Pronounce words clearly and verbatim including natural hesitations like um, uh, matlab."
-)
-
-
 def transcribe_audio_bytes(audio_bytes: bytes, mime: str = "audio/wav", prompt: str = "") -> dict:
     """
     Write audio bytes to a temp file, run faster-whisper, return transcript dict.
@@ -98,7 +91,8 @@ def transcribe_audio_bytes(audio_bytes: bytes, mime: str = "audio/wav", prompt: 
         tmp.write(audio_bytes)
         tmp_path = tmp.name
 
-    initial_prompt = f"{DEFAULT_INITIAL_PROMPT} Context: {prompt}" if prompt else DEFAULT_INITIAL_PROMPT
+    # Only pass clean topic context if provided, never fake names or instruction text (which causes hallucinations)
+    clean_prompt = prompt.strip() if prompt and prompt.strip() else None
 
     try:
         with _model_lock:
@@ -109,11 +103,14 @@ def transcribe_audio_bytes(audio_bytes: bytes, mime: str = "audio/wav", prompt: 
                 beam_size=1,
                 best_of=1,
                 temperature=0.0,
-                initial_prompt=initial_prompt,
+                initial_prompt=clean_prompt,
+                repetition_penalty=1.15,
+                no_speech_threshold=0.6,
+                hallucination_silence_threshold=2.0,
                 vad_filter=True,          # skip silent parts automatically
                 vad_parameters=dict(
-                    min_silence_duration_ms=250,
-                    speech_pad_ms=80,
+                    min_silence_duration_ms=300,
+                    speech_pad_ms=100,
                 ),
                 word_timestamps=False,
                 condition_on_previous_text=False,  # each chunk is independent

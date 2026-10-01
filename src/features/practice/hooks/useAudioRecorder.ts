@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { ACOUSTIC_THRESHOLDS } from "@/config/constants";
 import { FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
-import { streamTranscribeChunkFn } from "@/server/data";
+import { streamTranscribeChunkFn, warmupWhisperFn } from "@/server/data";
 
 export type RecorderPhase = "idle" | "recording" | "uploading";
 
@@ -143,14 +143,16 @@ export function useAudioRecorder() {
     const f = finalTranscript.trim();
     const i = interimTranscript.trim();
 
-    if (s.length > 0) {
-      if (i.length > 0 && !s.toLowerCase().endsWith(i.toLowerCase())) {
-        return `${s} ${i}`;
+    // Use whichever source has captured more content so UI never freezes on stale/short server chunks
+    const base = s.length >= f.length && s.length > 0 ? s : f;
+
+    if (base && i) {
+      if (!base.toLowerCase().endsWith(i.toLowerCase())) {
+        return `${base} ${i}`;
       }
-      return s;
+      return base;
     }
-    if (f && i) return `${f} ${i}`;
-    return f || i || "";
+    return base || i || "";
   }, [finalTranscript, interimTranscript, serverWhisperTranscript]);
 
   // Dynamic real-time filler word counter
@@ -378,6 +380,9 @@ export function useAudioRecorder() {
     isWhisperFetchingRef.current = false;
     recordedChunksRef.current = [];
 
+    // Pre-warm the FastWhisper sidecar (wakes Render free-tier container early)
+    void warmupWhisperFn().catch(() => {});
+
     // FIX: Start Speech Recognition IMMEDIATELY — before the getUserMedia await.
     // Web Speech API uses its own internal audio pipeline (independent of getUserMedia),
     // so recognition can begin capturing instantly without waiting for MediaRecorder setup.
@@ -557,8 +562,10 @@ export function useAudioRecorder() {
 
           if (result.text && result.text.trim().length > 0 && isRecordingRef.current) {
             const trimmed = result.text.trim();
-            serverWhisperRef.current = trimmed;
-            setServerWhisperTranscript(trimmed);
+            if (trimmed.length >= serverWhisperRef.current.length) {
+              serverWhisperRef.current = trimmed;
+              setServerWhisperTranscript(trimmed);
+            }
           }
         } catch (streamErr) {
           console.debug("[useAudioRecorder] Live chunk streaming note:", streamErr);
@@ -687,10 +694,12 @@ export function useAudioRecorder() {
     const baseFinal = finalTranscriptRef.current || cumulativeFinalRef.current || "";
     const webSpeechTranscript = (baseFinal + trailingInterim).trim();
 
-    // Prefer server-side FastWhisper transcript if present
+    // Prefer server-side FastWhisper transcript if it captured equal or more content
     const serverTranscript = serverWhisperRef.current.trim();
     const resolvedTranscript =
-      serverTranscript.length > 0 ? serverTranscript : webSpeechTranscript || serverTranscript;
+      serverTranscript.length >= webSpeechTranscript.length && serverTranscript.length > 0
+        ? serverTranscript
+        : webSpeechTranscript || serverTranscript;
 
     return { samples, elapsed, audioUrl, transcript: resolvedTranscript };
   }, [stream, samples, elapsed]);

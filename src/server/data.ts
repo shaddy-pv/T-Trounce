@@ -436,6 +436,16 @@ export const streamTranscribeChunkFn = createServerFn({ method: "POST" })
   });
 
 /**
+ * Server Function: Pre-warm the FastWhisper sidecar (wakes Render free-tier container)
+ */
+export const warmupWhisperFn = createServerFn({ method: "POST" }).handler(
+  async (): Promise<{ status: string }> => {
+    await TranscriptionService.pingWarmup();
+    return { status: "ok" };
+  },
+);
+
+/**
  * Server Function: Fetch real weekly student report (Protected: Faculty or Self)
  */
 export const fetchStudentReportFn = createServerFn({ method: "GET" })
