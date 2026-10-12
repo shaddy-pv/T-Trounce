@@ -56,32 +56,38 @@ export function encodeWavFromFloatSamples(floatSamples: Float32Array, sampleRate
 }
 
 /**
- * Decodes any browser audio blob (WebM/Opus/MP4) via AudioContext and re-encodes
- * as a proper 16-bit PCM WAV data URL.
+ * Decodes any browser audio blob (WebM/Opus/MP4) via a SEPARATE temporary AudioContext
+ * and re-encodes as a proper 16-bit PCM WAV data URL.
+ *
+ * Uses its own AudioContext (not the recording one) to avoid any interference
+ * with the live recording pipeline.
  *
  * This is critical for FastWhisper streaming: MediaRecorder WebM chunks contain
  * corrupt/infinite duration metadata that causes faster-whisper's VAD filter to
  * classify the entire clip as silence and return an empty transcript.
  * WAV files store duration via explicit sample count — always correct.
  */
-async function blobToWavDataUrl(
-  blob: Blob,
-  ctx: AudioContext,
-): Promise<string> {
+async function blobToWavDataUrl(blob: Blob): Promise<string> {
+  const AudioCtxClass =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  const tmpCtx = new AudioCtxClass();
   try {
     const arrayBuffer = await blob.arrayBuffer();
     // slice(0) copies the buffer so decodeAudioData can detach it safely
-    const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+    const decoded = await tmpCtx.decodeAudioData(arrayBuffer.slice(0));
     const samples = decoded.getChannelData(0); // mono channel
     return encodeWavFromFloatSamples(samples, decoded.sampleRate);
   } catch {
-    // Fallback: return raw blob as data URL if decode fails
+    // Fallback: return raw blob as data URL if WAV decode fails
     return await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result as string);
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
+  } finally {
+    tmpCtx.close().catch(() => {});
   }
 }
 
@@ -137,6 +143,7 @@ export function useAudioRecorder() {
   const [interimTranscript, setInterimTranscript] = useState("");
   const [volumeLevel, setVolumeLevel] = useState<number>(0);
   const [sttAvailable, setSttAvailable] = useState<boolean | null>(null);
+  const [sttError, setSttError] = useState<string | null>(null);
 
   // Microphone device management (external mic support)
   const [audioDevices, setAudioDevices] = useState<AudioInputDevice[]>([]);
@@ -337,9 +344,16 @@ export function useAudioRecorder() {
     };
 
     recognition.onerror = (e) => {
-      // Silently ignore benign non-fatal events
-      if (["no-speech", "network", "aborted"].includes(e.error)) return;
+      if (e.error === "aborted") return; // benign — fired when we call recognition.stop()
+      if (e.error === "no-speech") return; // handled by onend restart
+      if (e.error === "network") {
+        // Speech Recognition cannot reach Google servers — common behind strict networks/VPNs
+        console.warn("[SpeechRecognition] network error — browser STT requires internet access", e.message);
+        setSttError("network");
+        return;
+      }
       console.warn("[SpeechRecognition]", e.error, e.message);
+      setSttError(e.error);
     };
 
     recognition.onend = () => {
@@ -397,6 +411,7 @@ export function useAudioRecorder() {
   const startRecording = useCallback(async () => {
     isRecordingRef.current = true;
     setMicError(null);
+    setSttError(null);
     setElapsed(0);
     setSamples([]);
     setFinalTranscript("");
@@ -574,6 +589,7 @@ export function useAudioRecorder() {
         });
         if (chunkBlob.size < 2000) return; // skip tiny/silent clips
 
+        // Guard: only send if AudioContext is alive (ensures MediaRecorder is recording)
         const activeCtx = audioContextRef.current;
         if (!activeCtx || activeCtx.state === "closed") return;
 
@@ -581,7 +597,8 @@ export function useAudioRecorder() {
           isWhisperFetchingRef.current = true;
 
           // Convert WebM→WAV to fix corrupt duration metadata before sending to whisper
-          const wavDataUrl = await blobToWavDataUrl(chunkBlob, activeCtx);
+          // Uses its own temporary AudioContext — no interference with recording pipeline
+          const wavDataUrl = await blobToWavDataUrl(chunkBlob);
 
           const seq = whisperSeqRef.current++;
           const result = await streamTranscribeChunkFn({
@@ -746,6 +763,7 @@ export function useAudioRecorder() {
     formattedTime,
     stream,
     micError,
+    sttError,
     samples,
     finalTranscript,
     interimTranscript,

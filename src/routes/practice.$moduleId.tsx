@@ -84,6 +84,7 @@ function PracticeModuleSession() {
     formattedTime,
     stream,
     micError,
+    sttError,
     finalTranscript,
     interimTranscript,
     transcript,
@@ -559,6 +560,10 @@ function PracticeModuleSession() {
                     {interimTranscript && (
                       <span className="ml-1 italic text-[#3FB8AF]/90">{interimTranscript}</span>
                     )}
+                  </span>
+                ) : sttError === "network" ? (
+                  <span className="italic text-[#E2A33C]/80 text-[13px]">
+                    ⚠ Speech recognition network error. Check your internet connection — browser STT requires Google servers. Whisper server transcript will still be saved.
                   </span>
                 ) : sttAvailable === false ? (
                   <span className="italic text-[#E2A33C]/80 text-[13px]">
