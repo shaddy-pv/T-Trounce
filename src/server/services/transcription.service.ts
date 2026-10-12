@@ -111,8 +111,8 @@ export class TranscriptionService {
     const geminiKey = process.env.GEMINI_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
 
-    // 0. Try FastWhisper sidecar first (8s timeout for network round-trip & inference)
-    const local = await this.transcribeWithLocalWhisper(audioBuffer, mimeType, 8000, promptContext);
+    // 0. Try FastWhisper sidecar first (25s timeout — Render inference takes 10-15s for WAV)
+    const local = await this.transcribeWithLocalWhisper(audioBuffer, mimeType, 25000, promptContext);
     if (local) return { text: local.text, confidence: local.confidence, isFinal: true };
 
     // 1. Try Google Gemini Flash Multimodal Streaming Chunk Transcription

@@ -55,6 +55,36 @@ export function encodeWavFromFloatSamples(floatSamples: Float32Array, sampleRate
   return `data:audio/wav;base64,${btoa(binary)}`;
 }
 
+/**
+ * Decodes any browser audio blob (WebM/Opus/MP4) via AudioContext and re-encodes
+ * as a proper 16-bit PCM WAV data URL.
+ *
+ * This is critical for FastWhisper streaming: MediaRecorder WebM chunks contain
+ * corrupt/infinite duration metadata that causes faster-whisper's VAD filter to
+ * classify the entire clip as silence and return an empty transcript.
+ * WAV files store duration via explicit sample count — always correct.
+ */
+async function blobToWavDataUrl(
+  blob: Blob,
+  ctx: AudioContext,
+): Promise<string> {
+  try {
+    const arrayBuffer = await blob.arrayBuffer();
+    // slice(0) copies the buffer so decodeAudioData can detach it safely
+    const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+    const samples = decoded.getChannelData(0); // mono channel
+    return encodeWavFromFloatSamples(samples, decoded.sampleRate);
+  } catch {
+    // Fallback: return raw blob as data URL if decode fails
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+}
+
 // Web Speech API interfaces
 interface SpeechRecognitionResultItem {
   transcript: string;
@@ -527,9 +557,11 @@ export function useAudioRecorder() {
         }
       }, 50);
 
-      // ── FastWhisper chunk streaming loop (every 3 seconds) ───────────────────
-      // Slices from index 0 ensure the WebM container retains its EBML header and Track metadata,
-      // avoiding "EBML header parsing failed" errors on ffmpeg / faster-whisper.
+      // ── FastWhisper chunk streaming loop (every 4 seconds) ───────────────────
+      // KEY FIX: WebM streaming blobs have corrupt/infinite duration metadata
+      // that causes faster-whisper's VAD to remove all audio (treating it as silence).
+      // We decode the WebM blob via AudioContext and re-encode as proper WAV first.
+      // WAV stores duration by explicit sample count — always correct for whisper.
       whisperChunkIntervalRef.current = window.setInterval(async () => {
         if (!isRecordingRef.current) return;
         if (isWhisperFetchingRef.current) return;
@@ -542,20 +574,20 @@ export function useAudioRecorder() {
         });
         if (chunkBlob.size < 2000) return; // skip tiny/silent clips
 
+        const activeCtx = audioContextRef.current;
+        if (!activeCtx || activeCtx.state === "closed") return;
+
         try {
           isWhisperFetchingRef.current = true;
-          const reader = new FileReader();
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(chunkBlob);
-          });
+
+          // Convert WebM→WAV to fix corrupt duration metadata before sending to whisper
+          const wavDataUrl = await blobToWavDataUrl(chunkBlob, activeCtx);
 
           const seq = whisperSeqRef.current++;
           const result = await streamTranscribeChunkFn({
             data: {
-              audioBase64: dataUrl,
-              mimeType: mimeTypeRef.current || "audio/webm",
+              audioBase64: wavDataUrl,
+              mimeType: "audio/wav", // always WAV after decode
               sequence: seq,
             },
           });
@@ -572,7 +604,7 @@ export function useAudioRecorder() {
         } finally {
           isWhisperFetchingRef.current = false;
         }
-      }, 3000);
+      }, 4000);
       // ────────────────────────────────────────────────────────────────────────
 
       setPhase("recording");
