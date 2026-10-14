@@ -146,8 +146,8 @@ export class TranscriptionService {
     const geminiKey = process.env.GEMINI_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
 
-    // Fast timeouts for live chunks, adequate window for full-audio pass on CPU
-    const whisperTimeoutMs = isFinal ? 30000 : 3500;
+    // Fast timeouts for live chunks, adequate 45s window for full-audio pass on CPU
+    const whisperTimeoutMs = isFinal ? 45000 : 3500;
 
     // 0. FastWhisper sidecar — instant on local dev, CPU inference on remote
     const local = await this.transcribeWithLocalWhisper(
