@@ -1,7 +1,7 @@
 import { MongoClient, Db } from "mongodb";
 import { env } from "@/config/env";
 import { modules } from "@/lib/tarang-data";
-import type { ModuleDoc, BatchDoc, UserDoc, StudentDoc } from "./schemas";
+import type { ModuleDoc, BatchDoc, UserDoc, StudentDoc, AssignmentDoc } from "./schemas";
 
 declare global {
   var _mongoClient: MongoClient | undefined;
@@ -58,6 +58,15 @@ export async function ensureDatabaseIndexes(db: Db) {
       { name: "idx_messages_student_created" },
     );
     await messagesCol.createIndex({ id: 1 }, { unique: true, name: "uniq_messages_id" });
+
+    // 6. Assignments indexes (fast lookup by batch and session)
+    const assignmentsCol = db.collection("assignments");
+    await assignmentsCol.createIndex({ id: 1 }, { unique: true, name: "uniq_assignments_id" });
+    await assignmentsCol.createIndex({ batchId: 1 }, { name: "idx_assignments_batchId" });
+    await assignmentsCol.createIndex(
+      { targetSession: 1, targetBatch: 1 },
+      { name: "idx_assignments_session_batch" },
+    );
 
     console.log("[MongoDB] Production database compound indexes verified.");
   } catch (err) {
@@ -177,6 +186,88 @@ export async function autoSeedDatabase(db: Db) {
         studentCount: 0,
         createdAt: new Date(),
       });
+    }
+
+    // Auto-seed default homework assignments if collection is empty
+    const assignmentsCol = db.collection<AssignmentDoc>("assignments");
+    const assignmentCount = await assignmentsCol.countDocuments();
+    if (assignmentCount === 0) {
+      const twoDaysFromNow = new Date(Date.now() + 86400000 * 2).toISOString();
+      const fourDaysFromNow = new Date(Date.now() + 86400000 * 4).toISOString();
+      const fiveDaysFromNow = new Date(Date.now() + 86400000 * 5).toISOString();
+      const sixDaysFromNow = new Date(Date.now() + 86400000 * 6).toISOString();
+
+      await assignmentsCol.insertMany([
+        {
+          id: "hw-1",
+          title: "Summer Introduction & Goal Pitch",
+          instructions:
+            "Speak clearly for 60 seconds without filler sounds (um, uh, matlab). State your name, background, and career aspirations.",
+          prompt:
+            "Hello everyone, my name is Priya Sharma. I am practicing with Tarang to improve my English fluency and confidence for upcoming interviews.",
+          difficulty: "Beginner",
+          durationSec: 60,
+          targetSession: "summer",
+          targetBatch: "morning",
+          batchId: "summer-morning",
+          teacherId: "teacher-1",
+          teacherName: "Mr. Sharma",
+          dueDate: twoDaysFromNow,
+          createdAt: new Date(),
+        },
+        {
+          id: "hw-1b",
+          title: "Summer Pronunciation Focus: Sibilants & Vowels",
+          instructions:
+            "Read the dialogue focusing on /s/ and /sh/ clarity without dropping trailing consonants.",
+          prompt:
+            "She sells sea shells on the sea shore, and the shells she sells are sea shells I am sure.",
+          difficulty: "Intermediate",
+          durationSec: 45,
+          targetSession: "summer",
+          targetBatch: "morning",
+          batchId: "summer-morning",
+          teacherId: "teacher-1",
+          teacherName: "Mr. Sharma",
+          dueDate: fourDaysFromNow,
+          createdAt: new Date(),
+        },
+        {
+          id: "hw-2",
+          title: "Debate: Urban vs Rural Opportunities",
+          instructions:
+            "Present a structured 90-second perspective on why tier-2/3 cities in India are emerging as technology and coaching hubs.",
+          prompt:
+            "In today's interconnected world, geography is no longer a barrier to quality education and tech careers...",
+          difficulty: "Intermediate",
+          durationSec: 90,
+          targetSession: "summer",
+          targetBatch: "evening",
+          batchId: "summer-evening",
+          teacherId: "teacher-1",
+          teacherName: "Mr. Sharma",
+          dueDate: fiveDaysFromNow,
+          createdAt: new Date(),
+        },
+        {
+          id: "hw-3",
+          title: "Autumn Speaking Drill: Customer Consultation",
+          instructions:
+            "Simulate a polite client conversation explaining a project update with zero hesitations.",
+          prompt:
+            "Good morning. I am calling to provide an update regarding your application status...",
+          difficulty: "Advanced",
+          durationSec: 75,
+          targetSession: "autumn",
+          targetBatch: "morning",
+          batchId: "autumn-morning",
+          teacherId: "teacher-1",
+          teacherName: "Mr. Sharma",
+          dueDate: sixDaysFromNow,
+          createdAt: new Date(),
+        },
+      ]);
+      console.log("[MongoDB] Default homework assignments auto-seeded.");
     }
   } catch (err) {
     console.warn("[MongoDB Auto-Seed Warning]", (err as Error).message);

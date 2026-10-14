@@ -350,7 +350,7 @@ function PracticeHubBody() {
                     hour: "numeric",
                     minute: "2-digit",
                   })
-                : "Not set";
+                : a.dueDate || "Not set";
 
               const submission = attemptsByAssignment.get(a.id);
               const isDone = !!submission;

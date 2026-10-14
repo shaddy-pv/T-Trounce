@@ -1,5 +1,5 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TeacherShell } from "@/components/tarang/TeacherShell";
 import { TButton } from "@/components/tarang/Button";
 import { fetchAssignmentsFn, createAssignmentFn, deleteAssignmentFn } from "@/server/data";
@@ -41,7 +41,7 @@ export const Route = createFileRoute("/assignments")({
   },
   loader: async () => {
     const assignments = await cachedClientFetch("assignments", () => fetchAssignmentsFn());
-    return { assignments };
+    return { assignments: assignments || [] };
   },
   pendingComponent: AssignmentsSkeleton,
   component: AssignmentsPage,
@@ -74,10 +74,15 @@ function AssignmentsPage() {
   const currentUser = useUser();
   const router = useRouter();
 
-  const [assignments, setAssignments] = useState(initialAssignments);
+  const [assignments, setAssignments] = useState<AssignmentPublic[]>(initialAssignments || []);
   const [selectedSession, setSelectedSession] = useState<string>("all");
   const [selectedBatch, setSelectedBatch] = useState<string>("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Sync state if loader refreshes
+  useEffect(() => {
+    setAssignments(initialAssignments || []);
+  }, [initialAssignments]);
 
   // Form State for New Homework Creation
   const [title, setTitle] = useState("");
@@ -96,9 +101,12 @@ function AssignmentsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const filteredAssignments = assignments.filter((a) => {
-    const matchesSession = selectedSession === "all" || a.targetSession === selectedSession;
-    const matchesBatch = selectedBatch === "all" || a.targetBatch === selectedBatch;
+  const filteredAssignments = (assignments || []).filter((a) => {
+    const sessionVal = (a.targetSession || "").toLowerCase();
+    const batchVal = (a.targetBatch || "").toLowerCase();
+    const matchesSession =
+      selectedSession === "all" || sessionVal === selectedSession.toLowerCase();
+    const matchesBatch = selectedBatch === "all" || batchVal === selectedBatch.toLowerCase();
     return matchesSession && matchesBatch;
   });
 
@@ -288,7 +296,8 @@ function AssignmentsPage() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="inline-flex items-center gap-1.5 rounded-[6px] border border-hairline bg-ink-950 px-2.5 py-1 text-[11px] font-medium text-[#3FB8AF]">
                       <span className="size-1.5 rounded-full bg-[#3FB8AF]" />
-                      {a.targetSession.toUpperCase()} · {a.targetBatch.toUpperCase()}
+                      {(a.targetSession || "summer").toUpperCase()} ·{" "}
+                      {(a.targetBatch || "morning").toUpperCase()}
                     </span>
                     <span className="num text-[11px] text-tertiary-warm">
                       {a.difficulty} · {a.durationSec}s
@@ -312,14 +321,16 @@ function AssignmentsPage() {
                   <span className="flex items-center gap-1.5">
                     <Calendar size={13} />
                     Due:{" "}
-                    {a.dueDate && !isNaN(new Date(a.dueDate).getTime())
-                      ? new Date(a.dueDate).toLocaleString("en-US", {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })
+                    {a.dueDate
+                      ? !isNaN(new Date(a.dueDate).getTime())
+                        ? new Date(a.dueDate).toLocaleString("en-US", {
+                            weekday: "short",
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })
+                        : a.dueDate
                       : "Not set"}
                   </span>
                   <button
