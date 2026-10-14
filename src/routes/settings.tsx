@@ -81,7 +81,8 @@ function SettingsPage() {
               System Settings
             </h1>
             <p className="mt-1 text-[14px] text-secondary-warm max-w-2xl">
-              Configure voice capture diagnostics, speech-to-text engines, and administrative preferences.
+              Configure voice capture diagnostics, speech-to-text engines, and administrative
+              preferences.
             </p>
           </div>
 
@@ -121,8 +122,8 @@ function SettingsPage() {
                 </h2>
               </div>
               <p className="text-[13px] leading-relaxed text-secondary-warm">
-                Toggle whether real-time speech captions appear character-by-character on student screens while
-                they speak into the microphone.
+                Toggle whether real-time speech captions appear character-by-character on student
+                screens while they speak into the microphone.
               </p>
             </div>
 
@@ -184,9 +185,9 @@ function SettingsPage() {
                 )}
               </div>
               <p className="mt-2 text-[12px] leading-relaxed text-secondary-warm">
-                Microphone audio is captured cleanly without real-time browser STT interruptions or delay.
-                When the student stops, the complete audio recording is transcribed with verbatim accuracy
-                (~95%) via <strong>Google Gemini 2.0 Flash</strong>.
+                Microphone audio is captured cleanly without real-time browser STT interruptions or
+                delay. When the student stops, the complete audio recording is transcribed with
+                verbatim accuracy (~95%) via <strong>Google Gemini 2.0 Flash</strong>.
               </p>
               <ul className="mt-3 space-y-1 text-[11px] text-tertiary-warm">
                 <li>✓ Zero distractions or inaccurate interim captions during speaking</li>
@@ -214,8 +215,9 @@ function SettingsPage() {
                 )}
               </div>
               <p className="mt-2 text-[12px] leading-relaxed text-secondary-warm">
-                Attempts client-side Web Speech API recognition directly in the browser. Spoken words appear
-                as live interim captions. Full audio pass still runs upon stopping for database persistence.
+                Attempts client-side Web Speech API recognition directly in the browser. Spoken
+                words appear as live interim captions. Full audio pass still runs upon stopping for
+                database persistence.
               </p>
               <ul className="mt-3 space-y-1 text-[11px] text-tertiary-warm">
                 <li>• Requires open network reachability to speech servers</li>
@@ -237,7 +239,9 @@ function SettingsPage() {
 
           <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="rounded-[12px] border border-hairline/80 bg-ink-950/70 p-4">
-              <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">Post-Recording STT</p>
+              <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">
+                Post-Recording STT
+              </p>
               <p className="mt-1 text-[15px] font-medium text-primary-warm flex items-center gap-1.5">
                 <Sparkles size={14} className="text-[#3FB8AF]" />
                 Gemini 2.0 Flash
@@ -252,7 +256,9 @@ function SettingsPage() {
             </div>
 
             <div className="rounded-[12px] border border-hairline/80 bg-ink-950/70 p-4">
-              <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">Live Voice STT</p>
+              <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">
+                Live Voice STT
+              </p>
               <p className="mt-1 text-[15px] font-medium text-primary-warm flex items-center gap-1.5">
                 <Radio size={14} className="text-[#3FB8AF]" />
                 Web Speech API (en-IN)
@@ -274,7 +280,9 @@ function SettingsPage() {
             </div>
 
             <div className="rounded-[12px] border border-hairline/80 bg-ink-950/70 p-4">
-              <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">DSP Audio Chain</p>
+              <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">
+                DSP Audio Chain
+              </p>
               <p className="mt-1 text-[15px] font-medium text-primary-warm flex items-center gap-1.5">
                 <Layers size={14} className="text-[#3FB8AF]" />
                 High-Pass + Dynamic EQ
@@ -302,18 +310,24 @@ function SettingsPage() {
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div className="rounded-[12px] border border-hairline bg-ink-950/60 p-4">
               <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">Name</p>
-              <p className="mt-1 text-[15px] font-medium text-primary-warm">{user?.name || "Administrator"}</p>
+              <p className="mt-1 text-[15px] font-medium text-primary-warm">
+                {user?.name || "Administrator"}
+              </p>
               <p className="num mt-1 text-[11px] text-tertiary-warm">Master Account</p>
             </div>
 
             <div className="rounded-[12px] border border-hairline bg-ink-950/60 p-4">
               <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">Email</p>
-              <p className="mt-1 text-[15px] font-medium text-primary-warm truncate">{user?.email || "admin@trounce.edu"}</p>
+              <p className="mt-1 text-[15px] font-medium text-primary-warm truncate">
+                {user?.email || "admin@trounce.edu"}
+              </p>
               <p className="num mt-1 text-[11px] text-tertiary-warm">Verified Authentication</p>
             </div>
 
             <div className="rounded-[12px] border border-hairline bg-ink-950/60 p-4">
-              <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">Permission Scope</p>
+              <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">
+                Permission Scope
+              </p>
               <p className="mt-1 text-[15px] font-medium text-[#3FB8AF] capitalize">
                 {user?.role || "Admin"} Privileges
               </p>

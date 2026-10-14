@@ -77,7 +77,11 @@ function ResultPage() {
 
   // Real-time poller: if background transcription is still generating transcript, poll until completed
   useEffect(() => {
-    if (result.transcriptionStatus === "completed" || (result.transcript && result.transcript.trim().length > 0)) return;
+    if (
+      result.transcriptionStatus === "completed" ||
+      (result.transcript && result.transcript.trim().length > 0)
+    )
+      return;
 
     let cancelled = false;
     let pollCount = 0;
@@ -90,7 +94,10 @@ function ResultPage() {
       try {
         const fresh = await fetchAttemptByIdFn({ data: result.id });
         if (fresh && !cancelled) {
-          if (fresh.transcriptionStatus === "completed" || (fresh.transcript && fresh.transcript.trim().length > 0)) {
+          if (
+            fresh.transcriptionStatus === "completed" ||
+            (fresh.transcript && fresh.transcript.trim().length > 0)
+          ) {
             setResult(fresh);
             clearInterval(interval);
           }

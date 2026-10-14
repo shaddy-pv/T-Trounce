@@ -525,4 +525,3 @@ export const updateAppSettingsFn = createServerFn({ method: "POST" })
     const user = (context as { user: SessionPayload }).user;
     return await SettingsService.updateSettings(data, user.userId);
   });
-

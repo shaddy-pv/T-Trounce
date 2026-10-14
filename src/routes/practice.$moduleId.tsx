@@ -525,7 +525,9 @@ function PracticeModuleSession() {
               <div className="flex h-[140px] flex-col items-center justify-center space-y-3 text-center">
                 <span className="size-7 animate-spin rounded-full border-2 border-[#3FB8AF] border-t-transparent" />
                 <p className="text-[14px] font-medium text-primary-warm">
-                  {isRefiningTranscript ? "Refining transcript with AI..." : "Finalizing acoustic diagnostic..."}
+                  {isRefiningTranscript
+                    ? "Refining transcript with AI..."
+                    : "Finalizing acoustic diagnostic..."}
                 </p>
                 <p className="num text-[12px] text-secondary-warm">
                   {isRefiningTranscript
@@ -583,10 +585,15 @@ function PracticeModuleSession() {
               </div>
 
               <p className="mt-2 min-h-[48px] rounded-lg border border-hairline/60 bg-ink-950/80 p-3 text-[14px] leading-relaxed text-primary-warm">
-                {sttUnavailable && phase === "recording" && !finalTranscript && !transcript && liveEngine !== "local-whisper" ? (
+                {sttUnavailable &&
+                phase === "recording" &&
+                !finalTranscript &&
+                !transcript &&
+                liveEngine !== "local-whisper" ? (
                   <span className="italic text-[#E2A33C]/90 text-[13px]">
                     Live captions unavailable — Google speech servers unreachable on this network.
-                    Your recording is being captured and will be accurately transcribed when you stop.
+                    Your recording is being captured and will be accurately transcribed when you
+                    stop.
                   </span>
                 ) : finalTranscript || interimTranscript ? (
                   <span>
@@ -614,7 +621,9 @@ function PracticeModuleSession() {
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="size-2 rounded-full bg-[#6B645A]" />
-                    <span className="num font-semibold text-secondary-warm">{livePauseCount}</span>{" "}
+                    <span className="num font-semibold text-secondary-warm">
+                      {livePauseCount}
+                    </span>{" "}
                     pauses
                   </span>
                 </div>
@@ -636,18 +645,23 @@ function PracticeModuleSession() {
                 <span className="num text-[11px] text-tertiary-warm">Microphone Active</span>
               </div>
               <p className="mt-1 text-[13px] text-tertiary-warm">
-                Speak clearly at your natural pace. Your full response will be transcribed by AI upon stopping.
+                Speak clearly at your natural pace. Your full response will be transcribed by AI
+                upon stopping.
               </p>
               {/* Live filler and pause counters */}
               <div className="mt-2.5 flex items-center justify-between border-t border-hairline/40 pt-2 text-[11px] text-secondary-warm">
                 <div className="flex items-center gap-3">
                   <span className="flex items-center gap-1.5">
                     <span className="size-2 rounded-full bg-[#E2A33C]" />
-                    <span className="num font-semibold text-[#E2A33C]">{liveFillerCount}</span> fillers
+                    <span className="num font-semibold text-[#E2A33C]">{liveFillerCount}</span>{" "}
+                    fillers
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="size-2 rounded-full bg-[#6B645A]" />
-                    <span className="num font-semibold text-secondary-warm">{livePauseCount}</span> pauses
+                    <span className="num font-semibold text-secondary-warm">
+                      {livePauseCount}
+                    </span>{" "}
+                    pauses
                   </span>
                 </div>
                 <span className="num text-[10px] text-tertiary-warm">Live Voice Diagnostic</span>

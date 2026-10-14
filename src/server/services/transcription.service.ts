@@ -192,7 +192,7 @@ export class TranscriptionService {
 
         if (response.ok) {
           const data = await response.json();
-          const text = ((data.candidates?.[0]?.content?.parts?.[0]?.text) ?? "").trim();
+          const text = (data.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
           if (text.length > 0) {
             return { text, confidence: 0.95, isFinal: true };
           }

@@ -18,10 +18,7 @@ export interface AudioInputDevice {
  * Unlike WebM chunks, WAV never has the corrupt/infinite duration metadata
  * that causes faster-whisper's VAD to classify entire clips as silence.
  */
-export function encodeWavFromFloatSamples(
-  floatSamples: Float32Array,
-  sampleRate: number,
-): string {
+export function encodeWavFromFloatSamples(floatSamples: Float32Array, sampleRate: number): string {
   const numChannels = 1;
   const bitsPerSample = 16;
   const bytesPerSample = bitsPerSample / 8;
@@ -285,7 +282,11 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       isRecordingRef.current = false;
       recognitionRunningRef.current = false;
       if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch { /* ignore */ }
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          /* ignore */
+        }
         recognitionRef.current = null;
       }
       if (localLiveTimerRef.current) {
@@ -296,7 +297,11 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       if (samplerIntervalRef.current) window.clearInterval(samplerIntervalRef.current);
       if (volumeIntervalRef.current) window.clearInterval(volumeIntervalRef.current);
       if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-        try { audioContextRef.current.close(); } catch { /* ignore */ }
+        try {
+          audioContextRef.current.close();
+        } catch {
+          /* ignore */
+        }
       }
     };
   }, []);
@@ -332,27 +337,27 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
 /**
  * Overlap-aware transcript merger to prevent word duplication on Web Speech restarts
  */
-function mergeTranscriptSessions(cumulative: string, sessionFinal: string): string {
-  const cum = cumulative.trim();
-  const ses = sessionFinal.trim();
-  if (!cum) return ses;
-  if (!ses) return cum;
+  function mergeTranscriptSessions(cumulative: string, sessionFinal: string): string {
+    const cum = cumulative.trim();
+    const ses = sessionFinal.trim();
+    if (!cum) return ses;
+    if (!ses) return cum;
 
-  const cumWords = cum.split(/\s+/);
-  const sesWords = ses.split(/\s+/);
+    const cumWords = cum.split(/\s+/);
+    const sesWords = ses.split(/\s+/);
 
-  // Check overlap of up to 5 words to prevent repetition (e.g. 'park' + 'park and sat')
-  const maxOverlap = Math.min(5, cumWords.length, sesWords.length);
-  for (let len = maxOverlap; len > 0; len--) {
-    const cumTail = cumWords.slice(-len).join(" ").toLowerCase();
-    const sesHead = sesWords.slice(0, len).join(" ").toLowerCase();
-    if (cumTail === sesHead) {
-      return (cum + " " + sesWords.slice(len).join(" ")).trim();
+    // Check overlap of up to 5 words to prevent repetition (e.g. 'park' + 'park and sat')
+    const maxOverlap = Math.min(5, cumWords.length, sesWords.length);
+    for (let len = maxOverlap; len > 0; len--) {
+      const cumTail = cumWords.slice(-len).join(" ").toLowerCase();
+      const sesHead = sesWords.slice(0, len).join(" ").toLowerCase();
+      if (cumTail === sesHead) {
+        return (cum + " " + sesWords.slice(len).join(" ")).trim();
+      }
     }
-  }
 
-  return `${cum} ${ses}`;
-}
+    return `${cum} ${ses}`;
+  }
 
   /**
    * Local FastWhisper live streaming engine (100% offline, zero internet dependency).
@@ -455,10 +460,7 @@ function mergeTranscriptSessions(cumulative: string, sessionFinal: string): stri
       }
 
       // Prepend history with overlap deduplication
-      const combinedFinal = mergeTranscriptSessions(
-        cumulativeFinalRef.current,
-        sessionFinal,
-      );
+      const combinedFinal = mergeTranscriptSessions(cumulativeFinalRef.current, sessionFinal);
 
       if (combinedFinal) {
         finalTranscriptRef.current = combinedFinal;
@@ -480,7 +482,11 @@ function mergeTranscriptSessions(cumulative: string, sessionFinal: string): stri
         );
         hasGoogleSttNetworkError = true;
         if (recognitionRef.current) {
-          try { recognitionRef.current.abort(); } catch { /* ignore */ }
+          try {
+            recognitionRef.current.abort();
+          } catch {
+            /* ignore */
+          }
           recognitionRef.current = null;
         }
         startLocalLiveStreaming();
@@ -488,9 +494,15 @@ function mergeTranscriptSessions(cumulative: string, sessionFinal: string): stri
       }
 
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-        console.warn("[SpeechRecognition] Web Speech permission blocked — activating Local FastWhisper live streaming");
+        console.warn(
+          "[SpeechRecognition] Web Speech permission blocked — activating Local FastWhisper live streaming",
+        );
         if (recognitionRef.current) {
-          try { recognitionRef.current.abort(); } catch { /* ignore */ }
+          try {
+            recognitionRef.current.abort();
+          } catch {
+            /* ignore */
+          }
           recognitionRef.current = null;
         }
         startLocalLiveStreaming();
@@ -547,7 +559,7 @@ function mergeTranscriptSessions(cumulative: string, sessionFinal: string): stri
         }, 120);
       }
     }
-  }, []); // 100% stable: no dependencies needed since all mutable state is stored in refs
+  }, [startLocalLiveStreaming]);
 
   // ── Post-Recording Gemini Accuracy Pass ───────────────────────────────────
 
@@ -711,7 +723,8 @@ function mergeTranscriptSessions(cumulative: string, sessionFinal: string): stri
       // Captures the DSP-processed audio for the post-recording Gemini accuracy pass.
       let chosenMime = "audio/webm";
       if (typeof MediaRecorder !== "undefined") {
-        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) chosenMime = "audio/webm;codecs=opus";
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus"))
+          chosenMime = "audio/webm;codecs=opus";
         else if (MediaRecorder.isTypeSupported("audio/webm")) chosenMime = "audio/webm";
         else if (MediaRecorder.isTypeSupported("audio/mp4")) chosenMime = "audio/mp4";
         else if (MediaRecorder.isTypeSupported("audio/ogg")) chosenMime = "audio/ogg";
@@ -767,7 +780,7 @@ function mergeTranscriptSessions(cumulative: string, sessionFinal: string): stri
       }, ACOUSTIC_THRESHOLDS.sampleIntervalMs);
       setPhase("recording");
     }
-  }, [selectedDeviceId, refreshAudioDevices, startSpeechRecognition]);
+  }, [selectedDeviceId, refreshAudioDevices, startSpeechRecognition, startLocalLiveStreaming]);
 
   // ── stopRecording ──────────────────────────────────────────────────────────
 
@@ -783,10 +796,7 @@ function mergeTranscriptSessions(cumulative: string, sessionFinal: string): stri
     // Rescue any trailing interim words from Web Speech API before stopping (overlap-aware)
     const pendingInterim = interimTranscriptRef.current.trim();
     if (pendingInterim) {
-      const rescued = mergeTranscriptSessions(
-        cumulativeFinalRef.current,
-        pendingInterim,
-      );
+      const rescued = mergeTranscriptSessions(cumulativeFinalRef.current, pendingInterim);
       cumulativeFinalRef.current = rescued;
       finalTranscriptRef.current = rescued;
       setFinalTranscript(rescued);
@@ -795,7 +805,11 @@ function mergeTranscriptSessions(cumulative: string, sessionFinal: string): stri
     // Stop Web Speech API
     recognitionRunningRef.current = false;
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch { /* ignore */ }
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        /* ignore */
+      }
       recognitionRef.current = null;
     }
     setInterimTranscript("");
@@ -834,7 +848,12 @@ function mergeTranscriptSessions(cumulative: string, sessionFinal: string): stri
               : null,
           );
         };
-        try { mr.stop(); } catch { clearTimeout(timeout); resolve(null); }
+        try {
+          mr.stop();
+        } catch {
+          clearTimeout(timeout);
+          resolve(null);
+        }
       } else if (recordedChunksRef.current.length > 0) {
         clearTimeout(timeout);
         resolve(new Blob(recordedChunksRef.current, { type: mimeTypeRef.current || "audio/webm" }));
@@ -864,13 +883,15 @@ function mergeTranscriptSessions(cumulative: string, sessionFinal: string): stri
     }
 
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-      try { await audioContextRef.current.close(); } catch { /* ignore */ }
+      try {
+        await audioContextRef.current.close();
+      } catch {
+        /* ignore */
+      }
     }
 
     // Build Web Speech transcript from all accumulated results
-    const trailingInterim = interimTranscriptRef.current
-      ? " " + interimTranscriptRef.current
-      : "";
+    const trailingInterim = interimTranscriptRef.current ? " " + interimTranscriptRef.current : "";
     const baseFinal = finalTranscriptRef.current || cumulativeFinalRef.current || "";
     const webSpeechResult = (baseFinal + trailingInterim).trim();
 

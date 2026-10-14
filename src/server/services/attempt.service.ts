@@ -161,10 +161,12 @@ export class AttemptService {
                 try {
                   const bgDb = await getDb();
                   if (bgDb) {
-                    await bgDb.collection<AttemptDoc>("attempts").updateOne(
-                      { id: capturedAttemptId, transcriptionStatus: "processing" },
-                      { $set: { transcriptionStatus: "completed", updatedAt: new Date() } },
-                    );
+                    await bgDb
+                      .collection<AttemptDoc>("attempts")
+                      .updateOne(
+                        { id: capturedAttemptId, transcriptionStatus: "processing" },
+                        { $set: { transcriptionStatus: "completed", updatedAt: new Date() } },
+                      );
                   }
                 } catch {
                   /* ignore cleanup update error */

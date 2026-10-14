@@ -25,7 +25,9 @@ export function setStoredLiveTranscriptionSetting(enabled: boolean) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, enabled ? "true" : "false");
-    window.dispatchEvent(new CustomEvent(SETTINGS_EVENT, { detail: { liveTranscriptionEnabled: enabled } }));
+    window.dispatchEvent(
+      new CustomEvent(SETTINGS_EVENT, { detail: { liveTranscriptionEnabled: enabled } }),
+    );
   } catch {
     // ignore storage access errors
   }
