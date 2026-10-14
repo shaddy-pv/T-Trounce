@@ -8,7 +8,7 @@ import {
   Pause,
   RotateCcw,
   Volume2,
-  Sparkles,
+  FileText,
   CheckCircle2,
 } from "lucide-react";
 import { Waveform } from "@/components/tarang/Waveform";
@@ -16,7 +16,7 @@ import { fetchModuleByIdFn, fetchStudentAttemptsFn, saveAttemptFn } from "@/serv
 import { useAudioRecorder } from "@/features/practice/hooks/useAudioRecorder";
 import { analyzeAudioSignal, FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
 import { useUser } from "@/lib/auth";
-import { useLiveTranscriptionSetting } from "@/lib/app-settings";
+import { useLiveTranscriptionSetting, usePostTranscriptionSetting } from "@/lib/app-settings";
 import type { AttemptResult, Module } from "@/types";
 
 export const Route = createFileRoute("/practice/$moduleId")({
@@ -81,6 +81,7 @@ function PracticeModuleSession() {
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
   const { enabled: liveTranscriptionEnabled } = useLiveTranscriptionSetting();
+  const { enabled: postTranscriptionEnabled } = usePostTranscriptionSetting();
 
   const {
     phase,
@@ -106,6 +107,7 @@ function PracticeModuleSession() {
   } = useAudioRecorder({
     promptContext: mod.prompt || mod.title,
     enableLiveTranscription: liveTranscriptionEnabled,
+    enablePostTranscription: postTranscriptionEnabled,
   });
 
   // Auth guard
@@ -341,7 +343,7 @@ function PracticeModuleSession() {
           <div className="mt-5 rounded-[12px] border border-hairline bg-ink-900 p-4">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-[12px] font-medium text-secondary-warm">
-                <Sparkles size={14} className="text-[#3FB8AF]" />
+                <FileText size={14} className="text-[#3FB8AF]" />
                 Verbatim Spoken Transcript
               </span>
               <div className="flex items-center gap-2 num text-[11px] text-tertiary-warm">
@@ -370,7 +372,7 @@ function PracticeModuleSession() {
                 })
               ) : (
                 <span className="italic text-tertiary-warm">
-                  Spoken recording captured and stored in MongoDB.
+                  Spoken recording captured and saved securely.
                 </span>
               )}
             </div>
@@ -577,7 +579,7 @@ function PracticeModuleSession() {
                   {isRefiningTranscript
                     ? "AI accuracy pass"
                     : liveEngine === "local-whisper"
-                      ? "⚡ Local Whisper (0% cloud lag)"
+                      ? "Local Whisper (0% cloud lag)"
                       : sttUnavailable
                         ? "STT offline · saved after stop"
                         : "real-time STT"}

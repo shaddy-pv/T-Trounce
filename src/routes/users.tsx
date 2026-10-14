@@ -12,7 +12,7 @@ import {
   Search,
   Shield,
   GraduationCap,
-  Sparkles,
+  RotateCcw,
   Check,
   Eye,
   EyeOff,
@@ -479,7 +479,7 @@ function UsersManagementPage() {
                       onClick={generateRandomPassword}
                       className="flex items-center gap-1 text-[11px] text-[#3FB8AF] hover:underline"
                     >
-                      <Sparkles size={11} />
+                      <RotateCcw size={11} />
                       Generate
                     </button>
                   </div>

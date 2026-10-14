@@ -7,7 +7,7 @@ import {
   Pause,
   RotateCcw,
   Volume2,
-  Sparkles,
+  FileText,
   Flag,
   X,
   Send,
@@ -269,7 +269,7 @@ function ResultPage() {
             Done
           </Link>
           <span className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
-            attempt · {result.durationSec || 30}s · saved to mongodb
+            attempt · {result.durationSec || 30}s · saved
           </span>
         </header>
 
@@ -357,7 +357,7 @@ function ResultPage() {
           <div className="rounded-[12px] border border-hairline bg-ink-900 p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-secondary-warm">
-                <Sparkles size={14} className="text-[#3FB8AF]" />
+                <FileText size={14} className="text-[#3FB8AF]" />
                 <p className="num text-[11px] uppercase tracking-[0.14em]">Spoken Transcript</p>
               </div>
               <div className="flex items-center gap-2">

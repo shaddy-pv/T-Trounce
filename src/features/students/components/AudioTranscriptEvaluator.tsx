@@ -4,7 +4,7 @@ import {
   Pause,
   RotateCcw,
   Volume2,
-  Sparkles,
+  FileText,
   MessageSquare,
   Copy,
   Check,
@@ -338,7 +338,7 @@ export function AudioTranscriptEvaluator({
       <div className="mt-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkles size={14} className="text-[#3FB8AF]" />
+            <FileText size={14} className="text-[#3FB8AF]" />
             <span className="num text-[11px] uppercase tracking-wider text-secondary-warm font-semibold">
               Spoken Transcript & Clarity Analysis
             </span>

@@ -130,6 +130,7 @@ function createSpeechRecognition(): SpeechRecognitionInstance | null {
 export interface UseAudioRecorderOptions {
   promptContext?: string;
   enableLiveTranscription?: boolean;
+  enablePostTranscription?: boolean;
 }
 
 /**
@@ -596,6 +597,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
    */
   const runPostRecordingTranscription = useCallback(
     async (audioBlob: Blob): Promise<string> => {
+      if (options?.enablePostTranscription === false) return "";
       if (!audioBlob || audioBlob.size < 2000) return "";
 
       setIsRefiningTranscript(true);
@@ -625,7 +627,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       }
       return "";
     },
-    [options?.promptContext],
+    [options?.promptContext, options?.enablePostTranscription],
   );
 
   // ── startRecording ─────────────────────────────────────────────────────────

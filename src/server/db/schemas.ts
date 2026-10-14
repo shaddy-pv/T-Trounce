@@ -145,6 +145,7 @@ export interface AppSettingsDoc {
   _id?: ObjectId;
   id: "global";
   liveTranscriptionEnabled: boolean;
+  postTranscriptionEnabled?: boolean;
   updatedAt: Date;
   updatedBy?: string;
 }

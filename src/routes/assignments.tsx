@@ -15,7 +15,6 @@ import {
   Check,
   AlertCircle,
   Layers,
-  Sparkles,
   Send,
 } from "lucide-react";
 

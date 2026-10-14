@@ -19,7 +19,6 @@ import {
   Pause,
   MessageSquare,
   Send,
-  Sparkles,
   AlertTriangle,
   HelpCircle,
   CheckCircle2,

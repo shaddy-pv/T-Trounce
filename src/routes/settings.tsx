@@ -2,14 +2,14 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { TeacherShell } from "@/components/tarang/TeacherShell";
 import { useUser } from "@/lib/auth";
-import { useLiveTranscriptionSetting } from "@/lib/app-settings";
+import { useLiveTranscriptionSetting, usePostTranscriptionSetting } from "@/lib/app-settings";
 import { getAppSettingsFn } from "@/server/data";
 import {
   Mic,
   Sliders,
   CheckCircle2,
   AlertCircle,
-  Sparkles,
+  FileText,
   Shield,
   Layers,
   Cpu,
@@ -47,18 +47,43 @@ export const Route = createFileRoute("/settings")({
 function SettingsPage() {
   const initialSettings = Route.useLoaderData();
   const user = useUser();
-  const { enabled, isLoading, toggleSetting } = useLiveTranscriptionSetting();
+  const {
+    enabled: liveEnabled,
+    isLoading: liveLoading,
+    toggleSetting: toggleLive,
+  } = useLiveTranscriptionSetting();
+  const {
+    enabled: postEnabled,
+    isLoading: postLoading,
+    toggleSetting: togglePost,
+  } = usePostTranscriptionSetting();
 
   const [notification, setNotification] = useState<string | null>(null);
 
-  const handleToggle = async () => {
-    const nextVal = !enabled;
+  const handleToggleLive = async () => {
+    const nextVal = !liveEnabled;
     try {
-      await toggleSetting(nextVal);
+      await toggleLive(nextVal);
       setNotification(
         nextVal
           ? "Live transcription has been enabled for all practice sessions."
           : "Live transcription has been disabled. Clean recording mode is now active.",
+      );
+      setTimeout(() => setNotification(null), 4000);
+    } catch {
+      setNotification("Failed to update setting. Please try again.");
+      setTimeout(() => setNotification(null), 4000);
+    }
+  };
+
+  const handleTogglePost = async () => {
+    const nextVal = !postEnabled;
+    try {
+      await togglePost(nextVal);
+      setNotification(
+        nextVal
+          ? "Post-recording transcription pass enabled. Audio will be transcribed upon stop."
+          : "Post-recording transcription disabled. Full-audio cloud pass will be skipped.",
       );
       setTimeout(() => setNotification(null), 4000);
     } catch {
@@ -109,7 +134,7 @@ function SettingsPage() {
           </div>
         )}
 
-        {/* Feature Toggle Card: Live Transcription */}
+        {/* Feature Toggle Card 1: Live Transcription */}
         <section className="rounded-[16px] border border-hairline bg-ink-900/95 p-6 shadow-xl backdrop-blur-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-hairline">
             <div className="space-y-1.5 max-w-xl">
@@ -132,34 +157,34 @@ function SettingsPage() {
               <button
                 type="button"
                 role="switch"
-                aria-checked={enabled}
-                disabled={isLoading}
-                onClick={handleToggle}
+                aria-checked={liveEnabled}
+                disabled={liveLoading}
+                onClick={handleToggleLive}
                 className={`relative inline-flex h-8 w-15 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#3FB8AF] focus:ring-offset-2 focus:ring-offset-ink-950 disabled:opacity-50 ${
-                  enabled ? "bg-[#3FB8AF]" : "bg-ink-800 border-hairline"
+                  liveEnabled ? "bg-[#3FB8AF]" : "bg-ink-800 border-hairline"
                 }`}
               >
                 <span className="sr-only">Toggle live transcription</span>
                 <span
                   className={`pointer-events-none inline-block size-7 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                    enabled ? "translate-x-7" : "translate-x-0 bg-[#A69E93]"
+                    liveEnabled ? "translate-x-7" : "translate-x-0 bg-[#A69E93]"
                   }`}
                 />
               </button>
 
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
-                  enabled
+                  liveEnabled
                     ? "bg-[#3FB8AF]/20 text-[#3FB8AF]"
                     : "bg-ink-800 text-tertiary-warm border border-hairline"
                 }`}
               >
                 <span
                   className={`size-1.5 rounded-full ${
-                    enabled ? "bg-[#3FB8AF] animate-pulse" : "bg-[#6B645A]"
+                    liveEnabled ? "bg-[#3FB8AF] animate-pulse" : "bg-[#6B645A]"
                   }`}
                 />
-                {enabled ? "Active (ON)" : "Disabled (OFF)"}
+                {liveEnabled ? "Active (ON)" : "Disabled (OFF)"}
               </span>
             </div>
           </div>
@@ -168,7 +193,7 @@ function SettingsPage() {
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div
               className={`rounded-[12px] border p-4 transition ${
-                !enabled
+                !liveEnabled
                   ? "border-[#3FB8AF]/40 bg-ink-950/80 shadow-md"
                   : "border-hairline/60 bg-ink-950/40 opacity-70"
               }`}
@@ -178,7 +203,7 @@ function SettingsPage() {
                   <span className="size-2 rounded-full bg-[#E2A33C]" />
                   Clean Audio Capture (Recommended)
                 </span>
-                {!enabled && (
+                {!liveEnabled && (
                   <span className="rounded bg-[#3FB8AF]/15 px-2 py-0.5 text-[10px] font-semibold text-[#3FB8AF]">
                     CURRENT
                   </span>
@@ -186,19 +211,18 @@ function SettingsPage() {
               </div>
               <p className="mt-2 text-[12px] leading-relaxed text-secondary-warm">
                 Microphone audio is captured cleanly without real-time browser STT interruptions or
-                delay. When the student stops, the complete audio recording is transcribed with
-                verbatim accuracy (~95%) via <strong>Google Gemini 2.0 Flash</strong>.
+                delay. When the student stops, complete audio is processed with verbatim accuracy.
               </p>
               <ul className="mt-3 space-y-1 text-[11px] text-tertiary-warm">
                 <li>✓ Zero distractions or inaccurate interim captions during speaking</li>
                 <li>✓ 100% resilient across all network connections and browser variants</li>
-                <li>✓ High-accuracy full-audio transcript generated on completion</li>
+                <li>✓ Clean audio waveform and optimal acoustic scoring</li>
               </ul>
             </div>
 
             <div
               className={`rounded-[12px] border p-4 transition ${
-                enabled
+                liveEnabled
                   ? "border-[#3FB8AF]/40 bg-ink-950/80 shadow-md"
                   : "border-hairline/60 bg-ink-950/40 opacity-70"
               }`}
@@ -208,7 +232,7 @@ function SettingsPage() {
                   <span className="size-2 rounded-full bg-[#3FB8AF]" />
                   Real-Time Live STT (Streaming Mode)
                 </span>
-                {enabled && (
+                {liveEnabled && (
                   <span className="rounded bg-[#3FB8AF]/15 px-2 py-0.5 text-[10px] font-semibold text-[#3FB8AF]">
                     CURRENT
                   </span>
@@ -216,14 +240,120 @@ function SettingsPage() {
               </div>
               <p className="mt-2 text-[12px] leading-relaxed text-secondary-warm">
                 Attempts client-side Web Speech API recognition directly in the browser. Spoken
-                words appear as live interim captions. Full audio pass still runs upon stopping for
-                database persistence.
+                words appear as live interim captions.
               </p>
               <ul className="mt-3 space-y-1 text-[11px] text-tertiary-warm">
-                <li>• Requires open network reachability to speech servers</li>
+                <li>• Instant low-latency display directly on the student screen</li>
                 <li>• May experience network stalls on strict firewalls</li>
-                <li>• Automatically switches to offline badge if Google STT drops</li>
+                <li>• Automatically switches to offline badge if speech servers drop</li>
               </ul>
+            </div>
+          </div>
+        </section>
+
+        {/* Feature Toggle Card 2: Post-Recording Transcription */}
+        <section className="rounded-[16px] border border-hairline bg-ink-900/95 p-6 shadow-xl backdrop-blur-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-hairline">
+            <div className="space-y-1.5 max-w-xl">
+              <div className="flex items-center gap-2.5">
+                <span className="flex size-8 items-center justify-center rounded-lg bg-[#3FB8AF]/15 text-[#3FB8AF]">
+                  <FileText size={17} />
+                </span>
+                <h2 className="text-[18px] font-semibold text-primary-warm">
+                  Post-Recording Transcription (Accuracy Pass)
+                </h2>
+              </div>
+              <p className="text-[13px] leading-relaxed text-secondary-warm">
+                Toggle whether full-audio AI/Whisper transcription runs automatically after the
+                student finishes recording to produce a verbatim transcript.
+              </p>
+            </div>
+
+            {/* Interactive Toggle Switch */}
+            <div className="flex items-center gap-4 sm:flex-col sm:items-end">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={postEnabled}
+                disabled={postLoading}
+                onClick={handleTogglePost}
+                className={`relative inline-flex h-8 w-15 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#3FB8AF] focus:ring-offset-2 focus:ring-offset-ink-950 disabled:opacity-50 ${
+                  postEnabled ? "bg-[#3FB8AF]" : "bg-ink-800 border-hairline"
+                }`}
+              >
+                <span className="sr-only">Toggle post-recording transcription</span>
+                <span
+                  className={`pointer-events-none inline-block size-7 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                    postEnabled ? "translate-x-7" : "translate-x-0 bg-[#A69E93]"
+                  }`}
+                />
+              </button>
+
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
+                  postEnabled
+                    ? "bg-[#3FB8AF]/20 text-[#3FB8AF]"
+                    : "bg-ink-800 text-tertiary-warm border border-hairline"
+                }`}
+              >
+                <span
+                  className={`size-1.5 rounded-full ${
+                    postEnabled ? "bg-[#3FB8AF] animate-pulse" : "bg-[#6B645A]"
+                  }`}
+                />
+                {postEnabled ? "Active (ON)" : "Disabled (OFF)"}
+              </span>
+            </div>
+          </div>
+
+          {/* Explanation */}
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div
+              className={`rounded-[12px] border p-4 transition ${
+                postEnabled
+                  ? "border-[#3FB8AF]/40 bg-ink-950/80 shadow-md"
+                  : "border-hairline/60 bg-ink-950/40 opacity-70"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-[13px] font-semibold text-primary-warm">
+                  <span className="size-2 rounded-full bg-[#3FB8AF]" />
+                  Full-Audio Whisper Pass (Active)
+                </span>
+                {postEnabled && (
+                  <span className="rounded bg-[#3FB8AF]/15 px-2 py-0.5 text-[10px] font-semibold text-[#3FB8AF]">
+                    CURRENT
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 text-[12px] leading-relaxed text-secondary-warm">
+                Upon stopping, complete recorded audio is sent to FastWhisper for full verbatim
+                analysis, capturing every spoken word, pause, and hesitation.
+              </p>
+            </div>
+
+            <div
+              className={`rounded-[12px] border p-4 transition ${
+                !postEnabled
+                  ? "border-[#3FB8AF]/40 bg-ink-950/80 shadow-md"
+                  : "border-hairline/60 bg-ink-950/40 opacity-70"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-[13px] font-semibold text-primary-warm">
+                  <span className="size-2 rounded-full bg-[#E2A33C]" />
+                  Offline Mode / Server Conservation
+                </span>
+                {!postEnabled && (
+                  <span className="rounded bg-[#3FB8AF]/15 px-2 py-0.5 text-[10px] font-semibold text-[#3FB8AF]">
+                    CURRENT
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 text-[12px] leading-relaxed text-secondary-warm">
+                Skips post-recording server transcription pass. Uses whatever transcript was
+                captured in real time or acoustic analysis, preserving server compute.
+              </p>
             </div>
           </div>
         </section>
@@ -243,15 +373,15 @@ function SettingsPage() {
                 Post-Recording STT
               </p>
               <p className="mt-1 text-[15px] font-medium text-primary-warm flex items-center gap-1.5">
-                <Sparkles size={14} className="text-[#3FB8AF]" />
-                Gemini 2.0 Flash
+                <Cpu size={14} className="text-[#3FB8AF]" />
+                FastWhisper Engine
               </p>
               <p className="mt-1 text-[12px] text-secondary-warm">
-                Verbatim Indian-accented English prompt. Runs on full audio after stop.
+                Verbatim speech inference. Runs on full audio after stop.
               </p>
               <div className="mt-3 flex items-center gap-1.5 text-[11px] text-[#3FB8AF]">
                 <CheckCircle2 size={13} />
-                <span>Primary Cloud Engine · Active</span>
+                <span>{postEnabled ? "Active (Enabled)" : "Disabled via toggle"}</span>
               </div>
             </div>
 

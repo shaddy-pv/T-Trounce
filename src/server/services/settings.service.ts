@@ -3,6 +3,7 @@ import type { AppSettingsDoc } from "../db/schemas";
 
 export interface AppSettings {
   liveTranscriptionEnabled: boolean;
+  postTranscriptionEnabled: boolean;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -10,13 +11,13 @@ export interface AppSettings {
 // In-memory fallback if database is temporarily connecting or unseeded
 let inMemorySettings: AppSettings = {
   liveTranscriptionEnabled: false, // Default: DISABLED as requested
+  postTranscriptionEnabled: true, // Default: ENABLED
   updatedAt: new Date().toISOString(),
 };
 
 export class SettingsService {
   /**
    * Retrieves current application settings.
-   * Default: liveTranscriptionEnabled = false
    */
   static async getSettings(): Promise<AppSettings> {
     try {
@@ -31,11 +32,13 @@ export class SettingsService {
         const initialDoc: AppSettingsDoc = {
           id: "global",
           liveTranscriptionEnabled: false,
+          postTranscriptionEnabled: true,
           updatedAt: new Date(),
         };
         await col.insertOne(initialDoc);
         inMemorySettings = {
           liveTranscriptionEnabled: false,
+          postTranscriptionEnabled: true,
           updatedAt: initialDoc.updatedAt.toISOString(),
         };
         return inMemorySettings;
@@ -43,6 +46,7 @@ export class SettingsService {
 
       inMemorySettings = {
         liveTranscriptionEnabled: Boolean(doc.liveTranscriptionEnabled),
+        postTranscriptionEnabled: doc.postTranscriptionEnabled ?? true,
         updatedAt: doc.updatedAt?.toISOString() || new Date().toISOString(),
         updatedBy: doc.updatedBy,
       };
@@ -58,12 +62,23 @@ export class SettingsService {
    * Updates application settings.
    */
   static async updateSettings(
-    updates: { liveTranscriptionEnabled: boolean },
+    updates: { liveTranscriptionEnabled?: boolean; postTranscriptionEnabled?: boolean },
     userId?: string,
   ): Promise<AppSettings> {
+    const current = await this.getSettings();
+    const liveVal =
+      updates.liveTranscriptionEnabled !== undefined
+        ? updates.liveTranscriptionEnabled
+        : current.liveTranscriptionEnabled;
+    const postVal =
+      updates.postTranscriptionEnabled !== undefined
+        ? updates.postTranscriptionEnabled
+        : current.postTranscriptionEnabled;
+
     const updatedAt = new Date();
     inMemorySettings = {
-      liveTranscriptionEnabled: updates.liveTranscriptionEnabled,
+      liveTranscriptionEnabled: liveVal,
+      postTranscriptionEnabled: postVal,
       updatedAt: updatedAt.toISOString(),
       updatedBy: userId,
     };
@@ -77,7 +92,8 @@ export class SettingsService {
           {
             $set: {
               id: "global",
-              liveTranscriptionEnabled: updates.liveTranscriptionEnabled,
+              liveTranscriptionEnabled: liveVal,
+              postTranscriptionEnabled: postVal,
               updatedAt,
               updatedBy: userId,
             },

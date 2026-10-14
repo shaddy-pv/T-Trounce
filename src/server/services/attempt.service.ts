@@ -4,6 +4,7 @@ import type { AttemptResult, SaveAttemptPayload } from "@/types";
 import { makeSampleWaveform } from "@/components/tarang/Waveform";
 import { StorageService } from "./storage.service";
 import { TranscriptionService } from "./transcription.service";
+import { SettingsService } from "./settings.service";
 import { invalidateRosterCache } from "./student.service";
 
 export class AttemptService {
@@ -120,6 +121,14 @@ export class AttemptService {
 
             void (async () => {
               try {
+                const settings = await SettingsService.getSettings();
+                if (settings.postTranscriptionEnabled === false) {
+                  console.log(
+                    `[AttemptService] Post-recording transcription disabled globally — skipping full-audio pass for attempt ${capturedAttemptId}.`,
+                  );
+                  return;
+                }
+
                 if (currentAudioId) {
                   const audioBufferRes = await StorageService.getAudioBuffer(currentAudioId);
                   if (audioBufferRes && audioBufferRes.buffer.length > 2000) {

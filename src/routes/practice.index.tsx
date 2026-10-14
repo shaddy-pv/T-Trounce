@@ -11,7 +11,7 @@ import {
 } from "@/server/data";
 import { cachedClientFetch } from "@/lib/client-cache";
 import { useUser } from "@/lib/auth";
-import { BookOpen, Calendar, Sparkles, MessageSquare, Check, Send, Clock } from "lucide-react";
+import { BookOpen, Calendar, Mic, MessageSquare, Check, Send, Clock } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useRouter } from "@tanstack/react-router";
 
@@ -442,7 +442,7 @@ function PracticeHubBody() {
                         isDone ? "text-[#3FB8AF]" : isLate ? "text-[#E2A33C]" : "text-[#3FB8AF]"
                       }`}
                     >
-                      <Sparkles size={13} />
+                      <Mic size={13} />
                       {isDone
                         ? "Listen & Review (or Retake) →"
                         : isLate
