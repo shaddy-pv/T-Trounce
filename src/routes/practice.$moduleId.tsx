@@ -130,31 +130,12 @@ function PracticeModuleSession() {
     const attemptId = `${moduleId}-${Date.now()}`;
 
     try {
-      // 1. Race stopRecording with a 10s hard client-side fallback
-      const stopPromise = stopRecording();
-      const fallbackStop = new Promise<{
-        samples: number[];
-        elapsed: number;
-        audioUrl: string;
-        transcript: string;
-      }>((resolve) =>
-        setTimeout(() => {
-          console.warn("[handleStop] Recording finalization timeout fired — forcing completion");
-          resolve({
-            samples,
-            elapsed,
-            audioUrl: "",
-            transcript: (finalTranscript || interimTranscript || transcript || "").trim(),
-          });
-        }, 10000),
-      );
-
       const {
         samples: recordedSamples,
         elapsed: recordedElapsed,
         audioUrl,
         transcript: recordedTranscript,
-      } = await Promise.race([stopPromise, fallbackStop]);
+      } = await stopRecording();
 
       // Perform real acoustic signal analysis
       const analysis = analyzeAudioSignal(

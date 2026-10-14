@@ -182,7 +182,7 @@ export interface UseAudioRecorderOptions {
  */
 // Module-level network detection flag so subsequent sessions on network-blocked ISPs
 // automatically use local FastWhisper live streaming without retrying failing Google STT
-let hasGoogleSttNetworkError = false;
+const hasGoogleSttNetworkError = false;
 
 export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   // ── State ──────────────────────────────────────────────────────────────────
@@ -218,6 +218,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const samplerIntervalRef = useRef<number | null>(null);
   const volumeIntervalRef = useRef<number | null>(null);
+  const lastAudioUrlRef = useRef<string>("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string>("audio/webm");
@@ -522,9 +523,11 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
 
       if (e.error === "network") {
         console.warn(
-          "[SpeechRecognition] Google speech servers unreachable on this network — seamlessly activating Local FastWhisper live streaming engine",
+          "[SpeechRecognition] Google speech servers unreachable on this browser/network (e.g. Brave shields). Continuing clean audio capture.",
         );
-        hasGoogleSttNetworkError = true;
+        sttUnavailableRef.current = true;
+        setSttUnavailable(true);
+        recognitionRunningRef.current = false;
         if (recognitionRef.current) {
           try {
             recognitionRef.current.abort();
@@ -533,14 +536,16 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
           }
           recognitionRef.current = null;
         }
-        startLocalLiveStreaming();
         return;
       }
 
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
         console.warn(
-          "[SpeechRecognition] Web Speech permission blocked — activating Local FastWhisper live streaming",
+          "[SpeechRecognition] Web Speech permission blocked. Continuing clean audio capture.",
         );
+        sttUnavailableRef.current = true;
+        setSttUnavailable(true);
+        recognitionRunningRef.current = false;
         if (recognitionRef.current) {
           try {
             recognitionRef.current.abort();
@@ -549,7 +554,6 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
           }
           recognitionRef.current = null;
         }
-        startLocalLiveStreaming();
         return;
       }
     };
@@ -647,15 +651,15 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
           return result?.text?.trim() || "";
         })();
 
-        // Safety timeout: Maximum 10 seconds for post-recording AI pass.
-        // If the network or remote CPU sidecar is slow, do not make the student wait.
+        // Fast safety timeout: Maximum 3.5s for post-recording AI pass.
+        // Never stall the student or hold audio playback hostage.
         const timeoutPromise = new Promise<string>((resolve) =>
           setTimeout(() => {
-            console.warn(
-              "[useAudioRecorder] Post-recording transcription pass timed out after 10s",
+            console.info(
+              "[useAudioRecorder] Client-side post-recording transcription pass timed out after 3.5s — falling back to background transcription",
             );
             resolve("");
-          }, 10000),
+          }, 3500),
         );
 
         const refinedText = await Promise.race([transcribePromise, timeoutPromise]);
@@ -942,10 +946,11 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       try {
         audioUrl = await new Promise((resolve, reject) => {
           const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
+          reader.onloadend = () => resolve((reader.result as string) || "");
           reader.onerror = reject;
           reader.readAsDataURL(blob);
         });
+        lastAudioUrlRef.current = audioUrl;
       } catch (e) {
         console.warn("Failed to convert Blob to data URL:", e);
       }
@@ -1008,6 +1013,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     startRecording,
     stopRecording,
     setPhase,
+    audioUrl: lastAudioUrlRef.current,
     isLiveTranscriptionEnabled: Boolean(options?.enableLiveTranscription),
     liveEngine,
   };

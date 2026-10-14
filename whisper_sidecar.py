@@ -38,7 +38,7 @@ log = logging.getLogger("whisper_sidecar")
 # ──────────────────────────────────────────────
 # Config from environment
 # ──────────────────────────────────────────────
-MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base")
+MODEL_SIZE = os.environ.get("WHISPER_MODEL", "tiny.en" if DEVICE == "cpu" else "base")
 DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
 HOST = os.environ.get("WHISPER_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT") or os.environ.get("WHISPER_PORT") or "8765")
@@ -50,7 +50,9 @@ LANG = os.environ.get("WHISPER_LANG", "en")
 try:
     from faster_whisper import WhisperModel  # type: ignore
 
-    cpu_threads = int(os.environ.get("WHISPER_CPU_THREADS", min(8, os.cpu_count() or 4)))
+    # On cloud free-tier CPU, 2 threads avoid context switching bottlenecks
+    default_threads = 2 if DEVICE == "cpu" else min(8, os.cpu_count() or 4)
+    cpu_threads = int(os.environ.get("WHISPER_CPU_THREADS", default_threads))
     log.info(f"Loading faster-whisper model: '{MODEL_SIZE}' on {DEVICE} (threads={cpu_threads}) ...")
     _model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type="int8", cpu_threads=cpu_threads)
     log.info(f"Model '{MODEL_SIZE}' loaded and ready.")
