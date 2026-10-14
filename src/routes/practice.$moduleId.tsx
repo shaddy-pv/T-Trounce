@@ -85,9 +85,11 @@ function PracticeModuleSession() {
 
   const {
     phase,
+    elapsed,
     formattedTime,
     stream,
     micError,
+    samples,
     sttUnavailable,
     finalTranscript,
     interimTranscript,
@@ -118,55 +120,98 @@ function PracticeModuleSession() {
   }, [user, navigate]);
 
   const handleStop = async () => {
-    const { samples, elapsed, audioUrl, transcript } = await stopRecording();
+    if (phase === "uploading") return;
+
     const studentId = user?.userId;
     if (!studentId) {
       navigate({ to: "/login", replace: true });
       return;
     }
-    const studentName = user?.name || "Student";
     const attemptId = `${moduleId}-${Date.now()}`;
 
-    // Perform real acoustic signal analysis
-    const analysis = analyzeAudioSignal(samples, elapsed, mod.difficulty, transcript);
-
-    const fullResult = {
-      id: attemptId,
-      studentId,
-      moduleId,
-      prompt: mod.prompt,
-      transcript: transcript ? transcript.trim() : "",
-      audioUrl: audioUrl || undefined,
-      durationSec: analysis.durationSec,
-      targetDurationSec: mod.durationSec, // target duration of the prompt — for completion%
-      pronunciation: analysis.pronunciation,
-      vocabulary: analysis.vocabulary,
-      grammar: analysis.grammar,
-      fillerCount: analysis.fillerCount,
-      pauseCount: analysis.pauseCount,
-      feedback: analysis.feedback,
-      waveform: analysis.waveform,
-      createdAt: new Date().toISOString(),
-    };
-
-    // Persist attempt to MongoDB
     try {
-      await saveAttemptFn({
-        data: {
-          studentId,
-          moduleId,
-          result: fullResult,
-        },
+      // 1. Race stopRecording with a 10s hard client-side fallback
+      const stopPromise = stopRecording();
+      const fallbackStop = new Promise<{
+        samples: number[];
+        elapsed: number;
+        audioUrl: string;
+        transcript: string;
+      }>((resolve) =>
+        setTimeout(() => {
+          console.warn("[handleStop] Recording finalization timeout fired — forcing completion");
+          resolve({
+            samples,
+            elapsed,
+            audioUrl: "",
+            transcript: (finalTranscript || interimTranscript || transcript || "").trim(),
+          });
+        }, 10000),
+      );
+
+      const {
+        samples: recordedSamples,
+        elapsed: recordedElapsed,
+        audioUrl,
+        transcript: recordedTranscript,
+      } = await Promise.race([stopPromise, fallbackStop]);
+
+      // Perform real acoustic signal analysis
+      const analysis = analyzeAudioSignal(
+        recordedSamples.length > 0 ? recordedSamples : samples,
+        recordedElapsed > 0 ? recordedElapsed : elapsed,
+        mod.difficulty,
+        recordedTranscript,
+      );
+
+      const fullResult = {
+        id: attemptId,
+        studentId,
+        moduleId,
+        prompt: mod.prompt,
+        transcript: recordedTranscript ? recordedTranscript.trim() : "",
+        audioUrl: audioUrl || undefined,
+        durationSec: analysis.durationSec,
+        targetDurationSec: mod.durationSec,
+        pronunciation: analysis.pronunciation,
+        vocabulary: analysis.vocabulary,
+        grammar: analysis.grammar,
+        fillerCount: analysis.fillerCount,
+        pauseCount: analysis.pauseCount,
+        feedback: analysis.feedback,
+        waveform: analysis.waveform,
+        createdAt: new Date().toISOString(),
+      };
+
+      // 2. Persist attempt to MongoDB with a 5s race timeout
+      try {
+        const savePromise = saveAttemptFn({
+          data: {
+            studentId,
+            moduleId,
+            result: fullResult,
+          },
+        });
+        const saveTimeout = new Promise((resolve) => setTimeout(resolve, 5000));
+        await Promise.race([savePromise, saveTimeout]);
+      } catch (err) {
+        console.warn("Attempt save fallback:", err);
+      }
+
+      // 3. Immediately navigate to result screen
+      navigate({
+        to: "/result/$attemptId",
+        params: { attemptId },
+        replace: true,
       });
     } catch (err) {
-      console.warn("Attempt save fallback:", err);
+      console.error("[handleStop] Forced navigation on unexpected error:", err);
+      navigate({
+        to: "/result/$attemptId",
+        params: { attemptId },
+        replace: true,
+      });
     }
-
-    navigate({
-      to: "/result/$attemptId",
-      params: { attemptId },
-      replace: true,
-    });
   };
 
   const togglePlayback = () => {

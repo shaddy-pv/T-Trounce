@@ -8,11 +8,24 @@ export interface TranscriptionResult {
 }
 
 /** URL of the optional FastWhisper Python sidecar */
-const defaultSidecarUrl =
-  process.env.NODE_ENV === "production"
-    ? "https://t-trounce.onrender.com"
-    : "http://127.0.0.1:8765";
-const rawSidecarUrl = (process.env.WHISPER_SIDECAR_URL || defaultSidecarUrl).trim();
+const productionSidecarUrl = "https://t-trounce.onrender.com";
+let rawSidecarUrl = (process.env.WHISPER_SIDECAR_URL || "").trim();
+
+if (process.env.NODE_ENV === "production") {
+  // In production on Render/cloud, redirect to the real Render sidecar if unset or pointing to localhost
+  if (
+    !rawSidecarUrl ||
+    rawSidecarUrl.includes("127.0.0.1") ||
+    rawSidecarUrl.includes("localhost")
+  ) {
+    rawSidecarUrl = productionSidecarUrl;
+  }
+} else {
+  if (!rawSidecarUrl) {
+    rawSidecarUrl = "http://127.0.0.1:8765";
+  }
+}
+
 const WHISPER_SIDECAR_URL = rawSidecarUrl.replace(/\/+$/, "");
 const IS_LOCAL_DEV =
   WHISPER_SIDECAR_URL.includes("127.0.0.1") || WHISPER_SIDECAR_URL.includes("localhost");
@@ -150,8 +163,8 @@ export class TranscriptionService {
     const geminiKey = process.env.GEMINI_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
 
-    // Fast timeouts for live chunks, adequate 45s window for full-audio pass on CPU
-    const whisperTimeoutMs = isFinal ? 45000 : 3500;
+    // Fast timeouts for live chunks, adequate 25s window for full-audio pass on CPU
+    const whisperTimeoutMs = isFinal ? 25000 : 3500;
 
     // 0. FastWhisper sidecar — instant on local dev, CPU inference on remote
     const local = await this.transcribeWithLocalWhisper(

@@ -104,12 +104,14 @@ def transcribe_audio_bytes(audio_bytes: bytes, mime: str = "audio/wav", prompt: 
 
     try:
         with _model_lock:
-            # beam_size=5 provides high-accuracy inference and resolves phonetic ambiguities (e.g. 'sat down' vs 'satan')
+            # beam_size: default 1 on CPU for fast sub-5s response on Render free tier, or 5 if CUDA/configured
+            beam_size = int(os.getenv("WHISPER_BEAM_SIZE", "1" if DEVICE == "cpu" else "5"))
+            best_of = int(os.getenv("WHISPER_BEST_OF", "1" if DEVICE == "cpu" else "5"))
             segments, info = _model.transcribe(
                 tmp_path,
                 language=LANG,
-                beam_size=5,
-                best_of=5,
+                beam_size=beam_size,
+                best_of=best_of,
                 patience=1.0,
                 temperature=0.0,
                 initial_prompt=initial_prompt,

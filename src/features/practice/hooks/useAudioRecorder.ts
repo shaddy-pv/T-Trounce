@@ -65,24 +65,49 @@ export function encodeWavFromFloatSamples(floatSamples: Float32Array, sampleRate
  * and re-encodes as a 16-bit PCM WAV data URL for Gemini transcription.
  */
 async function blobToWavDataUrl(blob: Blob): Promise<string> {
-  const AudioCtxClass =
-    window.AudioContext ||
-    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  const tmpCtx = new AudioCtxClass();
-  try {
-    const arrayBuffer = await blob.arrayBuffer();
-    const decoded = await tmpCtx.decodeAudioData(arrayBuffer.slice(0));
-    const samples = decoded.getChannelData(0); // mono for STT
-    return encodeWavFromFloatSamples(samples, decoded.sampleRate);
-  } catch {
-    return await new Promise<string>((resolve, reject) => {
+  const fallbackRead = () =>
+    new Promise<string>((resolve) => {
       const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
+      reader.onloadend = () => resolve((reader.result as string) || "");
+      reader.onerror = () => resolve("");
       reader.readAsDataURL(blob);
     });
-  } finally {
-    tmpCtx.close().catch(() => {});
+
+  if (typeof window === "undefined" || !blob || blob.size === 0) {
+    return "";
+  }
+
+  try {
+    const AudioCtxClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtxClass) {
+      return await fallbackRead();
+    }
+
+    const tmpCtx = new AudioCtxClass();
+    try {
+      // Chromium bug guard: decodeAudioData on MediaRecorder WebM blobs can hang indefinitely.
+      // Strict 1500ms timeout ensures it NEVER blocks the recording pipeline.
+      const decoded = await Promise.race([
+        (async () => {
+          const arrayBuffer = await blob.arrayBuffer();
+          return await tmpCtx.decodeAudioData(arrayBuffer.slice(0));
+        })(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
+      ]);
+
+      if (!decoded) {
+        return await fallbackRead();
+      }
+
+      const samples = decoded.getChannelData(0); // mono for STT
+      return encodeWavFromFloatSamples(samples, decoded.sampleRate);
+    } finally {
+      tmpCtx.close().catch(() => {});
+    }
+  } catch {
+    return await fallbackRead();
   }
 }
 
@@ -602,26 +627,44 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
 
       setIsRefiningTranscript(true);
       try {
-        // WebM → WAV conversion: fixes corrupt duration metadata before sending
-        const wavDataUrl = await blobToWavDataUrl(audioBlob);
+        const transcribePromise = (async () => {
+          const dataUrl = await blobToWavDataUrl(audioBlob);
+          if (!dataUrl) return "";
 
-        const result = await streamTranscribeChunkFn({
-          data: {
-            audioBase64: wavDataUrl,
-            mimeType: "audio/wav",
-            sequence: 0,
-            promptContext: options?.promptContext,
-            isFinal: true, // signals server: use verbatim prompt + 30s timeout
-          },
-        });
+          const isWav = dataUrl.startsWith("data:audio/wav");
+          const mime = isWav ? "audio/wav" : audioBlob.type || "audio/webm";
 
-        if (result.text && result.text.trim().length > 0) {
-          const refined = result.text.trim();
-          setPostRecordingTranscript(refined);
-          return refined;
+          const result = await streamTranscribeChunkFn({
+            data: {
+              audioBase64: dataUrl,
+              mimeType: mime,
+              sequence: 0,
+              promptContext: options?.promptContext,
+              isFinal: true, // signals server: use verbatim prompt + 25s timeout
+            },
+          });
+
+          return result?.text?.trim() || "";
+        })();
+
+        // Safety timeout: Maximum 10 seconds for post-recording AI pass.
+        // If the network or remote CPU sidecar is slow, do not make the student wait.
+        const timeoutPromise = new Promise<string>((resolve) =>
+          setTimeout(() => {
+            console.warn(
+              "[useAudioRecorder] Post-recording transcription pass timed out after 10s",
+            );
+            resolve("");
+          }, 10000),
+        );
+
+        const refinedText = await Promise.race([transcribePromise, timeoutPromise]);
+        if (refinedText && refinedText.length > 0) {
+          setPostRecordingTranscript(refinedText);
+          return refinedText;
         }
       } catch (err) {
-        console.debug("[useAudioRecorder] Post-recording Gemini pass note:", err);
+        console.warn("[useAudioRecorder] Post-recording transcription pass note:", err);
       } finally {
         setIsRefiningTranscript(false);
       }
@@ -921,12 +964,16 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     const baseFinal = finalTranscriptRef.current || cumulativeFinalRef.current || "";
     const webSpeechResult = (baseFinal + trailingInterim).trim();
 
-    // Run Gemini full-audio accuracy pass — replaces Web Speech result if successful
+    // Run AI full-audio accuracy pass — replaces Web Speech result if successful
     let finalTranscriptValue = webSpeechResult;
     if (blob && blob.size > 2000) {
-      const geminiResult = await runPostRecordingTranscription(blob);
-      if (geminiResult.trim().length > 0) {
-        finalTranscriptValue = geminiResult;
+      try {
+        const aiResult = await runPostRecordingTranscription(blob);
+        if (aiResult && aiResult.trim().length > 0) {
+          finalTranscriptValue = aiResult.trim();
+        }
+      } catch (postErr) {
+        console.warn("[useAudioRecorder] Post-recording transcript error:", postErr);
       }
     }
 
