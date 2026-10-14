@@ -1,5 +1,5 @@
 // Trounce Teacher Console — Progressive Web App Service Worker
-const CACHE_NAME = "trounce-pwa-v2";
+const CACHE_NAME = "trounce-pwa-v3";
 const OFFLINE_URL = "/offline.html";
 
 const PRECACHE_ASSETS = [

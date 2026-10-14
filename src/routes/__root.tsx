@@ -168,12 +168,14 @@ function RootComponent() {
         navigator.serviceWorker
           .register("/sw.js", { scope: "/" })
           .then((registration) => {
+            void registration.update().catch(() => {});
             registration.addEventListener("updatefound", () => {
               const newWorker = registration.installing;
               if (newWorker) {
                 newWorker.addEventListener("statechange", () => {
                   if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-                    console.info("[PWA] Trounce updated in background; ready on reload.");
+                    newWorker.postMessage({ type: "SKIP_WAITING" });
+                    console.info("[PWA] Trounce updated to latest service worker.");
                   }
                 });
               }

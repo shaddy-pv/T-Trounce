@@ -373,10 +373,19 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     console.info("[useAudioRecorder] Activating Local FastWhisper live streaming engine");
 
     let isChunkProcessing = false;
+    let consecutiveErrors = 0;
 
     const tickLocalLive = async () => {
       if (!isRecordingRef.current) return;
       if (isChunkProcessing) return;
+      if (consecutiveErrors >= 2) {
+        if (localLiveTimerRef.current) {
+          window.clearInterval(localLiveTimerRef.current);
+          localLiveTimerRef.current = null;
+        }
+        setSttUnavailable(true);
+        return;
+      }
       if (recordedChunksRef.current.length === 0) return;
 
       isChunkProcessing = true;
@@ -384,7 +393,8 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
         const blob = new Blob(recordedChunksRef.current, {
           type: mimeTypeRef.current || "audio/webm",
         });
-        if (blob.size > 1500) {
+        // Limit live chunk size to prevent server payload spikes and 502s
+        if (blob.size > 1500 && blob.size < 400000) {
           const wavUrl = await blobToWavDataUrl(blob);
           const res = await streamTranscribeChunkFn({
             data: {
@@ -395,6 +405,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
               isFinal: false,
             },
           });
+          consecutiveErrors = 0;
           if (res.text && res.text.trim().length > 0 && isRecordingRef.current) {
             const clean = res.text.trim();
             finalTranscriptRef.current = clean;
@@ -403,14 +414,21 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
           }
         }
       } catch (err) {
-        console.debug("[useAudioRecorder] Local live tick note:", err);
+        consecutiveErrors++;
+        console.debug("[useAudioRecorder] Live stream tick note:", err);
+        if (consecutiveErrors >= 2) {
+          if (localLiveTimerRef.current) {
+            window.clearInterval(localLiveTimerRef.current);
+            localLiveTimerRef.current = null;
+          }
+          setSttUnavailable(true);
+        }
       } finally {
         isChunkProcessing = false;
       }
     };
 
-    // High-responsiveness: first chunk transcribes at 600ms (near-instant start), then updates every 1000ms
-    localLiveTimerRef.current = window.setInterval(tickLocalLive, 1000);
+    localLiveTimerRef.current = window.setInterval(tickLocalLive, 1200);
     window.setTimeout(tickLocalLive, 600);
   }, [options?.promptContext]);
 
@@ -655,9 +673,15 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       const rawStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
       refreshAudioDevices();
 
-      // Start live transcription directly using high-speed Local FastWhisper (0% cloud latency, zero network errors)
+      // Start live transcription: prefer client Web Speech API (0 server requests, instant response)
+      // If unsupported or blocked, seamlessly falls back to streaming engine
       if (isLiveEnabledRef.current) {
-        startLocalLiveStreaming();
+        const recognition = createSpeechRecognition();
+        if (recognition) {
+          startSpeechRecognition();
+        } else {
+          startLocalLiveStreaming();
+        }
       }
 
       // ── DSP Chain ─────────────────────────────────────────────────────────────
@@ -780,7 +804,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       }, ACOUSTIC_THRESHOLDS.sampleIntervalMs);
       setPhase("recording");
     }
-  }, [selectedDeviceId, refreshAudioDevices, startLocalLiveStreaming]);
+  }, [selectedDeviceId, refreshAudioDevices, startSpeechRecognition, startLocalLiveStreaming]);
 
   // ── stopRecording ──────────────────────────────────────────────────────────
 

@@ -59,16 +59,22 @@ export class TranscriptionService {
    * 1. Local sidecar on http://127.0.0.1:8765 if running (instant sub-second response)
    * 2. Configured WHISPER_SIDECAR_URL (production / remote Render sidecar)
    */
-  static async resolveWhisperUrl(): Promise<string> {
+  static async resolveWhisperUrl(): Promise<string | null> {
+    const isLocalhost =
+      WHISPER_SIDECAR_URL.includes("127.0.0.1") || WHISPER_SIDECAR_URL.includes("localhost");
+    // In production on Render/cloud, never try 127.0.0.1 (it will hang and trigger 502)
+    if (process.env.NODE_ENV === "production" && isLocalhost) {
+      return null;
+    }
     try {
-      const ping = await fetch("http://127.0.0.1:8765/health", {
-        signal: AbortSignal.timeout(500),
+      const ping = await fetch(`${WHISPER_SIDECAR_URL}/health`, {
+        signal: AbortSignal.timeout(300),
       });
-      if (ping.ok) return "http://127.0.0.1:8765";
+      if (ping.ok) return WHISPER_SIDECAR_URL;
     } catch {
       // Local sidecar not running
     }
-    return WHISPER_SIDECAR_URL;
+    return null;
   }
 
   /**
@@ -79,11 +85,13 @@ export class TranscriptionService {
   static async transcribeWithLocalWhisper(
     audioBuffer: Buffer,
     mimeType: string = "audio/wav",
-    timeoutMs: number = 5000,
+    timeoutMs: number = 4000,
     promptContext?: string,
   ): Promise<{ text: string; confidence: number } | null> {
     try {
       const targetUrl = await this.resolveWhisperUrl();
+      if (!targetUrl) return null; // Instant 0ms exit when sidecar is not running
+
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       const base64Audio = audioBuffer.toString("base64");
@@ -137,8 +145,8 @@ export class TranscriptionService {
     const geminiKey = process.env.GEMINI_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
 
-    // Longer timeout for post-recording full-audio pass (allows thorough inference)
-    const whisperTimeoutMs = isFinal ? 45000 : 15000;
+    // Fast timeouts so server never hangs or triggers 502
+    const whisperTimeoutMs = isFinal ? 8000 : 3500;
 
     // 0. FastWhisper sidecar — instant on local dev, CPU inference on remote
     const local = await this.transcribeWithLocalWhisper(
@@ -149,8 +157,7 @@ export class TranscriptionService {
     );
     if (local) return { text: local.text, confidence: local.confidence, isFinal: true };
 
-    // 1. Google Gemini 2.0 Flash — primary cloud engine
-    // gemini-2.0-flash is faster and more accurate than 1.5-flash for audio transcription
+    // 1. Google Gemini — primary cloud engine
     if (geminiKey) {
       try {
         const base64Audio = audioBuffer.toString("base64");
@@ -163,11 +170,11 @@ export class TranscriptionService {
           : `Transcribe the spoken speech in this audio verbatim, including filler words (um, uh, matlab, hmm). Return only the recognized words as plain text. If silent, return empty.`;
 
         const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            signal: AbortSignal.timeout(isFinal ? 30000 : 12000),
+            signal: AbortSignal.timeout(isFinal ? 12000 : 3500),
             body: JSON.stringify({
               contents: [
                 {
@@ -287,10 +294,11 @@ export class TranscriptionService {
         const cleanMime = mimeType.split(";")[0] || "audio/webm";
 
         const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(12000),
             body: JSON.stringify({
               contents: [
                 {
