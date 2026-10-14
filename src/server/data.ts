@@ -516,12 +516,17 @@ export const getAppSettingsFn = createServerFn({ method: "GET" }).handler(
 );
 
 /**
- * Server Function: Update global application settings (Protected: Faculty/Admin)
+ * Server Function: Update global application settings (Protected: Master Admin shadanmd566@gmail.com only)
  */
 export const updateAppSettingsFn = createServerFn({ method: "POST" })
   .middleware([teacherOnlyMiddleware])
   .validator((input: unknown) => UpdateAppSettingsInputSchema.parse(input))
   .handler(async ({ data, context }): Promise<AppSettings> => {
     const user = (context as { user: SessionPayload }).user;
+    if (user.email?.toLowerCase() !== "shadanmd566@gmail.com") {
+      throw new Error(
+        "Forbidden: System settings can only be modified by master administrator (shadanmd566@gmail.com).",
+      );
+    }
     return await SettingsService.updateSettings(data, user.userId);
   });

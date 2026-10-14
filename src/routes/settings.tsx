@@ -30,12 +30,9 @@ export const Route = createFileRoute("/settings")({
   }),
   beforeLoad: ({ context }) => {
     if (!context.session) throw redirect({ to: "/login" });
-    if (
-      context.session.role !== "teacher" &&
-      context.session.role !== "admin" &&
-      !context.session.isAdmin
-    ) {
-      throw redirect({ to: "/practice" });
+    const isMasterAdmin = context.session.email?.toLowerCase() === "shadanmd566@gmail.com";
+    if (!isMasterAdmin) {
+      throw redirect({ to: "/dashboard" });
     }
   },
   loader: async () => {
@@ -47,6 +44,8 @@ export const Route = createFileRoute("/settings")({
 function SettingsPage() {
   const initialSettings = Route.useLoaderData();
   const user = useUser();
+  const isMasterAdmin = user?.email?.toLowerCase() === "shadanmd566@gmail.com";
+
   const {
     enabled: liveEnabled,
     isLoading: liveLoading,
@@ -59,6 +58,19 @@ function SettingsPage() {
   } = usePostTranscriptionSetting();
 
   const [notification, setNotification] = useState<string | null>(null);
+
+  if (!isMasterAdmin) {
+    return (
+      <TeacherShell>
+        <div className="py-16 text-center">
+          <p className="text-[16px] text-secondary-warm">
+            Access to System Settings is strictly restricted to master administrator
+            (shadanmd566@gmail.com).
+          </p>
+        </div>
+      </TeacherShell>
+    );
+  }
 
   const handleToggleLive = async () => {
     const nextVal = !liveEnabled;

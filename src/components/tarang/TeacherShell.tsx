@@ -29,6 +29,8 @@ export function TeacherShell({ children }: { children: ReactNode }) {
     setMobileMenuOpen(false);
   }, [pathname]);
 
+  const isMasterAdmin = user?.email?.toLowerCase() === "shadanmd566@gmail.com";
+
   // Pre-warm teacher routes during browser idle time for 0ms transitions
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -38,11 +40,13 @@ export function TeacherShell({ children }: { children: ReactNode }) {
         router.preloadRoute({ to: "/flags" }).catch(() => {});
         router.preloadRoute({ to: "/reports" }).catch(() => {});
         router.preloadRoute({ to: "/users" }).catch(() => {});
-        router.preloadRoute({ to: "/settings" }).catch(() => {});
+        if (isMasterAdmin) {
+          router.preloadRoute({ to: "/settings" }).catch(() => {});
+        }
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [router]);
+  }, [router, isMasterAdmin]);
 
   const nav = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -50,7 +54,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
     { to: "/flags", label: "Flags", icon: Flag },
     { to: "/reports", label: "Reports", icon: BarChart3 },
     { to: "/users", label: "Users & Teachers", icon: Users },
-    { to: "/settings", label: "Settings", icon: Settings },
+    ...(isMasterAdmin ? [{ to: "/settings", label: "Settings", icon: Settings }] : []),
     ...(user?.isAdmin ? [{ to: "/practice", label: "Student View", icon: ExternalLink }] : []),
   ];
 

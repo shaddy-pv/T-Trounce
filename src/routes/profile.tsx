@@ -139,10 +139,8 @@ function ProfilePage() {
           <p className="num mt-1 text-[12px] text-tertiary-warm">Account Data Synchronized</p>
         </div>
 
-        {/* Admin / Faculty Feature Settings Card */}
-        {(user?.isAdmin || user?.role === "admin" || user?.role === "teacher") && (
-          <AdminFeatureSettingsCard />
-        )}
+        {/* Master Admin Feature Settings Card (strictly restricted to shadanmd566@gmail.com) */}
+        {user?.email?.toLowerCase() === "shadanmd566@gmail.com" && <AdminFeatureSettingsCard />}
 
         <TButton
           variant="secondary"
