@@ -780,7 +780,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       }, ACOUSTIC_THRESHOLDS.sampleIntervalMs);
       setPhase("recording");
     }
-  }, [selectedDeviceId, refreshAudioDevices, startSpeechRecognition, startLocalLiveStreaming]);
+  }, [selectedDeviceId, refreshAudioDevices, startLocalLiveStreaming]);
 
   // ── stopRecording ──────────────────────────────────────────────────────────
 

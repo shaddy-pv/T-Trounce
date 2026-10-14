@@ -1,5 +1,5 @@
 // Trounce Teacher Console — Progressive Web App Service Worker
-const CACHE_NAME = "trounce-pwa-v1";
+const CACHE_NAME = "trounce-pwa-v2";
 const OFFLINE_URL = "/offline.html";
 
 const PRECACHE_ASSETS = [
@@ -18,8 +18,13 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_ASSETS))
-      .then(() => self.skipWaiting()),
+      .then((cache) =>
+        cache.addAll(PRECACHE_ASSETS.map((url) => new Request(url, { cache: "reload" }))),
+      )
+      .then(() => self.skipWaiting())
+      .catch((err) => {
+        console.warn("[SW] Precache note:", err);
+      }),
   );
 });
 
@@ -44,37 +49,53 @@ self.addEventListener("activate", (event) => {
 // Fetch: Smart caching strategy
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-  const url = new URL(request.url);
 
   // 1. Only handle GET requests
   if (request.method !== "GET") {
     return;
   }
 
-  // 2. Skip audio streaming endpoints and sidecar APIs from service worker cache
-  if (url.pathname.startsWith("/api/audio/") || url.pathname.startsWith("/api/transcribe")) {
+  // 2. Ignore non-http/https (e.g. chrome-extension:)
+  if (!request.url.startsWith("http://") && !request.url.startsWith("https://")) {
     return;
   }
 
-  // 3. Navigation requests: Network-first, fallback to /offline.html
+  const url = new URL(request.url);
+
+  // 3. DO NOT intercept API calls, server functions, audio streams, or websockets
+  if (
+    url.pathname.startsWith("/api/") ||
+    url.pathname.includes("_server") ||
+    url.searchParams.has("_serverFnId") ||
+    url.searchParams.has("_server")
+  ) {
+    return; // Let browser network handle naturally without SW
+  }
+
+  // 4. Navigation requests: Network-first with offline.html fallback
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request).catch(async () => {
-        const cache = await caches.open(CACHE_NAME);
-        const cachedOffline = await cache.match(OFFLINE_URL);
-        return (
-          cachedOffline ||
-          new Response("You are offline", {
+        try {
+          const cache = await caches.open(CACHE_NAME);
+          const cachedOffline = await cache.match(OFFLINE_URL);
+          if (cachedOffline) return cachedOffline;
+        } catch {
+          // fallback below
+        }
+        return new Response(
+          "<!DOCTYPE html><html><head><title>Offline</title></head><body style='font-family:sans-serif;padding:2rem;text-align:center;'><h2>You are offline</h2><p>Please check your internet connection.</p></body></html>",
+          {
             status: 503,
-            headers: { "Content-Type": "text/plain" },
-          })
+            headers: { "Content-Type": "text/html; charset=utf-8" },
+          },
         );
       }),
     );
     return;
   }
 
-  // 4. Static assets (JS chunks, CSS, Icons, Fonts): Stale-While-Revalidate
+  // 5. Static assets (JS chunks, CSS, Icons, Fonts): Stale-While-Revalidate with guaranteed Response
   const isStaticAsset =
     url.pathname.startsWith("/assets/") ||
     url.pathname.startsWith("/icons/") ||
@@ -84,27 +105,40 @@ self.addEventListener("fetch", (event) => {
 
   if (isStaticAsset) {
     event.respondWith(
-      caches.match(request).then((cachedResponse) => {
-        const networkFetch = fetch(request)
+      (async () => {
+        const cache = await caches.open(CACHE_NAME);
+        const cachedResponse = await cache.match(request);
+
+        // Fetch in background to update cache
+        const fetchPromise = fetch(request)
           .then((networkResponse) => {
             if (networkResponse && networkResponse.status === 200) {
-              const responseClone = networkResponse.clone();
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(request, responseClone);
-              });
+              cache.put(request, networkResponse.clone()).catch(() => {});
             }
             return networkResponse;
           })
-          .catch(() => cachedResponse);
+          .catch(() => null);
 
-        return cachedResponse || networkFetch;
-      }),
+        // If we have a cached response, return it immediately
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+
+        // Otherwise wait for network response
+        const networkResponse = await fetchPromise;
+        if (networkResponse) {
+          return networkResponse;
+        }
+
+        // If network failed and nothing in cache, return a valid fallback Response object (never undefined)
+        return new Response("", { status: 408, statusText: "Request Timed Out" });
+      })(),
     );
     return;
   }
 
-  // 5. Default: Network first with cache fallback
-  event.respondWith(fetch(request).catch(() => caches.match(request)));
+  // 6. For all other requests, DO NOT call event.respondWith!
+  // Allowing other requests to pass through untouched prevents "Failed to convert value to 'Response'" errors.
 });
 
 // Message listener to trigger instant update
