@@ -186,13 +186,25 @@ class WhisperHandler(BaseHTTPRequestHandler):
         """Handle CORS preflight"""
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "POST, GET, HEAD, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
+    def do_HEAD(self):
+        """Handle HEAD requests for uptime monitoring (UptimeRobot, Render health checks)"""
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
     def do_GET(self):
-        if self.path == "/health":
-            self._send_json({"status": "ok", "model": MODEL_SIZE, "device": DEVICE})
+        if self.path in ("/", "/health", "/ping"):
+            self._send_json({
+                "status": "ok",
+                "service": "Trounce FastWhisper Sidecar",
+                "model": MODEL_SIZE,
+                "device": DEVICE,
+            })
         else:
             self._send_json({"error": "Not found"}, 404)
 

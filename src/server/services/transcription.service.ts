@@ -8,7 +8,11 @@ export interface TranscriptionResult {
 }
 
 /** URL of the optional FastWhisper Python sidecar */
-const rawSidecarUrl = (process.env.WHISPER_SIDECAR_URL ?? "http://127.0.0.1:8765").trim();
+const defaultSidecarUrl =
+  process.env.NODE_ENV === "production"
+    ? "https://t-trounce.onrender.com"
+    : "http://127.0.0.1:8765";
+const rawSidecarUrl = (process.env.WHISPER_SIDECAR_URL || defaultSidecarUrl).trim();
 const WHISPER_SIDECAR_URL = rawSidecarUrl.replace(/\/+$/, "");
 const IS_LOCAL_DEV =
   WHISPER_SIDECAR_URL.includes("127.0.0.1") || WHISPER_SIDECAR_URL.includes("localhost");
@@ -67,7 +71,7 @@ export class TranscriptionService {
       return null;
     }
     try {
-      const pingTimeout = isLocalhost ? 300 : 4000;
+      const pingTimeout = isLocalhost ? 300 : 8000;
       const ping = await fetch(`${WHISPER_SIDECAR_URL}/health`, {
         signal: AbortSignal.timeout(pingTimeout),
       });
@@ -86,7 +90,7 @@ export class TranscriptionService {
   static async transcribeWithLocalWhisper(
     audioBuffer: Buffer,
     mimeType: string = "audio/wav",
-    timeoutMs: number = 4000,
+    timeoutMs: number = 45000,
     promptContext?: string,
   ): Promise<{ text: string; confidence: number } | null> {
     try {
