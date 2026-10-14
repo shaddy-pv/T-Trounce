@@ -17,8 +17,10 @@ import { AssignmentService, type AssignmentPublic } from "./services/assignment.
 import { MessageService } from "./services/message.service";
 import { TranscriptionService } from "./services/transcription.service";
 import { FlagService } from "./services/flag.service";
+import { SettingsService, type AppSettings } from "./services/settings.service";
 
 import { LoginInputSchema } from "./validators/auth.validator";
+import { UpdateAppSettingsInputSchema } from "./validators/settings.validator";
 import { CreateUserInputSchema, DeleteUserInputSchema } from "./validators/user.validator";
 import {
   CreateAssignmentInputSchema,
@@ -432,6 +434,7 @@ export const streamTranscribeChunkFn = createServerFn({ method: "POST" })
       data.mimeType,
       data.promptContext,
       data.sequence,
+      data.isFinal, // true = post-recording accuracy pass; false = live chunk (legacy)
     );
   });
 
@@ -502,3 +505,24 @@ export const resolveFlagFn = createServerFn({ method: "POST" })
     });
     return { success };
   });
+
+/**
+ * Server Function: Get global application settings
+ */
+export const getAppSettingsFn = createServerFn({ method: "GET" }).handler(
+  async (): Promise<AppSettings> => {
+    return await SettingsService.getSettings();
+  },
+);
+
+/**
+ * Server Function: Update global application settings (Protected: Faculty/Admin)
+ */
+export const updateAppSettingsFn = createServerFn({ method: "POST" })
+  .middleware([teacherOnlyMiddleware])
+  .validator((input: unknown) => UpdateAppSettingsInputSchema.parse(input))
+  .handler(async ({ data, context }): Promise<AppSettings> => {
+    const user = (context as { user: SessionPayload }).user;
+    return await SettingsService.updateSettings(data, user.userId);
+  });
+

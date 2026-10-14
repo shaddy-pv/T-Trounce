@@ -50,7 +50,7 @@ LANG = os.environ.get("WHISPER_LANG", "en")
 try:
     from faster_whisper import WhisperModel  # type: ignore
 
-    cpu_threads = int(os.environ.get("WHISPER_CPU_THREADS", min(4, os.cpu_count() or 1)))
+    cpu_threads = int(os.environ.get("WHISPER_CPU_THREADS", min(8, os.cpu_count() or 4)))
     log.info(f"Loading faster-whisper model: '{MODEL_SIZE}' on {DEVICE} (threads={cpu_threads}) ...")
     _model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type="int8", cpu_threads=cpu_threads)
     log.info(f"Model '{MODEL_SIZE}' loaded and ready.")
@@ -69,6 +69,11 @@ _model_lock = threading.Lock()
 # ──────────────────────────────────────────────
 # Transcription helper
 # ──────────────────────────────────────────────
+DEFAULT_INITIAL_PROMPT = (
+    "Verbatim transcript of spoken English speech drill. Accurate words and natural phrasing without hallucinations."
+)
+
+
 def transcribe_audio_bytes(audio_bytes: bytes, mime: str = "audio/wav", prompt: str = "") -> dict:
     """
     Write audio bytes to a temp file, run faster-whisper, return transcript dict.
@@ -91,26 +96,31 @@ def transcribe_audio_bytes(audio_bytes: bytes, mime: str = "audio/wav", prompt: 
         tmp.write(audio_bytes)
         tmp_path = tmp.name
 
-    # Only pass clean topic context if provided, never fake names or instruction text (which causes hallucinations)
-    clean_prompt = prompt.strip() if prompt and prompt.strip() else None
+    # Prime Whisper decoder with Indian English hints + assignment topic context
+    if prompt and prompt.strip():
+        initial_prompt = f"{DEFAULT_INITIAL_PROMPT} Topic context: {prompt.strip()}"
+    else:
+        initial_prompt = DEFAULT_INITIAL_PROMPT
 
     try:
         with _model_lock:
-            # beam_size=1 (greedy decoding) provides ultra-fast sub-second streaming inference on CPU
+            # beam_size=5 provides high-accuracy inference and resolves phonetic ambiguities (e.g. 'sat down' vs 'satan')
             segments, info = _model.transcribe(
                 tmp_path,
                 language=LANG,
-                beam_size=1,
-                best_of=1,
+                beam_size=5,
+                best_of=5,
+                patience=1.0,
                 temperature=0.0,
-                initial_prompt=clean_prompt,
-                repetition_penalty=1.15,
+                initial_prompt=initial_prompt,
+                repetition_penalty=1.05,
                 no_speech_threshold=0.6,
-                hallucination_silence_threshold=2.0,
+                compression_ratio_threshold=2.4,
+                hallucination_silence_threshold=0.8,
                 vad_filter=True,          # skip silent parts automatically
                 vad_parameters=dict(
-                    min_silence_duration_ms=300,
-                    speech_pad_ms=100,
+                    min_silence_duration_ms=250,
+                    speech_pad_ms=200,    # 200ms padding ensures initial/trailing phonemes are never clipped
                 ),
                 word_timestamps=False,
                 condition_on_previous_text=False,  # each chunk is independent
@@ -161,13 +171,16 @@ class WhisperHandler(BaseHTTPRequestHandler):
         pass
 
     def _send_json(self, data: dict, status: int = 200):
-        body = json.dumps(data).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            body = json.dumps(data).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, OSError):
+            pass
 
     def do_OPTIONS(self):
         """Handle CORS preflight"""

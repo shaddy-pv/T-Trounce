@@ -17,6 +17,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ProgressRouteImport } from './routes/progress'
 import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as UsersRouteImport } from './routes/users'
 import { Route as PracticeIndexRouteImport } from './routes/practice.index'
 import { Route as PracticeModuleIdRouteImport } from './routes/practice.$moduleId'
@@ -64,6 +65,11 @@ const ReportsRoute = ReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UsersRoute = UsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof ProfileRoute
   '/progress': typeof ProgressRoute
   '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
   '/users': typeof UsersRoute
   '/practice/$moduleId': typeof PracticeModuleIdRoute
   '/result/$attemptId': typeof ResultAttemptIdRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByTo {
   '/profile': typeof ProfileRoute
   '/progress': typeof ProgressRoute
   '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
   '/users': typeof UsersRoute
   '/practice/$moduleId': typeof PracticeModuleIdRoute
   '/result/$attemptId': typeof ResultAttemptIdRoute
@@ -138,6 +146,7 @@ export interface FileRoutesById {
   '/profile': typeof ProfileRoute
   '/progress': typeof ProgressRoute
   '/reports': typeof ReportsRoute
+  '/settings': typeof SettingsRoute
   '/users': typeof UsersRoute
   '/practice/$moduleId': typeof PracticeModuleIdRoute
   '/result/$attemptId': typeof ResultAttemptIdRoute
@@ -156,6 +165,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/progress'
     | '/reports'
+    | '/settings'
     | '/users'
     | '/practice/$moduleId'
     | '/result/$attemptId'
@@ -172,6 +182,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/progress'
     | '/reports'
+    | '/settings'
     | '/users'
     | '/practice/$moduleId'
     | '/result/$attemptId'
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/progress'
     | '/reports'
+    | '/settings'
     | '/users'
     | '/practice/$moduleId'
     | '/result/$attemptId'
@@ -205,6 +217,7 @@ export interface RootRouteChildren {
   ProfileRoute: typeof ProfileRoute
   ProgressRoute: typeof ProgressRoute
   ReportsRoute: typeof ReportsRoute
+  SettingsRoute: typeof SettingsRoute
   UsersRoute: typeof UsersRoute
   PracticeModuleIdRoute: typeof PracticeModuleIdRoute
   ResultAttemptIdRoute: typeof ResultAttemptIdRoute
@@ -271,6 +284,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReportsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/users': {
       id: '/users'
       path: '/users'
@@ -325,6 +345,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileRoute: ProfileRoute,
   ProgressRoute: ProgressRoute,
   ReportsRoute: ReportsRoute,
+  SettingsRoute: SettingsRoute,
   UsersRoute: UsersRoute,
   PracticeModuleIdRoute: PracticeModuleIdRoute,
   ResultAttemptIdRoute: ResultAttemptIdRoute,

@@ -376,23 +376,23 @@ function StudentDetail() {
                           </span>
                           {isDone ? (
                             isLateSubmission ? (
-                              <span className="inline-flex items-center gap-1 rounded bg-[#E2A33C]/20 px-2 py-0.5 num text-[10px] font-semibold text-[#E2A33C]">
-                                <Clock size={10} /> Late ·{" "}
-                                {compScore !== null ? `${compScore}%` : "Done"}
+                              <span className="inline-flex items-center gap-1 rounded-full border border-[#E2A33C]/30 bg-[#E2A33C]/15 px-2.5 py-0.5 num text-[10px] font-semibold text-[#E2A33C] whitespace-nowrap shrink-0">
+                                <Clock size={10} className="shrink-0" /> Late
+                                {compScore !== null ? ` (${compScore}%)` : ""}
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 rounded bg-[#3FB8AF]/20 px-2 py-0.5 num text-[10px] font-semibold text-[#3FB8AF]">
-                                <Check size={10} /> Done
-                                {compScore !== null ? ` · ${compScore}%` : ""}
+                              <span className="inline-flex items-center gap-1 rounded-full border border-[#3FB8AF]/30 bg-[#3FB8AF]/15 px-2.5 py-0.5 num text-[10px] font-semibold text-[#3FB8AF] whitespace-nowrap shrink-0">
+                                <Check size={10} className="shrink-0" /> Done
+                                {compScore !== null ? ` (${compScore}%)` : ""}
                               </span>
                             )
                           ) : isOverduePending ? (
-                            <span className="inline-flex items-center gap-1 rounded bg-[#E2A33C]/20 px-2 py-0.5 num text-[10px] font-semibold text-[#E2A33C]">
-                              <Clock size={10} /> Overdue
+                            <span className="inline-flex items-center gap-1 rounded-full border border-[#E2A33C]/30 bg-[#E2A33C]/15 px-2.5 py-0.5 num text-[10px] font-semibold text-[#E2A33C] whitespace-nowrap shrink-0">
+                              <Clock size={10} className="shrink-0" /> Overdue
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded bg-ink-800 px-2 py-0.5 num text-[10px] font-medium text-tertiary-warm">
-                              <Clock size={10} /> Pending
+                            <span className="inline-flex items-center gap-1 rounded-full bg-ink-800 px-2.5 py-0.5 num text-[10px] font-medium text-tertiary-warm whitespace-nowrap shrink-0">
+                              <Clock size={10} className="shrink-0" /> Pending
                             </span>
                           )}
                         </div>

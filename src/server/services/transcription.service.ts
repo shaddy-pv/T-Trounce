@@ -55,8 +55,25 @@ const COMMON_FILLERS = new Set([
 
 export class TranscriptionService {
   /**
-   * Try the local FastWhisper sidecar first.
-   * Returns null if the sidecar is not reachable (not installed / not running).
+   * Determine the fastest available Whisper endpoint:
+   * 1. Local sidecar on http://127.0.0.1:8765 if running (instant sub-second response)
+   * 2. Configured WHISPER_SIDECAR_URL (production / remote Render sidecar)
+   */
+  static async resolveWhisperUrl(): Promise<string> {
+    try {
+      const ping = await fetch("http://127.0.0.1:8765/health", {
+        signal: AbortSignal.timeout(500),
+      });
+      if (ping.ok) return "http://127.0.0.1:8765";
+    } catch {
+      // Local sidecar not running
+    }
+    return WHISPER_SIDECAR_URL;
+  }
+
+  /**
+   * Try the FastWhisper sidecar first (local if running, else remote Render).
+   * Returns null if the sidecar is not reachable.
    * Aborts after `timeoutMs` ms so it fails fast and does not block the caller.
    */
   static async transcribeWithLocalWhisper(
@@ -66,12 +83,13 @@ export class TranscriptionService {
     promptContext?: string,
   ): Promise<{ text: string; confidence: number } | null> {
     try {
+      const targetUrl = await this.resolveWhisperUrl();
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       const base64Audio = audioBuffer.toString("base64");
       const cleanMime = mimeType.split(";")[0] || "audio/wav";
 
-      const response = await fetch(`${WHISPER_SIDECAR_URL}/transcribe`, {
+      const response = await fetch(`${targetUrl}/transcribe`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -99,40 +117,62 @@ export class TranscriptionService {
   }
 
   /**
-   * Transcribe an audio chunk in real time during continuous microphone streaming.
-   * Priority: FastWhisper sidecar (8s timeout) → Gemini → OpenAI Whisper
+   * Transcribe an audio recording for accuracy correction.
+   *
+   * Supports two modes via the `isFinal` flag:
+   *   - isFinal=true  → Post-recording full-audio pass (45s timeout).
+   *     Uses a verbatim transcription prompt tuned for Indian-accented English/Hinglish.
+   *     This is the "accuracy correction" path that replaces the Web Speech API live result.
+   *   - isFinal=false → Legacy live-chunk mode (kept for compatibility).
+   *
+   * Engine priority: FastWhisper sidecar → Gemini 2.0 Flash → OpenAI Whisper
    */
   static async transcribeChunk(
     audioBuffer: Buffer,
     mimeType: string = "audio/wav",
     promptContext?: string,
     sequence: number = 0,
+    isFinal: boolean = false,
   ): Promise<{ text: string; confidence: number; isFinal: boolean }> {
     const geminiKey = process.env.GEMINI_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
 
-    // 0. Try FastWhisper sidecar first (25s timeout — Render inference takes 10-15s for WAV)
-    const local = await this.transcribeWithLocalWhisper(audioBuffer, mimeType, 25000, promptContext);
+    // Longer timeout for post-recording full-audio pass (allows thorough inference)
+    const whisperTimeoutMs = isFinal ? 45000 : 15000;
+
+    // 0. FastWhisper sidecar — instant on local dev, CPU inference on remote
+    const local = await this.transcribeWithLocalWhisper(
+      audioBuffer,
+      mimeType,
+      whisperTimeoutMs,
+      promptContext,
+    );
     if (local) return { text: local.text, confidence: local.confidence, isFinal: true };
 
-    // 1. Try Google Gemini Flash Multimodal Streaming Chunk Transcription
+    // 1. Google Gemini 2.0 Flash — primary cloud engine
+    // gemini-2.0-flash is faster and more accurate than 1.5-flash for audio transcription
     if (geminiKey) {
       try {
         const base64Audio = audioBuffer.toString("base64");
         const cleanMime = mimeType.split(";")[0] || "audio/wav";
 
+        // Post-recording mode: thorough verbatim prompt for maximum accuracy
+        // Live-chunk mode: simpler prompt for speed
+        const transcriptionPrompt = isFinal
+          ? `You are an expert verbatim speech-to-text engine for Indian-accented English and Hinglish. Transcribe ALL spoken words in this audio EXACTLY as spoken, including filler words (um, uh, er, ah, hmm, matlab, yaani, haina), repetitions, and false starts. Do NOT correct grammar or add punctuation unless spoken. Return ONLY the raw spoken words as a single paragraph. If silent or unintelligible, return empty string. Context: "${promptContext || "English speaking practice"}"`
+          : `Transcribe the spoken speech in this audio verbatim, including filler words (um, uh, matlab, hmm). Return only the recognized words as plain text. If silent, return empty.`;
+
         const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(isFinal ? 30000 : 12000),
             body: JSON.stringify({
               contents: [
                 {
                   parts: [
-                    {
-                      text: `Transcribe the spoken speech in this continuous audio chunk snippet verbatim, including any spoken filler words (such as um, uh, matlab, hmm). Return only the recognized words as raw text with no markdown formatting. If silence or no speech is present, return an empty response.`,
-                    },
+                    { text: transcriptionPrompt },
                     {
                       inline_data: {
                         mime_type: cleanMime,
@@ -142,21 +182,34 @@ export class TranscriptionService {
                   ],
                 },
               ],
+              generationConfig: {
+                temperature: 0, // deterministic output for transcription
+                maxOutputTokens: 2048,
+              },
             }),
           },
         );
 
         if (response.ok) {
           const data = await response.json();
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-          return { text, confidence: 0.95, isFinal: true };
+          const text = ((data.candidates?.[0]?.content?.parts?.[0]?.text) ?? "").trim();
+          if (text.length > 0) {
+            return { text, confidence: 0.95, isFinal: true };
+          }
+        } else {
+          const errText = await response.text().catch(() => "");
+          console.warn(
+            "[TranscriptionService.transcribeChunk] Gemini error:",
+            response.status,
+            errText,
+          );
         }
       } catch (err) {
         console.warn("[TranscriptionService.transcribeChunk] Gemini note:", err);
       }
     }
 
-    // 2. Try OpenAI Whisper Streaming Chunk Transcription
+    // 2. OpenAI Whisper — secondary cloud engine fallback
     if (openaiKey) {
       try {
         const formData = new FormData();
@@ -164,20 +217,24 @@ export class TranscriptionService {
         formData.append("file", blob, `chunk-${sequence}.wav`);
         formData.append("model", "whisper-1");
         formData.append("language", "en");
+        if (promptContext && isFinal) formData.append("prompt", promptContext);
 
         const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
           method: "POST",
           headers: { Authorization: `Bearer ${openaiKey}` },
           body: formData,
+          signal: AbortSignal.timeout(isFinal ? 30000 : 12000),
         });
 
         if (response.ok) {
           const data = await response.json();
-          const text = data.text?.trim() || "";
-          return { text, confidence: 0.92, isFinal: true };
+          const text = (data.text ?? "").trim();
+          if (text.length > 0) {
+            return { text, confidence: 0.92, isFinal: true };
+          }
         }
       } catch (err) {
-        console.warn("[TranscriptionService.transcribeChunk] Whisper note:", err);
+        console.warn("[TranscriptionService.transcribeChunk] OpenAI Whisper note:", err);
       }
     }
 

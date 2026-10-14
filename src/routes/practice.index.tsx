@@ -384,27 +384,31 @@ function PracticeHubBody() {
                         : "border-[#3FB8AF]/30 bg-ink-900/90 hover:border-[#3FB8AF]"
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`num text-[11px] uppercase tracking-wider ${isLate && !isDone ? "text-[#E2A33C]" : "text-[#3FB8AF]"}`}
-                      >
-                        {a.targetSession} · {a.targetBatch} batch
+                  <div className="flex items-center justify-between gap-3">
+                    <span
+                      className={`num text-[11px] uppercase tracking-wider font-medium ${isLate && !isDone ? "text-[#E2A33C]" : "text-[#3FB8AF]"}`}
+                    >
+                      {a.targetSession} · {a.targetBatch} batch
+                    </span>
+
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <span className="num text-[11px] text-tertiary-warm">
+                        {a.difficulty} · {a.durationSec}s
                       </span>
                       {isDone ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-[#3FB8AF]/20 px-2 py-0.5 num text-[11px] font-semibold text-[#3FB8AF]">
-                          <Check size={11} /> Done
-                          {completionPct !== null ? ` · ${completionPct}%` : ""}
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#3FB8AF]/30 bg-[#3FB8AF]/15 px-2.5 py-0.5 num text-[11px] font-medium text-[#3FB8AF] whitespace-nowrap shrink-0">
+                          <Check size={11} className="shrink-0" />
+                          <span>Done</span>
+                          {completionPct !== null && (
+                            <span className="opacity-90 font-semibold">({completionPct}%)</span>
+                          )}
                         </span>
                       ) : isLate ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-[#E2A33C]/20 px-2 py-0.5 num text-[11px] font-semibold text-[#E2A33C]">
-                          <Clock size={11} /> Overdue
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E2A33C]/30 bg-[#E2A33C]/15 px-2.5 py-0.5 num text-[11px] font-medium text-[#E2A33C] whitespace-nowrap shrink-0">
+                          <Clock size={11} className="shrink-0" /> Overdue
                         </span>
                       ) : null}
                     </div>
-                    <span className="num text-[11px] text-tertiary-warm">
-                      {a.difficulty} · {a.durationSec}s
-                    </span>
                   </div>
 
                   <h3 className="display mt-1.5 text-[16px] text-primary-warm">{a.title}</h3>
@@ -480,25 +484,25 @@ function PracticeHubBody() {
                     : "border-hairline bg-ink-900 hover:border-[#9C9388]"
                 }`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[15px] text-primary-warm">{m.title}</p>
-                      {isDone && (
-                        <span className="inline-flex items-center gap-1 rounded bg-[#3FB8AF]/15 px-2 py-0.5 num text-[10px] font-semibold text-[#3FB8AF]">
-                          <Check size={10} /> Done
-                          {completionPct !== null ? ` · ${completionPct}%` : ""}
-                        </span>
-                      )}
-                    </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[15px] font-medium text-primary-warm truncate">{m.title}</p>
                     <p className="mt-1 text-[12px] text-secondary-warm">
                       {m.difficulty} · {m.durationSec}s
                     </p>
                   </div>
-                  <div className="shrink-0 flex items-center gap-2">
+
+                  <div className="shrink-0 flex items-center gap-3">
                     {isDone ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 opacity-80">
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#3FB8AF]/30 bg-[#3FB8AF]/15 px-2.5 py-0.5 num text-[11px] font-medium text-[#3FB8AF] whitespace-nowrap shrink-0">
+                          <Check size={11} className="shrink-0" />
+                          <span>Done</span>
+                          {completionPct !== null && (
+                            <span className="opacity-90 font-semibold">({completionPct}%)</span>
+                          )}
+                        </span>
+                        <div className="hidden sm:block w-16 opacity-80">
                           <Waveform
                             mode="thumbnail"
                             data={
@@ -512,12 +516,12 @@ function PracticeHubBody() {
                             height={22}
                           />
                         </div>
-                        <span className="num text-[11px] text-[#3FB8AF] group-hover:underline">
+                        <span className="num text-[11px] text-[#3FB8AF] group-hover:underline whitespace-nowrap">
                           Review →
                         </span>
                       </div>
                     ) : (
-                      <span className="num text-[11px] uppercase tracking-wider text-[#3FB8AF]">
+                      <span className="num text-[11px] uppercase tracking-wider text-[#3FB8AF] whitespace-nowrap">
                         start →
                       </span>
                     )}

@@ -16,6 +16,7 @@ import { fetchModuleByIdFn, fetchStudentAttemptsFn, saveAttemptFn } from "@/serv
 import { useAudioRecorder } from "@/features/practice/hooks/useAudioRecorder";
 import { analyzeAudioSignal, FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
 import { useUser } from "@/lib/auth";
+import { useLiveTranscriptionSetting } from "@/lib/app-settings";
 import type { AttemptResult, Module } from "@/types";
 
 export const Route = createFileRoute("/practice/$moduleId")({
@@ -79,26 +80,33 @@ function PracticeModuleSession() {
   const [audioDuration, setAudioDuration] = useState(existingAttempt?.durationSec || 30);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
+  const { enabled: liveTranscriptionEnabled } = useLiveTranscriptionSetting();
+
   const {
     phase,
     formattedTime,
     stream,
     micError,
-    sttError,
+    sttUnavailable,
     finalTranscript,
     interimTranscript,
     transcript,
     volumeLevel,
     liveFillerCount,
     livePauseCount,
-    sttAvailable,
+    isRefiningTranscript,
     audioDevices,
     selectedDeviceId,
     setSelectedDeviceId,
     startRecording,
     stopRecording,
     setPhase,
-  } = useAudioRecorder();
+    isLiveTranscriptionEnabled,
+    liveEngine,
+  } = useAudioRecorder({
+    promptContext: mod.prompt || mod.title,
+    enableLiveTranscription: liveTranscriptionEnabled,
+  });
 
   // Auth guard
   useEffect(() => {
@@ -517,10 +525,12 @@ function PracticeModuleSession() {
               <div className="flex h-[140px] flex-col items-center justify-center space-y-3 text-center">
                 <span className="size-7 animate-spin rounded-full border-2 border-[#3FB8AF] border-t-transparent" />
                 <p className="text-[14px] font-medium text-primary-warm">
-                  Finalizing acoustic diagnostic...
+                  {isRefiningTranscript ? "Refining transcript with AI..." : "Finalizing acoustic diagnostic..."}
                 </p>
                 <p className="num text-[12px] text-secondary-warm">
-                  {formattedTime} recorded · calculating clarity and fluency
+                  {isRefiningTranscript
+                    ? "Gemini is correcting your transcript for accuracy"
+                    : `${formattedTime} recorded · calculating clarity and fluency`}
                 </p>
               </div>
             ) : (
@@ -538,22 +548,46 @@ function PracticeModuleSession() {
           </div>
         </section>
 
-        {/* Real-time Live Speech-to-Text Transcript Display */}
-        {(phase === "recording" || phase === "uploading") && (
+        {/* Real-time Live Speech-to-Text Transcript Display (when enabled by Admin) */}
+        {isLiveTranscriptionEnabled && (phase === "recording" || phase === "uploading") && (
           <section className="mt-4 px-5">
             <div className="rounded-[12px] border border-[#3FB8AF]/40 bg-ink-900/90 p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-2 text-[12px] font-semibold text-[#3FB8AF]">
                   <span
-                    className={`size-2 rounded-full bg-[#3FB8AF] ${phase === "recording" ? "animate-pulse" : ""}`}
+                    className={`size-2 rounded-full ${
+                      isRefiningTranscript
+                        ? "bg-[#3FB8AF] animate-ping"
+                        : sttUnavailable
+                          ? "bg-[#E2A33C]"
+                          : phase === "recording"
+                            ? "bg-[#3FB8AF] animate-pulse"
+                            : "bg-[#3FB8AF]"
+                    }`}
                   />
-                  Live Speech Transcription:
+                  {isRefiningTranscript
+                    ? "Refining Transcript:"
+                    : liveEngine === "local-whisper"
+                      ? "Live AI Transcription (Local):"
+                      : "Live Transcription:"}
                 </span>
-                <span className="num text-[11px] text-tertiary-warm">real-time STT</span>
+                <span className="num text-[11px] text-tertiary-warm">
+                  {isRefiningTranscript
+                    ? "AI accuracy pass"
+                    : liveEngine === "local-whisper"
+                      ? "⚡ Local Whisper (0% cloud lag)"
+                      : sttUnavailable
+                        ? "STT offline · saved after stop"
+                        : "real-time STT"}
+                </span>
               </div>
+
               <p className="mt-2 min-h-[48px] rounded-lg border border-hairline/60 bg-ink-950/80 p-3 text-[14px] leading-relaxed text-primary-warm">
-                {transcript ? (
-                  <span>{transcript}</span>
+                {sttUnavailable && phase === "recording" && !finalTranscript && !transcript && liveEngine !== "local-whisper" ? (
+                  <span className="italic text-[#E2A33C]/90 text-[13px]">
+                    Live captions unavailable — Google speech servers unreachable on this network.
+                    Your recording is being captured and will be accurately transcribed when you stop.
+                  </span>
                 ) : finalTranscript || interimTranscript ? (
                   <span>
                     {finalTranscript && <span>{finalTranscript}</span>}
@@ -561,36 +595,59 @@ function PracticeModuleSession() {
                       <span className="ml-1 italic text-[#3FB8AF]/90">{interimTranscript}</span>
                     )}
                   </span>
-                ) : sttError === "network" ? (
-                  <span className="italic text-[#E2A33C]/80 text-[13px]">
-                    ⚠ Speech recognition network error. Check your internet connection — browser STT requires Google servers. Whisper server transcript will still be saved.
-                  </span>
-                ) : sttAvailable === false ? (
-                  <span className="italic text-[#E2A33C]/80 text-[13px]">
-                    Live transcription is not supported in this browser. Use Chrome or Edge for
-                    real-time voice-to-text.
-                  </span>
+                ) : transcript ? (
+                  <span>{transcript}</span>
                 ) : (
                   <span className="italic text-tertiary-warm">
-                    Listening to your voice... Speak your response clearly into your microphone.
+                    Listening... speak your response clearly into your microphone.
                   </span>
                 )}
               </p>
 
-              {/* Real-time live filler and pause counts */}
+              {/* Live filler and pause counters */}
               <div className="mt-2.5 flex items-center justify-between border-t border-hairline/40 pt-2 text-[11px] text-secondary-warm">
                 <div className="flex items-center gap-3">
                   <span className="flex items-center gap-1.5">
                     <span className="size-2 rounded-full bg-[#E2A33C]" />
                     <span className="num font-semibold text-[#E2A33C]">{liveFillerCount}</span>{" "}
-                    fillers detected
+                    fillers
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="size-2 rounded-full bg-[#6B645A]" />
-                    <span className="num font-semibold text-secondary-warm">
-                      {livePauseCount}
-                    </span>{" "}
+                    <span className="num font-semibold text-secondary-warm">{livePauseCount}</span>{" "}
                     pauses
+                  </span>
+                </div>
+                <span className="num text-[10px] text-tertiary-warm">Live Voice Diagnostic</span>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Clean Voice Capture Indicator (when live STT is disabled by Admin) */}
+        {!isLiveTranscriptionEnabled && phase === "recording" && (
+          <section className="mt-4 px-5">
+            <div className="rounded-[12px] border border-hairline/60 bg-ink-900/80 p-3.5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-[12px] font-medium text-secondary-warm">
+                  <span className="size-2 rounded-full bg-[#3FB8AF] animate-pulse" />
+                  Recording Audio Signal...
+                </span>
+                <span className="num text-[11px] text-tertiary-warm">Microphone Active</span>
+              </div>
+              <p className="mt-1 text-[13px] text-tertiary-warm">
+                Speak clearly at your natural pace. Your full response will be transcribed by AI upon stopping.
+              </p>
+              {/* Live filler and pause counters */}
+              <div className="mt-2.5 flex items-center justify-between border-t border-hairline/40 pt-2 text-[11px] text-secondary-warm">
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-[#E2A33C]" />
+                    <span className="num font-semibold text-[#E2A33C]">{liveFillerCount}</span> fillers
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-[#6B645A]" />
+                    <span className="num font-semibold text-secondary-warm">{livePauseCount}</span> pauses
                   </span>
                 </div>
                 <span className="num text-[10px] text-tertiary-warm">Live Voice Diagnostic</span>
@@ -624,7 +681,7 @@ function PracticeModuleSession() {
           {phase === "uploading" && (
             <div className="flex w-full items-center justify-center gap-2 rounded-[12px] border border-hairline bg-ink-900 py-4 text-[14px] text-secondary-warm">
               <span className="size-2 animate-ping rounded-full bg-[#3FB8AF]" />
-              Analyzing Speech & Uploading...
+              {isRefiningTranscript ? "Refining with AI..." : "Analyzing Speech & Uploading..."}
             </div>
           )}
         </section>

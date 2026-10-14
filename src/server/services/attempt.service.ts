@@ -111,10 +111,8 @@ export class AttemptService {
             );
 
             // 2. Full-Audio Server-side Transcription & Diagnostic Pipeline
-            // Even if live streaming provided a preliminary transcript, speech can finish before
-            // streaming chunks catch up. Always run Whisper on the full complete audio recording in the background
-            // so 100% of spoken words (including trailing sentences) are captured verbatim.
-            transcriptionStatus = "processing";
+            // If client already provided a transcript, mark completed immediately; otherwise process in background
+            transcriptionStatus = transcript.length > 0 ? "completed" : "processing";
             const capturedAttemptId = payload.result.id;
             const promptContext = payload.result.prompt;
             const currentAudioId = audioId;
@@ -153,21 +151,24 @@ export class AttemptService {
                           `[AttemptService] Full-audio transcript saved for attempt ${capturedAttemptId}: "${fullText.slice(0, 80)}..."`,
                         );
                       }
-                    } else {
-                      const bgDb = await getDb();
-                      if (bgDb) {
-                        await bgDb
-                          .collection<AttemptDoc>("attempts")
-                          .updateOne(
-                            { id: capturedAttemptId },
-                            { $set: { transcriptionStatus: "completed" } },
-                          );
-                      }
                     }
                   }
                 }
               } catch (bgErr) {
                 console.warn("[AttemptService] Background transcription note:", bgErr);
+              } finally {
+                // Ensure transcriptionStatus is never left stuck in 'processing'
+                try {
+                  const bgDb = await getDb();
+                  if (bgDb) {
+                    await bgDb.collection<AttemptDoc>("attempts").updateOne(
+                      { id: capturedAttemptId, transcriptionStatus: "processing" },
+                      { $set: { transcriptionStatus: "completed", updatedAt: new Date() } },
+                    );
+                  }
+                } catch {
+                  /* ignore cleanup update error */
+                }
               }
             })();
           } catch (storageErr) {

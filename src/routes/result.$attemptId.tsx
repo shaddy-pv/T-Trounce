@@ -75,22 +75,22 @@ function ResultPage() {
     }
   }, [loaderData?.result]);
 
-  // Real-time poller: if background Whisper is still transcribing full audio, poll until completed
+  // Real-time poller: if background transcription is still generating transcript, poll until completed
   useEffect(() => {
-    if (result.transcriptionStatus === "completed") return;
+    if (result.transcriptionStatus === "completed" || (result.transcript && result.transcript.trim().length > 0)) return;
 
     let cancelled = false;
     let pollCount = 0;
     const interval = setInterval(async () => {
       pollCount++;
-      if (pollCount > 15 || cancelled) {
+      if (pollCount > 20 || cancelled) {
         clearInterval(interval);
         return;
       }
       try {
         const fresh = await fetchAttemptByIdFn({ data: result.id });
         if (fresh && !cancelled) {
-          if (fresh.transcriptionStatus === "completed") {
+          if (fresh.transcriptionStatus === "completed" || (fresh.transcript && fresh.transcript.trim().length > 0)) {
             setResult(fresh);
             clearInterval(interval);
           }
@@ -104,7 +104,7 @@ function ResultPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [result.id, result.transcriptionStatus]);
+  }, [result.id, result.transcriptionStatus, result.transcript]);
 
   // Audio Playback state
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -359,11 +359,12 @@ function ResultPage() {
                     ✓ Updated & re-scored
                   </span>
                 )}
-                {(!result.transcript || result.transcriptionStatus === "processing") &&
+                {!result.transcript &&
+                  result.transcriptionStatus === "processing" &&
                   !isEditingTranscript && (
                     <span className="flex items-center gap-1.5 text-[11px] font-medium text-[#3FB8AF]">
                       <Loader2 size={12} className="animate-spin" />
-                      Transcribing with Whisper...
+                      Transcribing audio...
                     </span>
                   )}
                 {!isEditingTranscript && (

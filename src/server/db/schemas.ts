@@ -140,3 +140,11 @@ export interface FlagDoc {
   resolvedAt?: Date;
   resolvedBy?: string;
 }
+
+export interface AppSettingsDoc {
+  _id?: ObjectId;
+  id: "global";
+  liveTranscriptionEnabled: boolean;
+  updatedAt: Date;
+  updatedBy?: string;
+}

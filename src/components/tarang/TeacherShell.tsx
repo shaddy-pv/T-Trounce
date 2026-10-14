@@ -10,6 +10,7 @@ import {
   BarChart3,
   Users,
   ExternalLink,
+  Settings,
 } from "lucide-react";
 import { useUser, clearUser } from "@/lib/auth";
 
@@ -37,6 +38,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
         router.preloadRoute({ to: "/flags" }).catch(() => {});
         router.preloadRoute({ to: "/reports" }).catch(() => {});
         router.preloadRoute({ to: "/users" }).catch(() => {});
+        router.preloadRoute({ to: "/settings" }).catch(() => {});
       }, 150);
       return () => clearTimeout(timer);
     }
@@ -48,6 +50,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
     { to: "/flags", label: "Flags", icon: Flag },
     { to: "/reports", label: "Reports", icon: BarChart3 },
     { to: "/users", label: "Users & Teachers", icon: Users },
+    { to: "/settings", label: "Settings", icon: Settings },
     ...(user?.isAdmin ? [{ to: "/practice", label: "Student View", icon: ExternalLink }] : []),
   ];
 
