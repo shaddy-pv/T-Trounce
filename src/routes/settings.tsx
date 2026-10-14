@@ -397,7 +397,7 @@ function SettingsPage() {
                 Real-time browser speech recognition for Indian English dialects.
               </p>
               <div className="mt-3 flex items-center gap-1.5 text-[11px]">
-                {enabled ? (
+                {liveEnabled ? (
                   <span className="text-[#3FB8AF] flex items-center gap-1">
                     <CheckCircle2 size={13} /> Enabled via toggle
                   </span>
