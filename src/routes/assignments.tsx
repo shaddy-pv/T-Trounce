@@ -181,12 +181,12 @@ function AssignmentsPage() {
     <TeacherShell>
       <div className="space-y-6">
         {/* Header Strip */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-hairline pb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-hairline pb-6">
           <div>
             <p className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
               Curriculum & Assignment Broadcast
             </p>
-            <h1 className="display mt-1 text-[26px]">Targeted Homework & Drills</h1>
+            <h1 className="display mt-1 text-[22px] sm:text-[26px]">Targeted Homework & Drills</h1>
             <p className="mt-1 text-[13px] text-secondary-warm">
               Give targeted speech homework specifically to students in your session and batch.
             </p>
@@ -198,7 +198,7 @@ function AssignmentsPage() {
               setFormError(null);
               setSuccessMessage(null);
             }}
-            className="flex items-center gap-2"
+            className="flex items-center justify-center gap-2 w-full sm:w-auto whitespace-nowrap shrink-0 cursor-pointer"
           >
             <Plus size={16} />
             Assign New Homework
@@ -214,7 +214,7 @@ function AssignmentsPage() {
             </span>
             <button
               onClick={() => setSuccessMessage(null)}
-              className="text-[12px] underline hover:text-white"
+              className="text-[12px] underline hover:text-white cursor-pointer"
             >
               Dismiss
             </button>
@@ -222,54 +222,56 @@ function AssignmentsPage() {
         )}
 
         {/* Session & Batch Filter */}
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-[12px] border border-hairline bg-ink-900 p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="flex items-center gap-1.5 num text-[11px] uppercase tracking-wider text-tertiary-warm mr-2">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 rounded-[12px] border border-hairline bg-ink-900 p-3 sm:p-4">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <span className="flex items-center gap-1.5 num text-[11px] uppercase tracking-wider text-tertiary-warm mr-1 sm:mr-2 shrink-0">
               <Layers size={13} className="text-[#3FB8AF]" />
               Target Session:
             </span>
             {[
-              { id: "all", label: "All Sessions" },
-              { id: "summer", label: "Summer" },
-              { id: "autumn", label: "Autumn" },
-              { id: "winter", label: "Winter" },
-              { id: "spring", label: "Spring" },
+              { id: "all", label: "All Sessions", shortLabel: "All" },
+              { id: "summer", label: "Summer", shortLabel: "Summer" },
+              { id: "autumn", label: "Autumn", shortLabel: "Autumn" },
+              { id: "winter", label: "Winter", shortLabel: "Winter" },
+              { id: "spring", label: "Spring", shortLabel: "Spring" },
             ].map((ses) => (
               <button
                 key={ses.id}
                 onClick={() => setSelectedSession(ses.id)}
                 className={
-                  "rounded-[6px] px-3 py-1 text-[12px] transition " +
+                  "rounded-[6px] px-2.5 sm:px-3 py-1 text-[12px] whitespace-nowrap shrink-0 transition cursor-pointer " +
                   (selectedSession === ses.id
                     ? "bg-[#3FB8AF] text-[#100E0C] font-semibold"
                     : "text-secondary-warm hover:bg-ink-800 hover:text-primary-warm")
                 }
               >
-                {ses.label}
+                <span className="hidden sm:inline">{ses.label}</span>
+                <span className="sm:hidden">{ses.shortLabel}</span>
               </button>
             ))}
           </div>
 
-          <div className="flex items-center gap-1 border-t sm:border-t-0 sm:border-l border-hairline pt-2 sm:pt-0 sm:pl-4">
-            <span className="num text-[11px] uppercase tracking-wider text-tertiary-warm mr-2">
+          <div className="flex flex-wrap items-center gap-1.5 border-t md:border-t-0 md:border-l border-hairline pt-2.5 md:pt-0 md:pl-4">
+            <span className="num text-[11px] uppercase tracking-wider text-tertiary-warm mr-1 sm:mr-2 shrink-0">
               Batch:
             </span>
             {[
-              { id: "all", label: "All" },
-              { id: "morning", label: "Morning" },
-              { id: "evening", label: "Evening" },
+              { id: "all", label: "All", shortLabel: "All" },
+              { id: "morning", label: "Morning", shortLabel: "Morning" },
+              { id: "evening", label: "Evening", shortLabel: "Evening" },
             ].map((bt) => (
               <button
                 key={bt.id}
                 onClick={() => setSelectedBatch(bt.id)}
                 className={
-                  "rounded-[6px] px-2.5 py-1 text-[12px] transition " +
+                  "rounded-[6px] px-2.5 py-1 text-[12px] whitespace-nowrap shrink-0 transition cursor-pointer " +
                   (selectedBatch === bt.id
                     ? "bg-[#E2A33C] text-[#100E0C] font-semibold"
                     : "text-secondary-warm hover:bg-ink-800 hover:text-primary-warm")
                 }
               >
-                {bt.label}
+                <span className="hidden sm:inline">{bt.label}</span>
+                <span className="sm:hidden">{bt.shortLabel}</span>
               </button>
             ))}
           </div>
@@ -317,25 +319,27 @@ function AssignmentsPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between border-t border-hairline pt-3 text-[12px] text-tertiary-warm">
-                  <span className="flex items-center gap-1.5">
-                    <Calendar size={13} />
-                    Due:{" "}
-                    {a.dueDate
-                      ? !isNaN(new Date(a.dueDate).getTime())
-                        ? new Date(a.dueDate).toLocaleString("en-US", {
-                            weekday: "short",
-                            month: "short",
-                            day: "numeric",
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })
-                        : a.dueDate
-                      : "Not set"}
+                <div className="mt-4 flex items-center justify-between gap-2 border-t border-hairline pt-3 text-[12px] text-tertiary-warm">
+                  <span className="flex items-center gap-1.5 truncate min-w-0">
+                    <Calendar size={13} className="shrink-0" />
+                    <span className="truncate">
+                      Due:{" "}
+                      {a.dueDate
+                        ? !isNaN(new Date(a.dueDate).getTime())
+                          ? new Date(a.dueDate).toLocaleString("en-US", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })
+                          : a.dueDate
+                        : "Not set"}
+                    </span>
                   </span>
                   <button
                     onClick={() => handleDeleteAssignment(a.id, a.title)}
-                    className="flex items-center gap-1 text-alert-rust hover:underline"
+                    className="flex items-center gap-1 text-alert-rust hover:underline shrink-0 whitespace-nowrap cursor-pointer ml-2"
                   >
                     <Trash2 size={12} />
                     Delete
@@ -455,7 +459,7 @@ function AssignmentsPage() {
                 </div>
 
                 {/* Difficulty, Duration, and Due Date */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[11px] uppercase tracking-wider text-tertiary-warm">
                       Difficulty
@@ -465,7 +469,7 @@ function AssignmentsPage() {
                       onChange={(e) =>
                         setDifficulty(e.target.value as "Beginner" | "Intermediate" | "Advanced")
                       }
-                      className="mt-1.5 h-10 w-full rounded-[8px] border border-hairline bg-ink-900 px-2 text-[12px] text-primary-warm focus:border-[#3FB8AF] focus:outline-none"
+                      className="mt-1.5 h-10 w-full rounded-[8px] border border-hairline bg-ink-900 px-3 text-[13px] text-primary-warm focus:border-[#3FB8AF] focus:outline-none"
                     >
                       <option value="Beginner">Beginner</option>
                       <option value="Intermediate">Intermediate</option>
@@ -480,7 +484,7 @@ function AssignmentsPage() {
                     <select
                       value={durationSec}
                       onChange={(e) => setDurationSec(Number(e.target.value))}
-                      className="mt-1.5 h-10 w-full rounded-[8px] border border-hairline bg-ink-900 px-2 text-[12px] text-primary-warm focus:border-[#3FB8AF] focus:outline-none"
+                      className="mt-1.5 h-10 w-full rounded-[8px] border border-hairline bg-ink-900 px-3 text-[13px] text-primary-warm focus:border-[#3FB8AF] focus:outline-none"
                     >
                       <option value={30}>30s</option>
                       <option value={60}>60s</option>
@@ -497,21 +501,26 @@ function AssignmentsPage() {
                       type="datetime-local"
                       value={dueDate}
                       onChange={(e) => setDueDate(e.target.value)}
-                      className="mt-1.5 h-10 w-full rounded-[8px] border border-hairline bg-ink-900 px-2 text-[12px] text-primary-warm focus:border-[#3FB8AF] focus:outline-none"
+                      className="mt-1.5 h-10 w-full rounded-[8px] border border-hairline bg-ink-900 px-3 text-[13px] text-primary-warm focus:border-[#3FB8AF] focus:outline-none"
                     />
                   </div>
                 </div>
 
                 {/* Actions */}
-                <div className="mt-6 flex items-center justify-end gap-3 pt-2">
+                <div className="mt-6 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 sm:gap-3 pt-2">
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(false)}
-                    className="h-10 rounded-[8px] px-4 text-[13px] text-secondary-warm hover:text-primary-warm"
+                    className="h-10 w-full sm:w-auto rounded-[8px] px-4 text-[13px] text-secondary-warm hover:text-primary-warm cursor-pointer"
                   >
                     Cancel
                   </button>
-                  <TButton type="submit" size="md" disabled={isSubmitting}>
+                  <TButton
+                    type="submit"
+                    size="md"
+                    disabled={isSubmitting}
+                    className="w-full sm:w-auto whitespace-nowrap cursor-pointer"
+                  >
                     {isSubmitting ? "Broadcasting..." : "Broadcast Homework"}
                   </TButton>
                 </div>

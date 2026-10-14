@@ -189,13 +189,15 @@ function setupCanvas(canvas: HTMLCanvasElement) {
 
 function drawLive(canvas: HTMLCanvasElement, buf: number[], bars: number) {
   const { ctx, w, h } = setupCanvas(canvas);
+  if (w <= 0 || h <= 0 || bars <= 0) return;
   const gap = 2;
-  const barW = (w - gap * (bars - 1)) / bars;
+  const barW = Math.max(1, (w - gap * (bars - 1)) / bars);
   const mid = h / 2;
   for (let i = 0; i < bars; i++) {
     const v = buf[i] ?? 0;
     const bh = Math.max(2, v * h * 0.9);
     const x = i * (barW + gap);
+    if (x > w) break;
     ctx.fillStyle = v > 0.04 ? COLOR_LIVE : COLOR_REST;
     roundRect(ctx, x, mid - bh / 2, barW, bh, Math.min(2, barW / 2));
     ctx.fill();
@@ -210,9 +212,11 @@ function drawStatic(
   mode: WaveformMode,
 ) {
   const { ctx, w, h } = setupCanvas(canvas);
-  const n = Math.min(bars, data.length);
+  if (w <= 0 || h <= 0 || !data.length) return;
   const gap = mode === "thumbnail" ? 1 : 2;
-  const barW = (w - gap * (n - 1)) / n;
+  const maxPossibleBars = Math.max(1, Math.floor((w + gap) / (1 + gap)));
+  const n = Math.min(bars, data.length, maxPossibleBars);
+  const barW = Math.max(1, (w - gap * (n - 1)) / n);
   const mid = h / 2;
   const revealCount = Math.floor(n * progress + 0.0001);
   for (let i = 0; i < n; i++) {
@@ -221,6 +225,7 @@ function drawStatic(
     const v = seg.v;
     const bh = Math.max(mode === "thumbnail" ? 1.5 : 2, v * h * 0.9);
     const x = i * (barW + gap);
+    if (x > w) break;
     let color: string = COLOR_REST;
     if (revealed) {
       color =
@@ -240,7 +245,13 @@ function roundRect(
   h: number,
   r: number,
 ) {
-  const rr = Math.min(r, w / 2, h / 2);
+  if (w <= 0 || h <= 0) return;
+  const maxR = Math.max(0, Math.min(w / 2, h / 2));
+  const rr = Math.max(0, Math.min(r, maxR));
+  if (rr === 0) {
+    ctx.rect(x, y, w, h);
+    return;
+  }
   ctx.beginPath();
   ctx.moveTo(x + rr, y);
   ctx.arcTo(x + w, y, x + w, y + h, rr);

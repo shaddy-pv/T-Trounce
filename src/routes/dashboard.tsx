@@ -97,29 +97,29 @@ function Dashboard() {
   return (
     <TeacherShell>
       {/* Header strip */}
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-hairline pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-hairline pb-6">
         <div>
           <p className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
             batch signal health
           </p>
-          <h1 className="display mt-2 text-[28px]">
+          <h1 className="display mt-1 text-[24px] sm:text-[28px]">
             {filteredStudents.length} active students
-            <span className="num ml-3 text-[14px] font-normal text-secondary-warm">
-              · {flagged.length} need attention · {totalActiveToday} recorded today
-            </span>
           </h1>
+          <p className="num mt-1 text-[13px] text-secondary-warm">
+            {flagged.length} need attention · {totalActiveToday} recorded today
+          </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           <Link
             to="/assignments"
-            className="inline-flex h-10 items-center gap-2 rounded-[4px] border border-hairline bg-ink-900 px-4 text-[13px] font-medium text-primary-warm transition hover:border-[#3FB8AF]"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-[4px] border border-hairline bg-ink-900 px-3.5 sm:px-4 text-[13px] font-medium text-primary-warm transition hover:border-[#3FB8AF] whitespace-nowrap shrink-0"
           >
             <BookOpen size={14} className="text-[#3FB8AF]" />
             Give Homework
           </Link>
           <Link
             to="/reports"
-            className="inline-flex h-10 items-center gap-2 rounded-[4px] bg-[#3FB8AF] px-4 text-[13px] font-medium text-[#100E0C] transition hover:brightness-110"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-[4px] bg-[#3FB8AF] px-3.5 sm:px-4 text-[13px] font-medium text-[#100E0C] transition hover:brightness-110 whitespace-nowrap shrink-0"
           >
             <Send size={14} />
             Generate reports
@@ -128,54 +128,56 @@ function Dashboard() {
       </div>
 
       {/* Session & Batch Selector Bar */}
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[8px] border border-hairline bg-ink-900 px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="flex items-center gap-1.5 num text-[11px] uppercase tracking-wider text-tertiary-warm mr-2">
+      <div className="mt-6 flex flex-col md:flex-row md:items-center justify-between gap-3.5 rounded-[8px] border border-hairline bg-ink-900 p-3 sm:px-4 sm:py-3">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <span className="flex items-center gap-1.5 num text-[11px] uppercase tracking-wider text-tertiary-warm mr-1 sm:mr-2 shrink-0">
             <Layers size={13} className="text-[#3FB8AF]" />
             Session:
           </span>
           {[
-            { id: "all", label: "All Sessions" },
-            { id: "summer", label: "Summer (Apr–Jun)" },
-            { id: "autumn", label: "Autumn (Jul–Sep)" },
-            { id: "winter", label: "Winter (Oct–Dec)" },
-            { id: "spring", label: "Spring (Jan–Mar)" },
+            { id: "all", label: "All Sessions", shortLabel: "All" },
+            { id: "summer", label: "Summer (Apr–Jun)", shortLabel: "Summer" },
+            { id: "autumn", label: "Autumn (Jul–Sep)", shortLabel: "Autumn" },
+            { id: "winter", label: "Winter (Oct–Dec)", shortLabel: "Winter" },
+            { id: "spring", label: "Spring (Jan–Mar)", shortLabel: "Spring" },
           ].map((ses) => (
             <button
               key={ses.id}
               onClick={() => setSelectedSession(ses.id)}
               className={
-                "rounded-[6px] px-2.5 py-1 text-[12px] transition " +
+                "rounded-[6px] px-2.5 py-1 text-[12px] whitespace-nowrap shrink-0 transition cursor-pointer " +
                 (selectedSession === ses.id
                   ? "bg-[#3FB8AF] text-[#100E0C] font-semibold"
                   : "text-secondary-warm hover:bg-ink-800 hover:text-primary-warm")
               }
             >
-              {ses.label}
+              <span className="hidden sm:inline">{ses.label}</span>
+              <span className="sm:hidden">{ses.shortLabel}</span>
             </button>
           ))}
         </div>
 
-        <div className="flex items-center gap-1 border-t sm:border-t-0 sm:border-l border-hairline pt-2 sm:pt-0 sm:pl-4">
-          <span className="num text-[11px] uppercase tracking-wider text-tertiary-warm mr-2">
+        <div className="flex flex-wrap items-center gap-1.5 border-t md:border-t-0 md:border-l border-hairline pt-2.5 md:pt-0 md:pl-4">
+          <span className="num text-[11px] uppercase tracking-wider text-tertiary-warm mr-1 sm:mr-2 shrink-0">
             Batch:
           </span>
           {[
-            { id: "all", label: "All Batches" },
-            { id: "morning", label: "Morning" },
-            { id: "evening", label: "Evening" },
+            { id: "all", label: "All Batches", shortLabel: "All" },
+            { id: "morning", label: "Morning", shortLabel: "Morning" },
+            { id: "evening", label: "Evening", shortLabel: "Evening" },
           ].map((bt) => (
             <button
               key={bt.id}
               onClick={() => setSelectedBatch(bt.id)}
               className={
-                "rounded-[6px] px-2.5 py-1 text-[12px] transition " +
+                "rounded-[6px] px-2.5 py-1 text-[12px] whitespace-nowrap shrink-0 transition cursor-pointer " +
                 (selectedBatch === bt.id
                   ? "bg-[#E2A33C] text-[#100E0C] font-semibold"
                   : "text-secondary-warm hover:bg-ink-800 hover:text-primary-warm")
               }
             >
-              {bt.label}
+              <span className="hidden sm:inline">{bt.label}</span>
+              <span className="sm:hidden">{bt.shortLabel}</span>
             </button>
           ))}
         </div>

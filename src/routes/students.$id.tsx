@@ -193,34 +193,40 @@ function StudentDetail() {
       </Link>
 
       {/* Profile Header Dossier */}
-      <div className="mt-4 flex flex-wrap items-end justify-between gap-4 border-b border-hairline pb-6">
+      <div className="mt-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-hairline pb-6">
         <div className="flex items-center gap-4">
-          <StatusDot status={s.status} className="size-3.5" />
+          <StatusDot status={s.status} className="size-3.5 shrink-0" />
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <p className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
                 complete student profile dossier
               </p>
-              <span className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#3FB8AF]/40 bg-[#3FB8AF]/15 px-2.5 py-0.5 text-[11px] font-semibold text-[#3FB8AF]">
+              <span className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#3FB8AF]/40 bg-[#3FB8AF]/15 px-2.5 py-0.5 text-[11px] font-semibold text-[#3FB8AF] whitespace-nowrap">
                 <Layers size={11} />
                 {sessionLabel} · {batchLabel} Batch
               </span>
             </div>
-            <h1 className="display mt-1 text-[30px] text-primary-warm">{s.name}</h1>
+            <h1 className="display mt-1 text-[26px] sm:text-[30px] text-primary-warm">{s.name}</h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <TButton
             variant="secondary"
             surface="console"
             size="sm"
             onClick={() => setMessageOpen(true)}
+            className="whitespace-nowrap shrink-0 cursor-pointer"
           >
             <MessageSquare size={14} />
             Direct Note
           </TButton>
-          <TButton surface="console" size="sm" onClick={sendParentReport}>
+          <TButton
+            surface="console"
+            size="sm"
+            onClick={sendParentReport}
+            className="whitespace-nowrap shrink-0 cursor-pointer"
+          >
             <Send size={14} />
             {reportSent ? "Report Sent" : "Share parent report"}
           </TButton>
@@ -236,7 +242,7 @@ function StudentDetail() {
       />
 
       {/* Top Metric Cards: Homework + Overall Signal */}
-      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4">
         <div className="rounded-[12px] border border-hairline bg-ink-900 p-4">
           <div className="flex items-center justify-between">
             <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">
@@ -289,22 +295,23 @@ function StudentDetail() {
 
       {/* Main Switchable Tabs Navigation */}
       <div className="mt-10">
-        <div className="flex items-center justify-between border-b border-hairline pb-3">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-hairline pb-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <button
               onClick={() => setActiveTab("homework")}
-              className={`flex items-center gap-2 rounded-[8px] px-4 py-2 text-[14px] font-semibold transition cursor-pointer ${
+              className={`flex items-center gap-2 rounded-[8px] px-3.5 sm:px-4 py-2 text-[13px] sm:text-[14px] font-semibold transition cursor-pointer whitespace-nowrap ${
                 activeTab === "homework"
                   ? "bg-[#3FB8AF] text-[#100E0C] shadow-md shadow-[#3FB8AF]/20"
                   : "bg-ink-900 text-secondary-warm hover:text-primary-warm hover:bg-ink-800 border border-hairline"
               }`}
             >
               <BookOpen size={16} />
-              Assigned Homework (Latest Submissions)
+              <span>Assigned Homework</span>
+              <span className="hidden md:inline font-normal opacity-90">(Latest Submissions)</span>
             </button>
             <button
               onClick={() => setActiveTab("retakes")}
-              className={`flex items-center gap-2 rounded-[8px] px-4 py-2 text-[14px] font-semibold transition cursor-pointer ${
+              className={`flex items-center gap-2 rounded-[8px] px-3.5 sm:px-4 py-2 text-[13px] sm:text-[14px] font-semibold transition cursor-pointer whitespace-nowrap ${
                 activeTab === "retakes"
                   ? "bg-[#E2A33C] text-[#100E0C] shadow-md shadow-[#E2A33C]/20"
                   : "bg-ink-900 text-secondary-warm hover:text-primary-warm hover:bg-ink-800 border border-hairline"
@@ -315,7 +322,7 @@ function StudentDetail() {
             </button>
           </div>
 
-          <span className="num text-[12px] text-tertiary-warm hidden sm:inline-block">
+          <span className="num text-[12px] text-tertiary-warm shrink-0">
             {rawAttempts.length} total audio recordings
           </span>
         </div>

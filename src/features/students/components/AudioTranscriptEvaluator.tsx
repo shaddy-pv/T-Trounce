@@ -336,29 +336,29 @@ export function AudioTranscriptEvaluator({
 
       {/* Spoken Transcript Evaluation */}
       <div className="mt-5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div className="flex items-center gap-2">
-            <FileText size={14} className="text-[#3FB8AF]" />
+            <FileText size={14} className="text-[#3FB8AF] shrink-0" />
             <span className="num text-[11px] uppercase tracking-wider text-secondary-warm font-semibold">
-              Spoken Transcript & Clarity Analysis
+              Spoken Transcript & Clarity
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
             <div className="flex items-center gap-2 num text-[11px] text-tertiary-warm">
               <span className="flex items-center gap-1">
-                <span className="size-2 rounded-full bg-alert-amber" />
+                <span className="size-2 rounded-full bg-alert-amber shrink-0" />
                 {attempt.fillerCount ?? 0} fillers
               </span>
               <span className="flex items-center gap-1">
-                <span className="size-2 rounded-full bg-alert-rust" />
+                <span className="size-2 rounded-full bg-alert-rust shrink-0" />
                 {attempt.pauseCount ?? 0} pauses
               </span>
             </div>
 
             <button
               onClick={handleCopyTranscript}
-              className="inline-flex items-center gap-1 rounded bg-ink-800/80 px-2 py-1 text-[11px] text-secondary-warm hover:text-primary-warm transition"
+              className="inline-flex items-center gap-1 rounded bg-ink-800/80 px-2 py-1 text-[11px] text-secondary-warm hover:text-primary-warm transition shrink-0 whitespace-nowrap cursor-pointer"
               title="Copy verbatim transcript to clipboard"
             >
               {copied ? <Check size={12} className="text-[#3FB8AF]" /> : <Copy size={12} />}
@@ -398,7 +398,7 @@ export function AudioTranscriptEvaluator({
       <div className="mt-5 rounded-[10px] border border-[#3FB8AF]/30 bg-[#3FB8AF]/5 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <MessageSquare size={14} className="text-[#3FB8AF]" />
+            <MessageSquare size={14} className="text-[#3FB8AF] shrink-0" />
             <span className="num text-[11px] uppercase tracking-wider font-semibold text-primary-warm">
               Teacher Feedback
             </span>
@@ -415,18 +415,18 @@ export function AudioTranscriptEvaluator({
           homework screen.
         </p>
 
-        <div className="mt-3 flex flex-col sm:flex-row gap-2">
+        <div className="mt-3 flex flex-col sm:flex-row gap-2.5">
           <textarea
             rows={2}
             value={feedbackText}
             onChange={(e) => setFeedbackText(e.target.value)}
             placeholder="e.g. Great pace and articulation! Try pausing briefly before introducing your second point."
-            className="flex-1 rounded-[8px] border border-hairline bg-ink-950 p-3 text-[13px] text-primary-warm placeholder:text-tertiary-warm focus:border-[#3FB8AF] focus:outline-none resize-none"
+            className="w-full flex-1 rounded-[8px] border border-hairline bg-ink-950 p-3 text-[13px] text-primary-warm placeholder:text-tertiary-warm focus:border-[#3FB8AF] focus:outline-none resize-none"
           />
           <button
             onClick={handleSaveFeedback}
             disabled={isSavingFeedback || !feedbackText.trim()}
-            className="inline-flex items-center justify-center gap-1.5 rounded-[8px] bg-[#3FB8AF] px-4 py-2 text-[13px] font-semibold text-[#100E0C] transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 self-end sm:self-auto"
+            className="inline-flex items-center justify-center gap-1.5 rounded-[8px] bg-[#3FB8AF] px-4 py-2.5 sm:py-2 text-[13px] font-semibold text-[#100E0C] transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 w-full sm:w-auto whitespace-nowrap"
           >
             <Send size={13} />
             {isSavingFeedback ? "Saving..." : "Save Feedback"}

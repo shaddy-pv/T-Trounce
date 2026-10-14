@@ -130,11 +130,11 @@ function ReportsPage() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[320px_1fr]">
         {/* Roster list */}
-        <div className="rounded-[4px] border border-hairline">
+        <div className="rounded-[4px] border border-hairline overflow-hidden">
           <div className="border-b border-hairline px-3 py-2 num text-[10px] uppercase tracking-[0.14em] text-tertiary-warm">
             roster · {studentRoster.length} students
           </div>
-          <ul>
+          <ul className="max-h-[240px] lg:max-h-[580px] overflow-y-auto">
             {studentRoster.map((r, i) => {
               const active = r.id === selectedId;
               const sent = sentIds.includes(r.id);
@@ -150,13 +150,15 @@ function ReportsPage() {
                     }
                   >
                     <StatusDot status={r.status} />
-                    <span className="flex-1">{r.name}</span>
+                    <span className="flex-1 truncate">{r.name}</span>
                     {sent ? (
-                      <span className="num inline-flex items-center gap-1 text-[11px] text-[#3FB8AF]">
+                      <span className="num inline-flex items-center gap-1 text-[11px] text-[#3FB8AF] shrink-0">
                         <Check size={12} /> sent
                       </span>
                     ) : (
-                      <span className="num text-[11px] text-tertiary-warm">{r.scorePct}%</span>
+                      <span className="num text-[11px] text-tertiary-warm shrink-0">
+                        {r.scorePct}%
+                      </span>
                     )}
                   </button>
                 </li>
@@ -167,7 +169,7 @@ function ReportsPage() {
 
         {/* Preview pane */}
         <div>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
             <p className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
               preview · what the parent sees
             </p>
@@ -181,12 +183,23 @@ function ReportsPage() {
 
           <ParentReportCard student={s} report={currentReport} />
 
-          <div className="mt-4 flex items-center justify-center gap-3">
-            <TButton variant="secondary" surface="console" size="md" onClick={printReport}>
+          <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-center gap-3 w-full max-w-[420px] mx-auto">
+            <TButton
+              variant="secondary"
+              surface="console"
+              size="md"
+              onClick={printReport}
+              className="w-full sm:w-auto whitespace-nowrap cursor-pointer"
+            >
               <Printer size={14} />
               Print / Save PDF
             </TButton>
-            <TButton surface="console" size="md" onClick={sendWhatsApp}>
+            <TButton
+              surface="console"
+              size="md"
+              onClick={sendWhatsApp}
+              className="w-full sm:w-auto whitespace-nowrap cursor-pointer"
+            >
               <Send size={14} />
               {sentIds.includes(s.id) ? "Resend to WhatsApp" : "Share via WhatsApp"}
             </TButton>

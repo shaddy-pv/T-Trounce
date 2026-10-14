@@ -36,7 +36,7 @@ export const TButton = forwardRef<HTMLButtonElement, TButtonProps>(function TBut
     <button
       ref={ref}
       className={cn(
-        "inline-flex items-center justify-center gap-2 transition-[background-color,border-color,color,filter] duration-150 ease-out disabled:opacity-40 disabled:pointer-events-none select-none",
+        "inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0 transition-[background-color,border-color,color,filter] duration-150 ease-out disabled:opacity-40 disabled:pointer-events-none select-none",
         radius,
         sizing,
         variants[variant],

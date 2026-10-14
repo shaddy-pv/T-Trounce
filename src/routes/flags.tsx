@@ -191,9 +191,9 @@ function FlagsPage() {
 
       {/* SECTION 1: STUDENT HELP REQUESTS */}
       <section className="mt-8">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
           <p className="num text-[11px] uppercase tracking-[0.18em] text-[#E2A33C] flex items-center gap-1.5">
-            <HelpCircle size={13} />
+            <HelpCircle size={13} className="shrink-0" />
             Student Help Requests · {studentRequests.length}
           </p>
           <span className="text-[12px] text-tertiary-warm">Action required by teacher</span>
@@ -212,11 +212,11 @@ function FlagsPage() {
               return (
                 <div
                   key={flag.id}
-                  className="rounded-[12px] border border-[#E2A33C]/50 bg-ink-900 p-5 shadow-sm space-y-4"
+                  className="rounded-[12px] border border-[#E2A33C]/50 bg-ink-900 p-4 sm:p-5 shadow-sm space-y-4"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <StatusDot status="flagged" />
                         <Link
                           to="/students/$id"
@@ -225,7 +225,7 @@ function FlagsPage() {
                         >
                           {flag.studentName}
                         </Link>
-                        <span className="rounded bg-[#E2A33C]/20 px-2 py-0.5 num text-[10px] font-semibold text-[#E2A33C]">
+                        <span className="rounded bg-[#E2A33C]/20 px-2 py-0.5 num text-[10px] font-semibold text-[#E2A33C] whitespace-nowrap">
                           {flag.category || "Guidance Requested"}
                         </span>
                       </div>
@@ -235,11 +235,11 @@ function FlagsPage() {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       <Link
                         to="/students/$id"
                         params={{ id: flag.studentId }}
-                        className="rounded-[6px] border border-hairline px-3 py-1 text-[12px] text-secondary-warm hover:text-primary-warm hover:bg-ink-800"
+                        className="rounded-[6px] border border-hairline px-3 py-1.5 text-[12px] text-secondary-warm hover:text-primary-warm hover:bg-ink-800 whitespace-nowrap"
                       >
                         Dossier →
                       </Link>
@@ -266,14 +266,14 @@ function FlagsPage() {
                       >
                         {isPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
                       </button>
-                      <span className="text-[12px] text-secondary-warm flex-1">
+                      <span className="text-[12px] text-secondary-warm flex-1 truncate">
                         {isPlaying
                           ? "Playing student recording..."
                           : "Listen to student voice submission"}
                         {flag.attemptDurationSec ? ` (${flag.attemptDurationSec}s)` : ""}
                       </span>
                       {flag.scorePct !== undefined && (
-                        <span className="num text-[12px] font-semibold text-[#E2A33C]">
+                        <span className="num text-[12px] font-semibold text-[#E2A33C] shrink-0 whitespace-nowrap">
                           Score: {flag.scorePct}%
                         </span>
                       )}
@@ -281,7 +281,7 @@ function FlagsPage() {
                   ) : null}
 
                   {/* Reply and Resolve Bar */}
-                  <div className="pt-2 border-t border-hairline flex flex-wrap items-center gap-3">
+                  <div className="pt-2 border-t border-hairline flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
                     <input
                       type="text"
                       placeholder="Type guidance or feedback for student (sent to their messages)..."
@@ -289,14 +289,14 @@ function FlagsPage() {
                       onChange={(e) =>
                         setReplyNotes((prev) => ({ ...prev, [flag.id]: e.target.value }))
                       }
-                      className="flex-1 min-w-[240px] rounded-[8px] border border-hairline bg-ink-950 px-3 py-1.5 text-[12px] text-primary-warm placeholder:text-tertiary-warm focus:border-[#3FB8AF] focus:outline-hidden"
+                      className="w-full sm:flex-1 min-w-0 rounded-[8px] border border-hairline bg-ink-950 px-3 py-2 text-[12px] text-primary-warm placeholder:text-tertiary-warm focus:border-[#3FB8AF] focus:outline-hidden"
                     />
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end">
                       <button
                         onClick={() => handleResolveFlag(flag.id, "resolved")}
                         disabled={isActing}
-                        className="inline-flex items-center gap-1.5 rounded-[8px] bg-[#3FB8AF] px-3.5 py-1.5 text-[12px] font-semibold text-[#100E0C] hover:brightness-110 transition cursor-pointer disabled:opacity-50"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-[8px] bg-[#3FB8AF] px-3.5 py-2 text-[12px] font-semibold text-[#100E0C] hover:brightness-110 transition cursor-pointer disabled:opacity-50 whitespace-nowrap shrink-0"
                       >
                         <Check size={13} />
                         {isActing ? "Saving..." : "Send Feedback & Resolve"}
@@ -304,7 +304,7 @@ function FlagsPage() {
                       <button
                         onClick={() => handleResolveFlag(flag.id, "dismissed")}
                         disabled={isActing}
-                        className="rounded-[8px] border border-hairline px-3 py-1.5 text-[12px] text-tertiary-warm hover:text-secondary-warm hover:bg-ink-800 transition cursor-pointer"
+                        className="rounded-[8px] border border-hairline px-3 py-2 text-[12px] text-tertiary-warm hover:text-secondary-warm hover:bg-ink-800 transition cursor-pointer whitespace-nowrap shrink-0"
                       >
                         Dismiss
                       </button>
@@ -319,9 +319,9 @@ function FlagsPage() {
 
       {/* SECTION 2: ACADEMIC ATTENTION & LOW SCORES */}
       <section className="mt-10">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
           <p className="num text-[11px] uppercase tracking-[0.18em] text-[#C1503B] flex items-center gap-1.5">
-            <AlertTriangle size={13} />
+            <AlertTriangle size={13} className="shrink-0" />
             Academic Alerts · {flaggedStudents.length}
           </p>
           <span className="text-[12px] text-tertiary-warm">
@@ -329,44 +329,54 @@ function FlagsPage() {
           </span>
         </div>
 
-        <div className="mt-3 overflow-hidden rounded-[8px] border border-[#C1503B]/60">
-          <table className="w-full text-[13px]">
-            <tbody>
-              {flaggedStudents.map((s, i) => (
-                <tr
+        {flaggedStudents.length === 0 ? (
+          <div className="mt-3 rounded-[8px] border border-[#C1503B]/40 bg-ink-900/60 px-4 py-6 text-center text-[13px] text-tertiary-warm">
+            No students currently flagged for low scores.
+          </div>
+        ) : (
+          <div className="mt-3">
+            {/* Mobile Card View (< sm) */}
+            <div className="sm:hidden space-y-3">
+              {flaggedStudents.map((s) => (
+                <div
                   key={s.id}
-                  className={
-                    "transition hover:bg-ink-900 " + (i > 0 ? "border-t border-hairline" : "")
-                  }
+                  className="rounded-[10px] border border-[#C1503B]/60 bg-ink-900 p-4 space-y-3"
                 >
-                  <td className="w-6 px-3 py-3">
-                    <StatusDot status="flagged" />
-                  </td>
-                  <td className="px-2 py-3">
-                    <Link
-                      to="/students/$id"
-                      params={{ id: s.id }}
-                      className="font-medium text-primary-warm hover:underline"
-                    >
-                      {s.name}
-                    </Link>
-                  </td>
-                  <td className="px-2 py-3 w-[180px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <StatusDot status="flagged" />
+                      <Link
+                        to="/students/$id"
+                        params={{ id: s.id }}
+                        className="font-medium text-primary-warm hover:underline truncate"
+                      >
+                        {s.name}
+                      </Link>
+                    </div>
+                    <span className="num text-[11px] text-secondary-warm shrink-0">
+                      {s.lastActive}
+                    </span>
+                  </div>
+
+                  <div className="rounded-[6px] bg-ink-950 p-2.5 space-y-2">
+                    <div className="flex items-center justify-between text-[12px]">
+                      <span className="num font-medium text-[#C1503B]">
+                        {s.flagReason ?? `${s.focus} · ${s.scorePct}%`}
+                      </span>
+                      <span className="num text-[11px] text-[#3FB8AF]">{s.scorePct}% score</span>
+                    </div>
                     <Waveform mode="thumbnail" data={s.waveform} height={20} />
-                  </td>
-                  <td className="num px-2 py-3 text-[#C1503B] font-medium">
-                    {s.flagReason ?? `${s.focus} · ${s.scorePct}%`}
-                  </td>
-                  <td className="num px-2 py-3 text-right text-secondary-warm">{s.lastActive}</td>
-                  <td className="px-3 py-3 text-right space-x-3">
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-hairline">
                     <button
                       onClick={() => sendNudge(s.id, s.name)}
                       disabled={actingId === s.id}
                       className={
-                        "inline-flex items-center gap-1 num text-[12px] cursor-pointer transition " +
+                        "inline-flex items-center gap-1.5 rounded-[6px] border border-hairline px-3 py-1.5 num text-[12px] cursor-pointer transition whitespace-nowrap " +
                         (nudgeSuccess[s.id]
-                          ? "text-[#3FB8AF] font-medium"
-                          : "text-[#E2A33C] hover:underline")
+                          ? "border-[#3FB8AF]/40 bg-[#3FB8AF]/15 text-[#3FB8AF] font-medium"
+                          : "text-[#E2A33C] hover:bg-ink-800")
                       }
                     >
                       {nudgeSuccess[s.id] ? (
@@ -384,7 +394,7 @@ function FlagsPage() {
                     <button
                       onClick={() => resolveStudentStatus(s.id)}
                       disabled={actingId === s.id}
-                      className="inline-flex items-center gap-1 num text-[12px] text-[#3FB8AF] hover:underline cursor-pointer"
+                      className="inline-flex items-center gap-1.5 rounded-[6px] border border-hairline px-3 py-1.5 num text-[12px] text-[#3FB8AF] hover:bg-ink-800 cursor-pointer whitespace-nowrap"
                     >
                       <Check size={12} />
                       Resolve
@@ -392,73 +402,155 @@ function FlagsPage() {
                     <Link
                       to="/students/$id"
                       params={{ id: s.id }}
-                      className="num text-[12px] text-tertiary-warm hover:text-primary-warm"
+                      className="rounded-[6px] border border-hairline px-3 py-1.5 num text-[12px] text-tertiary-warm hover:text-primary-warm hover:bg-ink-800 whitespace-nowrap"
                     >
                       Dossier →
                     </Link>
-                  </td>
-                </tr>
+                  </div>
+                </div>
               ))}
-              {flaggedStudents.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-[13px] text-tertiary-warm">
-                    No students currently flagged for low scores.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            {/* Desktop / Tablet Table View (>= sm) */}
+            <div className="hidden sm:block overflow-x-auto rounded-[8px] border border-[#C1503B]/60">
+              <table className="w-full min-w-[620px] text-[13px]">
+                <tbody>
+                  {flaggedStudents.map((s, i) => (
+                    <tr
+                      key={s.id}
+                      className={
+                        "transition hover:bg-ink-900 " + (i > 0 ? "border-t border-hairline" : "")
+                      }
+                    >
+                      <td className="w-6 px-3 py-3">
+                        <StatusDot status="flagged" />
+                      </td>
+                      <td className="px-2 py-3">
+                        <Link
+                          to="/students/$id"
+                          params={{ id: s.id }}
+                          className="font-medium text-primary-warm hover:underline"
+                        >
+                          {s.name}
+                        </Link>
+                      </td>
+                      <td className="px-2 py-3 w-[180px]">
+                        <Waveform mode="thumbnail" data={s.waveform} height={20} />
+                      </td>
+                      <td className="num px-2 py-3 text-[#C1503B] font-medium">
+                        {s.flagReason ?? `${s.focus} · ${s.scorePct}%`}
+                      </td>
+                      <td className="num px-2 py-3 text-right text-secondary-warm whitespace-nowrap">
+                        {s.lastActive}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <div className="flex items-center justify-end gap-3 whitespace-nowrap">
+                          <button
+                            onClick={() => sendNudge(s.id, s.name)}
+                            disabled={actingId === s.id}
+                            className={
+                              "inline-flex items-center gap-1 num text-[12px] cursor-pointer transition " +
+                              (nudgeSuccess[s.id]
+                                ? "text-[#3FB8AF] font-medium"
+                                : "text-[#E2A33C] hover:underline")
+                            }
+                          >
+                            {nudgeSuccess[s.id] ? (
+                              <>
+                                <Check size={12} />
+                                Nudged
+                              </>
+                            ) : (
+                              <>
+                                <BellRing size={12} />
+                                Nudge
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => resolveStudentStatus(s.id)}
+                            disabled={actingId === s.id}
+                            className="inline-flex items-center gap-1 num text-[12px] text-[#3FB8AF] hover:underline cursor-pointer"
+                          >
+                            <Check size={12} />
+                            Resolve
+                          </button>
+                          <Link
+                            to="/students/$id"
+                            params={{ id: s.id }}
+                            className="num text-[12px] text-tertiary-warm hover:text-primary-warm"
+                          >
+                            Dossier →
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* SECTION 3: INACTIVITY NUDGES */}
       <section className="mt-10 mb-12">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
           <p className="num text-[11px] uppercase tracking-[0.18em] text-[#E2A33C] flex items-center gap-1.5">
-            <BellRing size={13} />
+            <BellRing size={13} className="shrink-0" />
             Needs a Nudge · {nudgeStudents.length}
           </p>
           <span className="text-[12px] text-tertiary-warm">Inactive for &gt;2 days</span>
         </div>
 
-        <div className="mt-3 overflow-hidden rounded-[8px] border border-hairline">
-          <table className="w-full text-[13px]">
-            <tbody>
-              {nudgeStudents.map((s, i) => (
-                <tr
+        {nudgeStudents.length === 0 ? (
+          <div className="mt-3 rounded-[8px] border border-hairline bg-ink-900/60 px-4 py-6 text-center text-[13px] text-tertiary-warm">
+            No students currently pending a nudge.
+          </div>
+        ) : (
+          <div className="mt-3">
+            {/* Mobile Card View (< sm) */}
+            <div className="sm:hidden space-y-3">
+              {nudgeStudents.map((s) => (
+                <div
                   key={s.id}
-                  className={
-                    "transition hover:bg-ink-900 " + (i > 0 ? "border-t border-hairline" : "")
-                  }
+                  className="rounded-[10px] border border-hairline bg-ink-900 p-4 space-y-3"
                 >
-                  <td className="w-6 px-3 py-3">
-                    <StatusDot status="nudge" />
-                  </td>
-                  <td className="px-2 py-3">
-                    <Link
-                      to="/students/$id"
-                      params={{ id: s.id }}
-                      className="font-medium text-primary-warm hover:underline"
-                    >
-                      {s.name}
-                    </Link>
-                  </td>
-                  <td className="px-2 py-3 w-[180px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <StatusDot status="nudge" />
+                      <Link
+                        to="/students/$id"
+                        params={{ id: s.id }}
+                        className="font-medium text-primary-warm hover:underline truncate"
+                      >
+                        {s.name}
+                      </Link>
+                    </div>
+                    <span className="num text-[11px] text-secondary-warm shrink-0">
+                      {s.lastActive}
+                    </span>
+                  </div>
+
+                  <div className="rounded-[6px] bg-ink-950 p-2.5 space-y-2">
+                    <div className="flex items-center justify-between text-[12px]">
+                      <span className="num font-medium text-secondary-warm">
+                        {s.flagReason ?? `${s.focus} · ${s.scorePct}%`}
+                      </span>
+                      <span className="num text-[11px] text-[#3FB8AF]">{s.scorePct}% score</span>
+                    </div>
                     <Waveform mode="thumbnail" data={s.waveform} height={20} />
-                  </td>
-                  <td className="num px-2 py-3 text-secondary-warm">
-                    {s.flagReason ?? `${s.focus} · ${s.scorePct}%`}
-                  </td>
-                  <td className="num px-2 py-3 text-right text-secondary-warm">{s.lastActive}</td>
-                  <td className="px-3 py-3 text-right space-x-3">
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-hairline">
                     <button
                       onClick={() => sendNudge(s.id, s.name)}
                       disabled={actingId === s.id}
                       className={
-                        "inline-flex items-center gap-1 num text-[12px] cursor-pointer transition " +
+                        "inline-flex items-center gap-1.5 rounded-[6px] border border-hairline px-3 py-1.5 num text-[12px] cursor-pointer transition whitespace-nowrap " +
                         (nudgeSuccess[s.id]
-                          ? "text-[#3FB8AF] font-medium"
-                          : "text-[#E2A33C] hover:underline")
+                          ? "border-[#3FB8AF]/40 bg-[#3FB8AF]/15 text-[#3FB8AF] font-medium"
+                          : "text-[#E2A33C] hover:bg-ink-800")
                       }
                     >
                       {nudgeSuccess[s.id] ? (
@@ -476,7 +568,7 @@ function FlagsPage() {
                     <button
                       onClick={() => resolveStudentStatus(s.id)}
                       disabled={actingId === s.id}
-                      className="inline-flex items-center gap-1 num text-[12px] text-[#3FB8AF] hover:underline cursor-pointer"
+                      className="inline-flex items-center gap-1.5 rounded-[6px] border border-hairline px-3 py-1.5 num text-[12px] text-[#3FB8AF] hover:bg-ink-800 cursor-pointer whitespace-nowrap"
                     >
                       <Check size={12} />
                       Resolve
@@ -484,23 +576,95 @@ function FlagsPage() {
                     <Link
                       to="/students/$id"
                       params={{ id: s.id }}
-                      className="num text-[12px] text-tertiary-warm hover:text-primary-warm"
+                      className="rounded-[6px] border border-hairline px-3 py-1.5 num text-[12px] text-tertiary-warm hover:text-primary-warm hover:bg-ink-800 whitespace-nowrap"
                     >
                       Dossier →
                     </Link>
-                  </td>
-                </tr>
+                  </div>
+                </div>
               ))}
-              {nudgeStudents.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-[13px] text-tertiary-warm">
-                    No students currently pending a nudge.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            {/* Desktop / Tablet Table View (>= sm) */}
+            <div className="hidden sm:block overflow-x-auto rounded-[8px] border border-hairline">
+              <table className="w-full min-w-[620px] text-[13px]">
+                <tbody>
+                  {nudgeStudents.map((s, i) => (
+                    <tr
+                      key={s.id}
+                      className={
+                        "transition hover:bg-ink-900 " + (i > 0 ? "border-t border-hairline" : "")
+                      }
+                    >
+                      <td className="w-6 px-3 py-3">
+                        <StatusDot status="nudge" />
+                      </td>
+                      <td className="px-2 py-3">
+                        <Link
+                          to="/students/$id"
+                          params={{ id: s.id }}
+                          className="font-medium text-primary-warm hover:underline"
+                        >
+                          {s.name}
+                        </Link>
+                      </td>
+                      <td className="px-2 py-3 w-[180px]">
+                        <Waveform mode="thumbnail" data={s.waveform} height={20} />
+                      </td>
+                      <td className="num px-2 py-3 text-secondary-warm">
+                        {s.flagReason ?? `${s.focus} · ${s.scorePct}%`}
+                      </td>
+                      <td className="num px-2 py-3 text-right text-secondary-warm whitespace-nowrap">
+                        {s.lastActive}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <div className="flex items-center justify-end gap-3 whitespace-nowrap">
+                          <button
+                            onClick={() => sendNudge(s.id, s.name)}
+                            disabled={actingId === s.id}
+                            className={
+                              "inline-flex items-center gap-1 num text-[12px] cursor-pointer transition " +
+                              (nudgeSuccess[s.id]
+                                ? "text-[#3FB8AF] font-medium"
+                                : "text-[#E2A33C] hover:underline")
+                            }
+                          >
+                            {nudgeSuccess[s.id] ? (
+                              <>
+                                <Check size={12} />
+                                Nudged Today
+                              </>
+                            ) : (
+                              <>
+                                <BellRing size={12} />
+                                Send Nudge
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => resolveStudentStatus(s.id)}
+                            disabled={actingId === s.id}
+                            className="inline-flex items-center gap-1 num text-[12px] text-[#3FB8AF] hover:underline cursor-pointer"
+                          >
+                            <Check size={12} />
+                            Resolve
+                          </button>
+                          <Link
+                            to="/students/$id"
+                            params={{ id: s.id }}
+                            className="num text-[12px] text-tertiary-warm hover:text-primary-warm"
+                          >
+                            Dossier →
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </section>
     </TeacherShell>
   );

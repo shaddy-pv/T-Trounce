@@ -172,12 +172,12 @@ function UsersManagementPage() {
     <TeacherShell>
       <div className="space-y-6">
         {/* Header & Action Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-hairline pb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-hairline pb-6">
           <div>
             <p className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
               User & Teacher Administration
             </p>
-            <h1 className="display mt-1 text-[26px]">Account & Batch Management</h1>
+            <h1 className="display mt-1 text-[22px] sm:text-[26px]">Account & Batch Management</h1>
             <p className="mt-1 text-[13px] text-secondary-warm">
               Enroll students and teachers into 4-Season Sessions (Summer, Autumn, Winter, Spring)
               and assign batches.
@@ -190,7 +190,7 @@ function UsersManagementPage() {
               setFormError(null);
               setSuccessMessage(null);
             }}
-            className="flex items-center gap-2"
+            className="flex items-center justify-center gap-2 w-full sm:w-auto whitespace-nowrap shrink-0 cursor-pointer"
           >
             <UserPlus size={16} />
             Create User / Teacher
@@ -206,7 +206,7 @@ function UsersManagementPage() {
             </span>
             <button
               onClick={() => setSuccessMessage(null)}
-              className="text-[12px] underline hover:text-white"
+              className="text-[12px] underline hover:text-white cursor-pointer"
             >
               Dismiss
             </button>
@@ -214,7 +214,7 @@ function UsersManagementPage() {
         )}
 
         {/* Metrics Overview Cards */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-3">
           <div className="rounded-[12px] border border-hairline bg-ink-900 p-4">
             <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">
               Total Accounts
@@ -249,9 +249,9 @@ function UsersManagementPage() {
         </div>
 
         {/* Filter and Search Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-[12px] border border-hairline bg-ink-900 p-4">
-          <div className="flex flex-1 items-center gap-2 rounded-[8px] border border-hairline bg-ink-950 px-3 py-1.5 min-w-[240px]">
-            <Search size={14} className="text-tertiary-warm" />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 rounded-[12px] border border-hairline bg-ink-900 p-3 sm:p-4">
+          <div className="flex flex-1 items-center gap-2 rounded-[8px] border border-hairline bg-ink-950 px-3 py-1.5 w-full sm:min-w-[240px]">
+            <Search size={14} className="text-tertiary-warm shrink-0" />
             <input
               type="text"
               placeholder="Search by name or email..."
@@ -261,13 +261,13 @@ function UsersManagementPage() {
             />
           </div>
 
-          <div className="flex items-center gap-1 rounded-[8px] border border-hairline bg-ink-950 p-1">
+          <div className="flex items-center gap-1 rounded-[8px] border border-hairline bg-ink-950 p-1 shrink-0 justify-center">
             {(["all", "teacher", "student"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setRoleFilter(tab)}
                 className={
-                  "rounded-[6px] px-3 py-1 text-[12px] capitalize transition " +
+                  "rounded-[6px] px-3 py-1 text-[12px] capitalize transition cursor-pointer whitespace-nowrap " +
                   (roleFilter === tab
                     ? "bg-[#3FB8AF] text-[#100E0C] font-semibold"
                     : "text-secondary-warm hover:text-primary-warm")
@@ -279,9 +279,113 @@ function UsersManagementPage() {
           </div>
         </div>
 
-        {/* Users Table */}
-        <div className="overflow-x-auto rounded-[12px] border border-hairline bg-ink-900">
-          <table className="w-full text-left text-[13px]">
+        {/* Mobile Users Cards View (< sm) */}
+        <div className="sm:hidden space-y-3">
+          {filteredUsers.length === 0 ? (
+            <div className="rounded-[12px] border border-hairline bg-ink-900 p-6 text-center text-secondary-warm text-[13px]">
+              No users found matching your search.
+            </div>
+          ) : (
+            filteredUsers.map((u) => {
+              const isCurrent = u.id === currentUser?.userId || u.email === currentUser?.email;
+              const isSuperAdmin = u.role === "admin";
+              const sessionLabel = u.sessionSeason
+                ? u.sessionSeason.charAt(0).toUpperCase() + u.sessionSeason.slice(1)
+                : "Summer";
+              const batchLabel = u.batchTime
+                ? u.batchTime.charAt(0).toUpperCase() + u.batchTime.slice(1)
+                : "Morning";
+
+              return (
+                <div
+                  key={u.id}
+                  className="rounded-[12px] border border-hairline bg-ink-900 p-4 space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      {u.role === "student" ? (
+                        <Link
+                          to="/students/$id"
+                          params={{ id: u.id }}
+                          className="font-medium text-primary-warm hover:text-[#3FB8AF] hover:underline flex items-center gap-1.5 truncate"
+                        >
+                          <span className="truncate">{u.name}</span>
+                          <span className="num text-[10px] text-[#3FB8AF] shrink-0">→</span>
+                        </Link>
+                      ) : (
+                        <div className="font-medium text-primary-warm truncate">{u.name}</div>
+                      )}
+                      <div className="text-[12px] text-tertiary-warm truncate mt-0.5">
+                        {u.email}
+                      </div>
+                    </div>
+                    <div>
+                      {isSuperAdmin ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-[#3FB8AF]/20 px-2 py-0.5 text-[11px] font-semibold text-[#3FB8AF] shrink-0">
+                          <Shield size={11} />
+                          ADMIN
+                        </span>
+                      ) : u.role === "teacher" ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-ink-800 px-2 py-0.5 text-[11px] font-medium text-primary-warm shrink-0">
+                          Teacher
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded bg-ink-800/60 px-2 py-0.5 text-[11px] text-secondary-warm shrink-0">
+                          Student
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-hairline pt-3 text-[11px]">
+                    <span className="inline-flex items-center gap-1.5 rounded-[6px] border border-hairline bg-ink-950 px-2 py-1 text-secondary-warm">
+                      <span className="size-1.5 rounded-full bg-[#3FB8AF]" />
+                      {sessionLabel} · {batchLabel}
+                    </span>
+                    <span className="num text-tertiary-warm">
+                      {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "Active"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-hairline pt-3">
+                    {u.role === "student" ? (
+                      <Link
+                        to="/students/$id"
+                        params={{ id: u.id }}
+                        className="text-[12px] text-[#3FB8AF] hover:underline font-medium"
+                      >
+                        View Profile & Dossier →
+                      </Link>
+                    ) : (
+                      <span className="text-[11px] text-tertiary-warm">Staff Account</span>
+                    )}
+
+                    {!isSuperAdmin && !isCurrent && (
+                      <button
+                        onClick={() => handleDeleteUser(u.id, u.name)}
+                        className="inline-flex items-center gap-1 rounded border border-alert-rust/30 px-2.5 py-1 text-[11px] text-alert-rust transition hover:bg-alert-rust/10 shrink-0 cursor-pointer"
+                        title="Delete User"
+                      >
+                        <Trash2 size={12} />
+                        Delete
+                      </button>
+                    )}
+                    {isSuperAdmin && (
+                      <span className="text-[11px] text-tertiary-warm italic">Protected</span>
+                    )}
+                    {isCurrent && !isSuperAdmin && (
+                      <span className="text-[11px] text-secondary-warm">(You)</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Users Table (Desktop & Tablet) */}
+        <div className="hidden sm:block overflow-x-auto rounded-[12px] border border-hairline bg-ink-900">
+          <table className="w-full min-w-[620px] text-left text-[13px]">
             <thead className="border-b border-hairline bg-ink-950/60 num text-[11px] uppercase tracking-wider text-tertiary-warm">
               <tr>
                 <th className="px-5 py-3">User & Contact</th>
@@ -503,7 +607,7 @@ function UsersManagementPage() {
                 </div>
 
                 {/* Session (Season) & Batch (Timing) Selection */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] uppercase tracking-wider text-tertiary-warm">
                       Session (3-Month Season)
@@ -538,15 +642,20 @@ function UsersManagementPage() {
                 </div>
 
                 {/* Submit / Cancel Buttons */}
-                <div className="mt-6 flex items-center justify-end gap-3 pt-2">
+                <div className="mt-6 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 sm:gap-3 pt-2">
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(false)}
-                    className="h-10 rounded-[8px] px-4 text-[13px] text-secondary-warm hover:text-primary-warm"
+                    className="h-10 w-full sm:w-auto rounded-[8px] px-4 text-[13px] text-secondary-warm hover:text-primary-warm cursor-pointer"
                   >
                     Cancel
                   </button>
-                  <TButton type="submit" size="md" disabled={isSubmitting}>
+                  <TButton
+                    type="submit"
+                    size="md"
+                    disabled={isSubmitting}
+                    className="w-full sm:w-auto whitespace-nowrap cursor-pointer"
+                  >
                     {isSubmitting ? "Creating..." : "Save & Create User"}
                   </TButton>
                 </div>

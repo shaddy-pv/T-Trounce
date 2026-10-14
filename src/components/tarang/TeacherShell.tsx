@@ -73,8 +73,8 @@ export function TeacherShell({ children }: { children: ReactNode }) {
               </span>
             </Link>
 
-            {/* Desktop / Tablet Navigation Links */}
-            <nav className="hidden md:flex items-center gap-1">
+            {/* Desktop / Large Screen Navigation Links */}
+            <nav className="hidden lg:flex items-center gap-1 shrink-0">
               {nav.map((n) => {
                 const active =
                   pathname === n.to || (n.to === "/dashboard" && pathname.startsWith("/students"));
@@ -83,7 +83,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
                     key={n.to}
                     to={n.to}
                     className={
-                      "rounded-[4px] px-2.5 lg:px-3 py-1.5 text-[13px] transition " +
+                      "rounded-[4px] px-2.5 xl:px-3 py-1.5 text-[13px] whitespace-nowrap shrink-0 transition " +
                       (active
                         ? "bg-ink-800 text-primary-warm"
                         : "text-secondary-warm hover:text-primary-warm hover:bg-ink-900")
@@ -97,28 +97,28 @@ export function TeacherShell({ children }: { children: ReactNode }) {
           </div>
 
           {/* Desktop Right Metadata */}
-          <div className="hidden md:flex items-center gap-3 lg:gap-4">
+          <div className="hidden lg:flex items-center gap-3 xl:gap-4 shrink-0">
             {user?.isAdmin && (
-              <span className="rounded bg-[#3FB8AF]/20 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-[#3FB8AF]">
+              <span className="rounded bg-[#3FB8AF]/20 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-[#3FB8AF] shrink-0">
                 ADMIN
               </span>
             )}
-            <span className="num hidden lg:inline text-[12px] text-tertiary-warm">
+            <span className="num hidden xl:inline text-[12px] text-tertiary-warm shrink-0">
               Batch · X-A · 2025
             </span>
-            <span className="text-[13px] text-secondary-warm truncate max-w-[140px]">
+            <span className="text-[13px] text-secondary-warm truncate max-w-[120px] xl:max-w-[160px]">
               {user?.name || "Faculty"}
             </span>
             <button
               onClick={handleSignOut}
-              className="text-[12px] text-tertiary-warm hover:text-secondary-warm transition"
+              className="text-[12px] text-tertiary-warm hover:text-secondary-warm transition shrink-0 whitespace-nowrap cursor-pointer"
             >
               Sign out
             </button>
           </div>
 
-          {/* Mobile Right Controls: User Name + Hamburger Button */}
-          <div className="flex md:hidden items-center gap-2.5">
+          {/* Mobile & Tablet Right Controls: User Role + Hamburger Button */}
+          <div className="flex lg:hidden items-center gap-2.5 shrink-0">
             {user?.isAdmin && (
               <span className="rounded bg-[#3FB8AF]/20 px-1.5 py-0.5 text-[9px] font-semibold text-[#3FB8AF]">
                 ADMIN
@@ -126,7 +126,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
             )}
             <button
               onClick={() => setMobileMenuOpen((prev) => !prev)}
-              className="flex size-9 items-center justify-center rounded-lg border border-hairline bg-ink-900 text-secondary-warm transition hover:bg-ink-800 hover:text-primary-warm"
+              className="flex size-9 items-center justify-center rounded-lg border border-hairline bg-ink-900 text-secondary-warm transition hover:bg-ink-800 hover:text-primary-warm cursor-pointer"
               aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
             >
               {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
@@ -134,9 +134,9 @@ export function TeacherShell({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        {/* Mobile Navigation Dropdown Drawer */}
+        {/* Mobile & Tablet Navigation Dropdown Drawer */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-b border-hairline bg-ink-900/98 px-4 py-4 shadow-2xl backdrop-blur-xl">
+          <div className="lg:hidden border-b border-hairline bg-ink-900/98 px-4 py-4 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-150">
             <div className="mb-3 flex items-center justify-between border-b border-hairline/60 pb-3">
               <div>
                 <p className="text-[13px] font-semibold text-primary-warm">
@@ -146,7 +146,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
               </div>
               <button
                 onClick={handleSignOut}
-                className="inline-flex items-center gap-1.5 rounded-md border border-hairline px-2.5 py-1 text-[12px] text-secondary-warm hover:text-alert-rust transition"
+                className="inline-flex items-center gap-1.5 rounded-md border border-hairline px-2.5 py-1 text-[12px] text-secondary-warm hover:text-alert-rust transition cursor-pointer"
               >
                 <LogOut size={13} />
                 <span>Sign out</span>
@@ -180,7 +180,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
       </header>
 
       {/* Main Container: Mobile, Tablet & Desktop Responsive */}
-      <main className="mx-auto max-w-[1280px] px-3 sm:px-6 py-5 sm:py-8 overflow-x-hidden">
+      <main className="mx-auto w-full max-w-[1280px] min-w-0 px-3 sm:px-6 py-5 sm:py-8 overflow-x-hidden">
         {children}
       </main>
     </div>
