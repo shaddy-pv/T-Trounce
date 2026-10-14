@@ -455,9 +455,21 @@ function ResultPage() {
                     return <span key={i}>{word}</span>;
                   })
                 ) : (
-                  <div className="flex items-center gap-2 text-[12px] text-secondary-warm italic py-1">
-                    <Loader2 size={13} className="animate-spin text-[#3FB8AF]" />
-                    <span>Processing phonetic transcription from audio recording...</span>
+                  <div className="flex items-center gap-2 text-[12px] text-secondary-warm py-1">
+                    {result.transcriptionStatus === "processing" ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin text-[#3FB8AF]" />
+                        <span className="italic">
+                          Processing phonetic transcription from audio recording...
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-tertiary-warm">
+                        No spoken speech detected in this recording. You can click{" "}
+                        <strong className="text-secondary-warm">Edit</strong> above to add your
+                        transcript.
+                      </span>
+                    )}
                   </div>
                 )}
               </div>

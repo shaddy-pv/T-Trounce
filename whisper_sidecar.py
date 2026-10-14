@@ -41,7 +41,7 @@ log = logging.getLogger("whisper_sidecar")
 MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base")
 DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
 HOST = os.environ.get("WHISPER_HOST", "0.0.0.0")
-PORT = int(os.environ.get("WHISPER_PORT", "8765"))
+PORT = int(os.environ.get("PORT") or os.environ.get("WHISPER_PORT") or "8765")
 LANG = os.environ.get("WHISPER_LANG", "en")
 
 # ──────────────────────────────────────────────

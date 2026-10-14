@@ -67,12 +67,13 @@ export class TranscriptionService {
       return null;
     }
     try {
+      const pingTimeout = isLocalhost ? 300 : 4000;
       const ping = await fetch(`${WHISPER_SIDECAR_URL}/health`, {
-        signal: AbortSignal.timeout(300),
+        signal: AbortSignal.timeout(pingTimeout),
       });
       if (ping.ok) return WHISPER_SIDECAR_URL;
     } catch {
-      // Local sidecar not running
+      // Sidecar not running
     }
     return null;
   }
@@ -145,8 +146,8 @@ export class TranscriptionService {
     const geminiKey = process.env.GEMINI_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
 
-    // Fast timeouts so server never hangs or triggers 502
-    const whisperTimeoutMs = isFinal ? 8000 : 3500;
+    // Fast timeouts for live chunks, adequate window for full-audio pass on CPU
+    const whisperTimeoutMs = isFinal ? 30000 : 3500;
 
     // 0. FastWhisper sidecar — instant on local dev, CPU inference on remote
     const local = await this.transcribeWithLocalWhisper(
