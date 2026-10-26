@@ -8,6 +8,7 @@ export interface UserDoc {
   _id?: ObjectId;
   id: string; // Public ID / Student ID
   email: string; // Unique email identifier
+  phone?: string; // Optional WhatsApp phone number
   username?: string; // Optional legacy username
   passwordHash: string; // Bcrypt hashed password
   name: string; // Display name
@@ -34,6 +35,7 @@ export interface StudentDoc {
   _id?: ObjectId;
   id: string;
   name: string;
+  phone?: string; // Optional WhatsApp phone number
   status: "on-track" | "nudge" | "flagged";
   focus: string;
   lastActive: string;

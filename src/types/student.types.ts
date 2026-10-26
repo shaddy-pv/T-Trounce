@@ -18,6 +18,7 @@ export interface StudentRow {
   sessionSeason?: string;
   batchTime?: string;
   batchId?: string;
+  phone?: string;
 }
 
 export interface StudentWeeklyReport {

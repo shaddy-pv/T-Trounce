@@ -6,6 +6,7 @@ import { makeSampleWaveform } from "@/components/tarang/Waveform";
 export interface UserPublic {
   id: string;
   email: string;
+  phone?: string;
   name: string;
   role: "admin" | "teacher" | "student";
   sessionSeason?: SessionSeason;
@@ -17,6 +18,7 @@ export interface UserPublic {
 export interface CreateUserInput {
   name: string;
   email: string;
+  phone?: string;
   role: "teacher" | "student";
   passwordPlain: string;
   sessionSeason?: SessionSeason;
@@ -36,6 +38,7 @@ export class UserService {
     return users.map((u) => ({
       id: u.id,
       email: u.email,
+      phone: u.phone,
       name: u.name,
       role: u.role,
       sessionSeason: u.sessionSeason,
@@ -60,6 +63,7 @@ export class UserService {
       throw new Error(`A user with email ${cleanEmail} already exists`);
     }
 
+    const cleanPhone = input.phone?.trim() || undefined;
     const passwordHash = await bcrypt.hash(input.passwordPlain, 10);
     const userId = `${input.role}-${Date.now()}`;
     const sessionSeason = input.sessionSeason || "summer";
@@ -69,6 +73,7 @@ export class UserService {
     const newUserDoc: UserDoc = {
       id: userId,
       email: cleanEmail,
+      phone: cleanPhone,
       name: input.name.trim(),
       role: input.role,
       passwordHash,
@@ -85,6 +90,7 @@ export class UserService {
       const newStudentDoc: StudentDoc = {
         id: userId,
         name: input.name.trim(),
+        phone: cleanPhone,
         status: "on-track",
         focus: "Introductory module practice",
         lastActive: "Today",
@@ -102,6 +108,7 @@ export class UserService {
     return {
       id: newUserDoc.id,
       email: newUserDoc.email,
+      phone: newUserDoc.phone,
       name: newUserDoc.name,
       role: newUserDoc.role,
       sessionSeason: newUserDoc.sessionSeason,

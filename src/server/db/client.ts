@@ -152,12 +152,18 @@ export async function autoSeedDatabase(db: Db) {
         username: "admin",
         passwordHash,
         name: "Shadan (Admin)",
+        phone: "9876543210",
         role: "admin",
         sessionSeason: "summer",
         batchTime: "morning",
         batchId: "summer-morning",
         createdAt: new Date(),
       });
+    } else {
+      await usersCol.updateOne(
+        { id: "admin-master", phone: { $exists: false } },
+        { $set: { phone: "9876543210" } },
+      );
     }
 
     const realUsers = await usersCol.find({}).toArray();

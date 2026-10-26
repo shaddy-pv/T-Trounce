@@ -82,7 +82,6 @@ export function analyzeAudioSignal(
   let pauseCount = 0;
   let consecutiveSilence = 0;
   const targetBarCount = ACOUSTIC_THRESHOLDS.targetWaveformBars || 56;
-  const step = Math.max(1, Math.floor(sampleCount / targetBarCount));
 
   // Determine positions for real filler markers across the timeline if fillers were spoken
   const fillerIndices = new Set<number>();
@@ -93,16 +92,34 @@ export function analyzeAudioSignal(
     }
   }
 
-  const rawSegments: WaveformSegment[] = [];
+  const waveform: WaveformSegment[] = [];
+  const windowRatio = sampleCount / targetBarCount;
 
-  for (let i = 0; i < sampleCount; i += step) {
-    const rawVal = samples[i] ?? noiseFloor;
-    const barIndex = rawSegments.length;
+  for (let barIdx = 0; barIdx < targetBarCount; barIdx++) {
+    // Window of samples corresponding to this bar along the audio timeline
+    const startIdx = Math.floor(barIdx * windowRatio);
+    const endIdx = Math.max(startIdx + 1, Math.min(sampleCount, Math.ceil((barIdx + 1) * windowRatio)));
 
-    // Relative volume normalized from 0.08 to 1.0
+    let sumSquares = 0;
+    let localPeak = 0;
+    let count = 0;
+
+    for (let s = startIdx; s < endIdx; s++) {
+      const val = samples[s] ?? 0;
+      sumSquares += val * val;
+      if (val > localPeak) localPeak = val;
+      count++;
+    }
+
+    const rms = count > 0 ? Math.sqrt(sumSquares / count) : noiseFloor;
+    // Blend RMS (speech vocalic core) with local peak (consonant attack) for natural acoustic clarity
+    const rawVal = rms * 0.72 + localPeak * 0.28;
+
+    // Relative volume normalized from 0.08 to 1.0 against noise floor and peak amplitude
+    const dynamicRange = Math.max(0.06, peakAmp - noiseFloor * 0.5);
     const normalizedVal = Math.min(
       1.0,
-      Math.max(0.08, (rawVal - noiseFloor * 0.5) / Math.max(0.05, peakAmp - noiseFloor * 0.5)),
+      Math.max(0.08, (rawVal - noiseFloor * 0.5) / dynamicRange),
     );
 
     let kind: "clear" | "pause" | "filler" = "clear";
@@ -118,8 +135,8 @@ export function analyzeAudioSignal(
     } else {
       consecutiveSilence = 0;
       if (
-        fillerIndices.has(barIndex) ||
-        (fillerCount > 0 && rawVal < hesitationThreshold && barIndex % 9 === 0)
+        fillerIndices.has(barIdx) ||
+        (fillerCount > 0 && rawVal < hesitationThreshold && barIdx % 9 === 0)
       ) {
         kind = "filler";
       } else {
@@ -127,18 +144,11 @@ export function analyzeAudioSignal(
       }
     }
 
-    rawSegments.push({
+    waveform.push({
       v: Math.max(0.08, Math.min(1.0, normalizedVal)),
       kind,
     });
   }
-
-  // Pad or slice to target bar count
-  while (rawSegments.length < targetBarCount) {
-    const last = rawSegments[rawSegments.length - 1] ?? { v: 0.35, kind: "clear" as const };
-    rawSegments.push({ ...last });
-  }
-  const waveform = rawSegments.slice(0, targetBarCount);
 
   // 3. Compute Triad Scores (Pronunciation, Vocabulary, Grammar)
   const diffMultiplier =

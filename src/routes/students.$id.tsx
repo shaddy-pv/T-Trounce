@@ -20,6 +20,11 @@ import { cachedClientFetch } from "@/lib/client-cache";
 import { TButton } from "@/components/tarang/Button";
 import { DirectNoteModal } from "@/features/students/components/DirectNoteModal";
 import { AudioTranscriptEvaluator } from "@/features/students/components/AudioTranscriptEvaluator";
+import { useUser } from "@/lib/auth";
+import {
+  cleanIndianPhoneNumber,
+  formatPhoneDisplay,
+} from "@/features/assignments/lib/whatsapp-reminders";
 import type { StudentRow, AttemptResult } from "@/types";
 
 export interface StudentProfileData {
@@ -168,7 +173,12 @@ function StudentDetail() {
   const activeRetake =
     retakeSubmissions.find((r) => r.id === selectedRetakeId) || retakeSubmissions[0] || null;
 
+  const currentUser = useUser();
   const sendParentReport = () => {
+    const teacherContact = currentUser?.phone
+      ? `${currentUser?.name || "Teacher"} (${formatPhoneDisplay(currentUser.phone)})`
+      : currentUser?.name || "Trounce Faculty";
+
     const shareText = encodeURIComponent(
       `*Trounce Spoken-English Academic Report for ${s.name}*\n` +
         `Session & Batch: ${sessionLabel} Season · ${batchLabel} Batch\n` +
@@ -176,9 +186,17 @@ function StudentDetail() {
         `Homework Received: ${homeworkStats.totalReceived} | Completed: ${homeworkStats.completed} | Pending: ${homeworkStats.pending}\n` +
         `Focus Area: ${s.focus}\n` +
         `Last Active: ${s.lastActive}\n\n` +
-        `Teacher Recommendation: Regular daily 5-minute speaking practice on Trounce.`,
+        `Teacher Recommendation: Regular daily 5-minute speaking practice on Trounce.\n\n` +
+        `_Teacher: ${teacherContact}_\n` +
+        `_Trounce Spoken English Institute_`,
     );
-    window.open(`https://api.whatsapp.com/send?text=${shareText}`, "_blank", "noopener,noreferrer");
+
+    const cleanPhone = cleanIndianPhoneNumber(s.phone);
+    const targetUrl = cleanPhone
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${shareText}`
+      : `https://api.whatsapp.com/send?text=${shareText}`;
+
+    window.open(targetUrl, "_blank", "noopener,noreferrer");
     setReportSent(true);
   };
 
@@ -206,7 +224,14 @@ function StudentDetail() {
                 {sessionLabel} · {batchLabel} Batch
               </span>
             </div>
-            <h1 className="display mt-1 text-[26px] sm:text-[30px] text-primary-warm">{s.name}</h1>
+            <div className="flex flex-wrap items-center gap-3 mt-1">
+              <h1 className="display text-[26px] sm:text-[30px] text-primary-warm">{s.name}</h1>
+              {s.phone && (
+                <span className="num text-[12px] font-medium text-emerald-500 light:text-emerald-700 bg-emerald-500/10 light:bg-emerald-100 px-2 py-0.5 rounded-[4px] border border-emerald-500/20">
+                  📱 {formatPhoneDisplay(s.phone)}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

@@ -1,8 +1,8 @@
 {
-  "name": "Trounce Teacher Console",
+  "name": "Trounce · Signal Speak Studio",
   "short_name": "Trounce",
-  "description": "Spoken-English waveform audio console for teachers and coaching institutes.",
-  "start_url": "/dashboard",
+  "description": "Spoken-English waveform audio coaching and fluency analytics for students and teachers.",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
@@ -37,6 +37,13 @@
     }
   ],
   "shortcuts": [
+    {
+      "name": "Speaking Practice",
+      "short_name": "Practice",
+      "description": "Practice speaking drills and view your waveform score",
+      "url": "/practice",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
     {
       "name": "Teacher Dashboard",
       "short_name": "Dashboard",

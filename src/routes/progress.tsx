@@ -4,6 +4,7 @@ import { Waveform, type WaveformSegment } from "@/components/tarang/Waveform";
 import { fetchStudentAttemptsFn } from "@/server/data";
 import { cachedClientFetch } from "@/lib/client-cache";
 import type { AttemptResult } from "@/types";
+import { useLanguage } from "@/lib/i18n";
 
 export const Route = createFileRoute("/progress")({
   head: () => ({
@@ -43,6 +44,7 @@ function ProgressSkeleton() {
 function ProgressPage() {
   const loaderData = Route.useLoaderData() as { attempts?: AttemptResult[] } | undefined;
   const attempts = loaderData?.attempts ?? [];
+  const { t } = useLanguage();
 
   /**
    * Compute completion% the same way as the practice page "Done · X%" badge:
@@ -85,39 +87,39 @@ function ProgressPage() {
   return (
     <StudentShell>
       <div className="px-5 pt-2 pb-10">
-        <h1 className="display text-[28px]">Your portfolio</h1>
-        <p className="mt-2 text-[13px] text-secondary-warm">
-          Attempts saved to your coaching profile (latest on top).
+        <h1 className="display text-[26px] font-medium text-primary-warm">{t("your_progress_title")}</h1>
+        <p className="mt-1 text-[13px] text-secondary-warm">
+          {t("your_progress_sub")}
         </p>
 
         {history.length > 0 ? (
           <>
-            <div className="mt-6 rounded-[12px] border border-hairline bg-ink-900 p-4">
+            <div className="mt-5 rounded-[12px] border border-hairline bg-ink-900 p-4">
               <div className="flex items-baseline justify-between">
                 <p className="num text-[11px] uppercase tracking-[0.14em] text-tertiary-warm">
-                  30-day signal trajectory
+                  {t("trajectory_title")}
                 </p>
-                <p className="num text-[14px] text-primary-warm">
-                  {firstScore} <span className="text-tertiary-warm">→</span> {latestScore}%
+                <p className="num text-[15px] font-bold text-primary-warm">
+                  {firstScore}% <span className="text-tertiary-warm">➜</span> <span className="text-[#3FB8AF]">{latestScore}%</span>
                 </p>
               </div>
-              <p className="mt-1 text-[13px] text-secondary-warm">
+              <p className="mt-1 text-[12px] text-secondary-warm">
                 {latestScore >= firstScore
-                  ? "Speech energy is rising. Pauses are more deliberate."
-                  : "Keep practicing daily prompts to build vocal confidence."}
+                  ? t("trajectory_good")
+                  : t("trajectory_start")}
               </p>
             </div>
 
-            <ul className="mt-6 flex flex-col gap-3">
+            <ul className="mt-5 flex flex-col gap-3">
               {history.map((h) => (
                 <li key={h.id} className="rounded-[12px] border border-hairline bg-ink-900 p-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-[13px] font-medium text-primary-warm">{h.date}</p>
-                      <p className="text-[11px] text-secondary-warm line-clamp-1">{h.prompt}</p>
+                      <p className="text-[12px] text-secondary-warm line-clamp-1 italic">"{h.prompt}"</p>
                     </div>
                     <div className="text-right">
-                      <p className="num text-[14px] text-primary-warm">{h.score}%</p>
+                      <p className="display num text-[16px] font-bold text-[#3FB8AF]">{h.score}%</p>
                       <p className="num text-[10px] text-tertiary-warm">{h.label}</p>
                     </div>
                   </div>
@@ -128,9 +130,9 @@ function ProgressPage() {
                     <Link
                       to="/result/$attemptId"
                       params={{ attemptId: h.id }}
-                      className="num text-[11px] text-[#3FB8AF] hover:underline"
+                      className="inline-flex items-center gap-1 text-[12px] font-medium text-[#3FB8AF] hover:underline"
                     >
-                      View Full Diagnostics →
+                      {t("listen_result_btn")}
                     </Link>
                   </div>
                 </li>
@@ -138,18 +140,16 @@ function ProgressPage() {
             </ul>
           </>
         ) : (
-          <div className="mt-12 flex flex-col items-center gap-3 text-center">
-            <p className="num text-[13px] uppercase tracking-[0.14em] text-tertiary-warm">
-              No attempts yet
-            </p>
-            <p className="text-[14px] text-secondary-warm">
-              Complete a practice drill or homework to see your signal here.
+          <div className="mt-12 text-center rounded-[12px] border border-hairline bg-ink-900 p-8">
+            <p className="text-[15px] font-medium text-primary-warm">{t("no_recordings_yet")}</p>
+            <p className="mt-1 text-[12px] text-secondary-warm">
+              {t("no_recordings_sub")}
             </p>
             <Link
               to="/practice"
-              className="mt-2 inline-flex items-center gap-1.5 rounded-[8px] bg-[#3FB8AF] px-4 py-2 text-[13px] font-medium text-ink-950 transition hover:brightness-110"
+              className="mt-4 inline-flex items-center justify-center rounded-[10px] bg-[#3FB8AF] px-5 py-2.5 text-[13px] font-bold text-ink-950 shadow-md shadow-[#3FB8AF]/20"
             >
-              Go to Practice →
+              {t("start_first_drill_btn")}
             </Link>
           </div>
         )}

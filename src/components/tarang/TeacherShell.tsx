@@ -13,6 +13,9 @@ import {
   Settings,
 } from "lucide-react";
 import { useUser, clearUser } from "@/lib/auth";
+import { ThemeToggle } from "@/components/tarang/ThemeToggle";
+import { LanguageSelector } from "@/components/tarang/LanguageSelector";
+import { useLanguage } from "@/lib/i18n";
 
 /** Fully responsive, mobile-and-tablet-friendly shell wrapping teacher routes. */
 export function TeacherShell({ children }: { children: ReactNode }) {
@@ -20,6 +23,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { t } = useLanguage();
 
   // Mobile drawer state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -49,12 +53,12 @@ export function TeacherShell({ children }: { children: ReactNode }) {
   }, [router, isMasterAdmin]);
 
   const nav = [
-    { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { to: "/assignments", label: "Assignments", icon: FileText },
-    { to: "/flags", label: "Flags", icon: Flag },
-    { to: "/reports", label: "Reports", icon: BarChart3 },
-    { to: "/users", label: "Users & Teachers", icon: Users },
-    ...(isMasterAdmin ? [{ to: "/settings", label: "Settings", icon: Settings }] : []),
+    { to: "/dashboard", label: t("nav_dashboard"), icon: LayoutDashboard },
+    { to: "/assignments", label: t("nav_assignments"), icon: FileText },
+    { to: "/flags", label: t("nav_flags"), icon: Flag },
+    { to: "/reports", label: t("nav_reports"), icon: BarChart3 },
+    { to: "/users", label: t("nav_users"), icon: Users },
+    ...(isMasterAdmin ? [{ to: "/settings", label: t("nav_settings"), icon: Settings }] : []),
     ...(user?.isAdmin ? [{ to: "/practice", label: "Student View", icon: ExternalLink }] : []),
   ];
 
@@ -101,7 +105,9 @@ export function TeacherShell({ children }: { children: ReactNode }) {
           </div>
 
           {/* Desktop Right Metadata */}
-          <div className="hidden lg:flex items-center gap-3 xl:gap-4 shrink-0">
+          <div className="hidden lg:flex items-center gap-2.5 xl:gap-3 shrink-0">
+            <LanguageSelector variant="button" />
+            <ThemeToggle showLabel={false} />
             {user?.isAdmin && (
               <span className="rounded bg-[#3FB8AF]/20 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-[#3FB8AF] shrink-0">
                 ADMIN
@@ -117,12 +123,14 @@ export function TeacherShell({ children }: { children: ReactNode }) {
               onClick={handleSignOut}
               className="text-[12px] text-tertiary-warm hover:text-secondary-warm transition shrink-0 whitespace-nowrap cursor-pointer"
             >
-              Sign out
+              {t("sign_out")}
             </button>
           </div>
 
-          {/* Mobile & Tablet Right Controls: User Role + Hamburger Button */}
-          <div className="flex lg:hidden items-center gap-2.5 shrink-0">
+          {/* Mobile & Tablet Right Controls: Language + Theme Toggle + User Role + Hamburger Button */}
+          <div className="flex lg:hidden items-center gap-1.5 shrink-0">
+            <LanguageSelector variant="button" />
+            <ThemeToggle showLabel={false} />
             {user?.isAdmin && (
               <span className="rounded bg-[#3FB8AF]/20 px-1.5 py-0.5 text-[9px] font-semibold text-[#3FB8AF]">
                 ADMIN
@@ -148,13 +156,22 @@ export function TeacherShell({ children }: { children: ReactNode }) {
                 </p>
                 <p className="num text-[11px] text-tertiary-warm">Batch · X-A · 2025</p>
               </div>
-              <button
-                onClick={handleSignOut}
-                className="inline-flex items-center gap-1.5 rounded-md border border-hairline px-2.5 py-1 text-[12px] text-secondary-warm hover:text-alert-rust transition cursor-pointer"
-              >
-                <LogOut size={13} />
-                <span>Sign out</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <ThemeToggle showLabel={true} />
+                <button
+                  onClick={handleSignOut}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-hairline px-2.5 py-1 text-[12px] text-secondary-warm hover:text-alert-rust transition cursor-pointer"
+                >
+                  <LogOut size={13} />
+                  <span>{t("sign_out")}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Mobile Drawer Language Selector */}
+            <div className="mb-3 pb-3 border-b border-hairline/60 flex items-center justify-between">
+              <span className="text-[12px] text-secondary-warm">Language:</span>
+              <LanguageSelector variant="segmented" />
             </div>
 
             <nav className="flex flex-col gap-1">

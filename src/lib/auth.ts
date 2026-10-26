@@ -11,6 +11,7 @@ export interface TrounceUser {
   name: string;
   role: Role;
   isAdmin?: boolean;
+  phone?: string;
   batchId?: string;
   sessionSeason?: string;
   batchTime?: string;

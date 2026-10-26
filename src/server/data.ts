@@ -13,7 +13,11 @@ import { StudentService } from "./services/student.service";
 import { AttemptService } from "./services/attempt.service";
 import { AuthService, type SessionPayload } from "./services/auth.service";
 import { UserService, type UserPublic } from "./services/user.service";
-import { AssignmentService, type AssignmentPublic } from "./services/assignment.service";
+import {
+  AssignmentService,
+  type AssignmentPublic,
+  type AssignmentSubmissionsData,
+} from "./services/assignment.service";
 import { MessageService } from "./services/message.service";
 import { TranscriptionService } from "./services/transcription.service";
 import { FlagService } from "./services/flag.service";
@@ -228,6 +232,34 @@ export const deleteAssignmentFn = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ success: boolean }> => {
     const success = await AssignmentService.deleteAssignment(data.id);
     return { success };
+  });
+
+/**
+ * Server Function: Fetch submissions and pending roster for an assignment (Protected: Faculty/Admin)
+ */
+export const fetchAssignmentSubmissionsFn = createServerFn({ method: "GET" })
+  .middleware([teacherOnlyMiddleware])
+  .validator((input: unknown) => z.object({ assignmentId: z.string().min(1) }).parse(input))
+  .handler(async ({ data }): Promise<AssignmentSubmissionsData | null> => {
+    return await AssignmentService.getAssignmentSubmissions(data.assignmentId);
+  });
+
+/**
+ * Server Function: Send assignment reminder notification (Protected: Faculty/Admin)
+ */
+export const sendAssignmentReminderFn = createServerFn({ method: "POST" })
+  .middleware([teacherOnlyMiddleware])
+  .validator((input: unknown) =>
+    z
+      .object({
+        assignmentId: z.string().min(1),
+        studentId: z.string().optional(),
+        channel: z.enum(["whatsapp", "in-app", "both"]).optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    return await AssignmentService.sendReminder(data);
   });
 
 /**

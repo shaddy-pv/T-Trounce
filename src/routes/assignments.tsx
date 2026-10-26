@@ -16,7 +16,9 @@ import {
   AlertCircle,
   Layers,
   Send,
+  ChevronRight,
 } from "lucide-react";
+import { AssignmentSubmissionsModal } from "@/features/assignments/components/AssignmentSubmissionsModal";
 
 export const Route = createFileRoute("/assignments")({
   head: () => ({
@@ -78,6 +80,7 @@ function AssignmentsPage() {
   const [selectedSession, setSelectedSession] = useState<string>("all");
   const [selectedBatch, setSelectedBatch] = useState<string>("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [inspectingAssignmentId, setInspectingAssignmentId] = useState<string | null>(null);
 
   // Sync state if loader refreshes
   useEffect(() => {
@@ -292,11 +295,13 @@ function AssignmentsPage() {
             {filteredAssignments.map((a) => (
               <div
                 key={a.id}
-                className="flex flex-col justify-between rounded-[12px] border border-hairline bg-ink-900 p-5 transition hover:border-[#9C9388]"
+                onClick={() => setInspectingAssignmentId(a.id)}
+                className="flex flex-col justify-between rounded-[12px] border border-hairline bg-ink-900 p-5 transition-all hover:border-[#3FB8AF] hover:shadow-lg cursor-pointer group shadow-sm select-none"
+                title="Click to view submitted and pending students"
               >
                 <div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-[6px] border border-hairline bg-ink-950 px-2.5 py-1 text-[11px] font-medium text-[#3FB8AF]">
+                    <span className="inline-flex items-center gap-1.5 rounded-[6px] border border-hairline bg-ink-950 light:bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-[#3FB8AF] light:text-teal-700 uppercase">
                       <span className="size-1.5 rounded-full bg-[#3FB8AF]" />
                       {(a.targetSession || "summer").toUpperCase()} ·{" "}
                       {(a.targetBatch || "morning").toUpperCase()}
@@ -306,10 +311,12 @@ function AssignmentsPage() {
                     </span>
                   </div>
 
-                  <h3 className="display mt-3 text-[17px] text-primary-warm">{a.title}</h3>
-                  <p className="mt-1 text-[12px] text-tertiary-warm">{a.instructions}</p>
+                  <h3 className="display mt-3 text-[17px] text-primary-warm group-hover:text-[#3FB8AF] light:group-hover:text-teal-700 transition-colors">
+                    {a.title}
+                  </h3>
+                  <p className="mt-1 text-[12px] text-tertiary-warm line-clamp-2">{a.instructions}</p>
 
-                  <div className="mt-3 rounded-[8px] border border-hairline bg-ink-950/80 p-3">
+                  <div className="mt-3 rounded-[8px] border border-hairline bg-ink-950/80 light:bg-slate-50 p-3">
                     <p className="num text-[10px] uppercase tracking-wider text-tertiary-warm">
                       Speaking Prompt
                     </p>
@@ -319,9 +326,9 @@ function AssignmentsPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between gap-2 border-t border-hairline pt-3 text-[12px] text-tertiary-warm">
+                <div className="mt-4 pt-3 border-t border-hairline flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[12px] text-tertiary-warm">
                   <span className="flex items-center gap-1.5 truncate min-w-0">
-                    <Calendar size={13} className="shrink-0" />
+                    <Calendar size={13} className="shrink-0 text-tertiary-warm" />
                     <span className="truncate">
                       Due:{" "}
                       {a.dueDate
@@ -337,13 +344,23 @@ function AssignmentsPage() {
                         : "Not set"}
                     </span>
                   </span>
-                  <button
-                    onClick={() => handleDeleteAssignment(a.id, a.title)}
-                    className="flex items-center gap-1 text-alert-rust hover:underline shrink-0 whitespace-nowrap cursor-pointer ml-2"
-                  >
-                    <Trash2 size={12} />
-                    Delete
-                  </button>
+
+                  <div className="flex items-center gap-3 justify-between sm:justify-end shrink-0">
+                    <span className="inline-flex items-center gap-1 font-semibold text-[#3FB8AF] light:text-teal-700 group-hover:translate-x-0.5 transition-transform text-[12px]">
+                      View Submissions & Nudge <ChevronRight size={13} />
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteAssignment(a.id, a.title);
+                      }}
+                      className="flex items-center gap-1 text-alert-rust hover:underline shrink-0 whitespace-nowrap cursor-pointer p-1 rounded hover:bg-ink-800/60 transition"
+                      title="Delete assignment"
+                    >
+                      <Trash2 size={12} />
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -392,10 +409,10 @@ function AssignmentsPage() {
                       }
                       className="mt-1.5 h-10 w-full rounded-[8px] border border-hairline bg-ink-900 px-3 text-[13px] text-primary-warm focus:border-[#3FB8AF] focus:outline-none"
                     >
-                      <option value="summer">Summer (Apr–Jun)</option>
-                      <option value="autumn">Autumn (Jul–Sep)</option>
-                      <option value="winter">Winter (Oct–Dec)</option>
-                      <option value="spring">Spring (Jan–Mar)</option>
+                      <option value="summer">Summer (Apr - Jun)</option>
+                      <option value="autumn">Autumn (Jul - Sep)</option>
+                      <option value="winter">Winter (Oct - Dec)</option>
+                      <option value="spring">Spring (Jan - Mar)</option>
                     </select>
                   </div>
 
@@ -527,6 +544,14 @@ function AssignmentsPage() {
               </form>
             </div>
           </div>
+        )}
+
+        {/* Inspect Assignment Submissions & Reminders Modal */}
+        {inspectingAssignmentId && (
+          <AssignmentSubmissionsModal
+            assignmentId={inspectingAssignmentId}
+            onClose={() => setInspectingAssignmentId(null)}
+          />
         )}
       </div>
     </TeacherShell>

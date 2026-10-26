@@ -982,7 +982,40 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       }
     }
 
-    return { samples, elapsed, audioUrl, transcript: finalTranscriptValue };
+    // Extract genuine acoustic PCM samples directly from the recorded audio Blob
+    let genuineSamples: number[] = [];
+    if (blob && blob.size > 1000) {
+      try {
+        const arrayBuf = await blob.arrayBuffer();
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) {
+          const decodeCtx = new AudioCtx();
+          const decodedBuffer = await decodeCtx.decodeAudioData(arrayBuf);
+          const channel = decodedBuffer.getChannelData(0);
+
+          const TARGET_SAMPLES = 84;
+          const sliceLength = Math.max(1, Math.floor(channel.length / TARGET_SAMPLES));
+          for (let i = 0; i < TARGET_SAMPLES; i++) {
+            const start = i * sliceLength;
+            const end = Math.min(channel.length, start + sliceLength);
+            let sumSquares = 0;
+            for (let j = start; j < end; j++) {
+              sumSquares += channel[j] * channel[j];
+            }
+            const rms = Math.sqrt(sumSquares / Math.max(1, end - start));
+            genuineSamples.push(rms);
+          }
+          await decodeCtx.close().catch(() => {});
+        }
+      } catch (pcmErr) {
+        console.warn("[useAudioRecorder] Audio PCM extraction note:", pcmErr);
+      }
+    }
+
+    const finalSamples = genuineSamples.length > 0 ? genuineSamples : samples;
+    return { samples: finalSamples, elapsed, audioUrl, transcript: finalTranscriptValue };
   }, [stream, samples, elapsed, runPostRecordingTranscription]);
 
   // ── Formatted time ─────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { Waveform } from "@/components/tarang/Waveform";
 import type { StudentRow, StudentWeeklyReport } from "@/types";
+import { useLanguage } from "@/lib/i18n";
 
 export function ParentReportCard({
   student,
@@ -8,6 +9,8 @@ export function ParentReportCard({
   student: StudentRow;
   report?: StudentWeeklyReport | null;
 }) {
+  const { t } = useLanguage();
+
   const attemptsCount = report
     ? report.attemptsThisWeek
     : Math.max(0, student.scorePct > 0 ? 1 : 0);
@@ -23,8 +26,8 @@ export function ParentReportCard({
   const trendText = report
     ? report.trendText
     : student.trendPct >= 0
-      ? `Score up ${student.trendPct}%, clear stretches are getting longer.`
-      : `Score down ${Math.abs(student.trendPct)}%, please encourage daily practice.`;
+      ? `Score up ${student.trendPct}%, speech clarity is improving.`
+      : `Score down ${Math.abs(student.trendPct)}%, please encourage regular practice.`;
 
   const firstName = student.name.split(" ")[0];
   const batchDisplay =
@@ -34,20 +37,20 @@ export function ParentReportCard({
   return (
     <div
       id="parent-report-card"
-      className="mt-3 mx-auto max-w-[420px] rounded-[12px] border border-hairline bg-ink-900 p-6"
+      className="mt-3 mx-auto max-w-[420px] rounded-[12px] border border-hairline bg-ink-900 p-6 shadow-sm"
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="size-2 rounded-full bg-[#3FB8AF]" />
           <span className="display text-[13px] font-semibold tracking-wide">trounce</span>
         </div>
-        <span className="num text-[10px] uppercase tracking-[0.14em] text-tertiary-warm">
-          weekly dossier
+        <span className="num text-[10px] uppercase tracking-[0.14em] text-[#3FB8AF] font-semibold bg-[#3FB8AF]/15 px-2 py-0.5 rounded">
+          {t("report_weekly_title")}
         </span>
       </div>
 
-      <p className="num mt-5 text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">Student</p>
-      <p className="mt-1 text-[18px]">{student.name}</p>
+      <p className="num mt-5 text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">{t("report_student_label")}</p>
+      <p className="mt-1 text-[20px] font-semibold text-primary-warm">{student.name}</p>
       <p className="text-[12px] text-secondary-warm capitalize">{batchDisplay}</p>
 
       <div className="mt-5">
@@ -55,41 +58,33 @@ export function ParentReportCard({
         <div className="mt-3 flex items-center justify-between text-[11px] text-secondary-warm">
           <span className="flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-[#3FB8AF]" />
-            clear
+            {t("report_speech_clear")}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-[#E2A33C]" />
-            filler
+            {t("report_speech_filler")}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-[#6B645A]" />
-            pause
+            {t("report_speech_pause")}
           </span>
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-3 divide-x divide-[#2E2A26] rounded-[4px] border border-hairline bg-ink-950">
-        <ScoreItem label="Pron" v={pronScore} />
-        <ScoreItem label="Vocab" v={vocabScore} />
-        <ScoreItem label="Gram" v={gramScore} />
+      <div className="mt-5 grid grid-cols-3 divide-x divide-hairline rounded-[8px] border border-hairline bg-ink-950">
+        <ScoreItem label={t("report_score_pron")} v={pronScore} />
+        <ScoreItem label={t("report_score_vocab")} v={vocabScore} />
+        <ScoreItem label={t("report_score_gram")} v={gramScore} />
       </div>
 
       <p className="mt-5 text-[13px] leading-[1.55] text-primary-warm">
-        {attemptsCount > 0 ? (
-          <>
-            <strong>{firstName}</strong> recorded {attemptsCount}{" "}
-            {attemptsCount === 1 ? "attempt" : "attempts"} this week. {trendText}
-          </>
-        ) : (
-          <>
-            <strong>{firstName}</strong> has recorded 0 voice attempts this week. Encourage regular
-            speaking practice on Trounce.
-          </>
-        )}
+        {attemptsCount > 0
+          ? t("report_summary_active", { name: firstName, count: attemptsCount, trend: trendText })
+          : t("report_summary_zero", { name: firstName })}
       </p>
 
-      <p className="mt-4 text-[11px] text-tertiary-warm">
-        Sent by Trounce Console · Official Progress Card
+      <p className="mt-4 text-[11px] text-tertiary-warm border-t border-hairline/60 pt-3">
+        {t("report_official_tag")}
       </p>
     </div>
   );

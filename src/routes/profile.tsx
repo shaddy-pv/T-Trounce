@@ -3,7 +3,10 @@ import { StudentShell } from "@/components/tarang/StudentShell";
 import { useUser, clearUser } from "@/lib/auth";
 import { TButton } from "@/components/tarang/Button";
 import { useLiveTranscriptionSetting, usePostTranscriptionSetting } from "@/lib/app-settings";
-import { Mic, Settings, FileText } from "lucide-react";
+import { Mic, Settings, FileText, Sun, Globe } from "lucide-react";
+import { ThemeToggle } from "@/components/tarang/ThemeToggle";
+import { LanguageSelector } from "@/components/tarang/LanguageSelector";
+import { useLanguage } from "@/lib/i18n";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -112,11 +115,12 @@ function AdminFeatureSettingsCard() {
 function ProfilePage() {
   const user = useUser();
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   return (
     <StudentShell>
       <div className="px-5 pt-2 pb-10">
-        <h1 className="display text-[28px]">Profile</h1>
+        <h1 className="display text-[28px]">{t("nav_profile")}</h1>
 
         <div className="mt-6 rounded-[12px] border border-hairline bg-ink-900 p-5">
           <p className="num text-[11px] uppercase tracking-[0.14em] text-tertiary-warm">
@@ -137,6 +141,34 @@ function ProfilePage() {
             {user?.batchTime ? `${user.batchTime} Batch` : "Unassigned"}
           </p>
           <p className="num mt-1 text-[12px] text-tertiary-warm">Account Data Synchronized</p>
+        </div>
+
+        {/* Language Preference Card */}
+        <div className="mt-4 rounded-[12px] border border-hairline bg-ink-900 p-5 space-y-3">
+          <div>
+            <p className="text-[14px] font-medium text-primary-warm flex items-center gap-2">
+              <Globe size={15} className="text-[#3FB8AF]" />
+              {t("lang_pref_title")}
+            </p>
+            <p className="text-[12px] text-tertiary-warm mt-0.5">
+              {t("lang_pref_desc")}
+            </p>
+          </div>
+          <LanguageSelector variant="segmented" className="w-full justify-between" />
+        </div>
+
+        {/* Theme Preference Card */}
+        <div className="mt-4 rounded-[12px] border border-hairline bg-ink-900 p-5 space-y-3">
+          <div>
+            <p className="text-[14px] font-medium text-primary-warm flex items-center gap-2">
+              <Sun size={15} className="text-[#E2A33C]" />
+              {t("theme_pref_title")}
+            </p>
+            <p className="text-[12px] text-tertiary-warm mt-0.5">
+              {t("theme_pref_desc")}
+            </p>
+          </div>
+          <ThemeToggle variant="segmented" className="w-full justify-between" />
         </div>
 
         {/* Master Admin Feature Settings Card (strictly restricted to shadanmd566@gmail.com) */}

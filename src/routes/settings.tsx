@@ -16,7 +16,12 @@ import {
   Radio,
   Power,
   RotateCcw,
+  Sun,
+  Globe,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/tarang/ThemeToggle";
+import { LanguageSelector } from "@/components/tarang/LanguageSelector";
+import { useLanguage } from "@/lib/i18n";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -44,6 +49,7 @@ export const Route = createFileRoute("/settings")({
 function SettingsPage() {
   const initialSettings = Route.useLoaderData();
   const user = useUser();
+  const { t } = useLanguage();
   const isMasterAdmin = user?.email?.toLowerCase() === "shadanmd566@gmail.com";
 
   const {
@@ -474,6 +480,59 @@ function SettingsPage() {
                 {user?.role || "Admin"} Privileges
               </p>
               <p className="num mt-1 text-[11px] text-tertiary-warm">Full System Administration</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Interface Appearance & Language */}
+        <section className="rounded-[16px] border border-hairline bg-ink-900/90 p-6 space-y-6">
+          <div>
+            <div className="flex items-center gap-2.5 pb-3 border-b border-hairline">
+              <Globe size={18} className="text-[#3FB8AF]" />
+              <div>
+                <h2 className="text-[16px] font-semibold text-primary-warm">
+                  {t("lang_pref_title")}
+                </h2>
+                <p className="text-[12px] text-tertiary-warm mt-0.5">
+                  {t("lang_pref_desc")}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-[14px] font-medium text-primary-warm">
+                  System Display Language
+                </p>
+                <p className="text-[12px] text-tertiary-warm">
+                  Choose between English, Hinglish, or Hindi
+                </p>
+              </div>
+              <LanguageSelector variant="segmented" />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2.5 pb-3 border-b border-hairline">
+              <Sun size={18} className="text-[#E2A33C]" />
+              <div>
+                <h2 className="text-[16px] font-semibold text-primary-warm">
+                  {t("theme_pref_title")}
+                </h2>
+                <p className="text-[12px] text-tertiary-warm mt-0.5">
+                  {t("theme_pref_desc")}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-[14px] font-medium text-primary-warm">
+                  Color Theme Mode
+                </p>
+                <p className="text-[12px] text-tertiary-warm">
+                  Light, Dark, or System preference
+                </p>
+              </div>
+              <ThemeToggle variant="segmented" />
             </div>
           </div>
         </section>

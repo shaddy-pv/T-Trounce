@@ -11,9 +11,10 @@ import {
 } from "@/server/data";
 import { cachedClientFetch } from "@/lib/client-cache";
 import { useUser } from "@/lib/auth";
-import { BookOpen, Calendar, Mic, MessageSquare, Check, Send, Clock } from "lucide-react";
+import { BookOpen, Calendar, Mic, MessageSquare, Check, Send, Clock, ChevronRight } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useRouter } from "@tanstack/react-router";
+import { useLanguage } from "@/lib/i18n";
 
 export const Route = createFileRoute("/practice/")({
   head: () => ({
@@ -222,28 +223,61 @@ function PracticeHubBody() {
     }
   };
 
+  const hasRecordedToday = streakGraph[6] === 1;
+  const { t } = useLanguage();
+
   return (
     <div className="px-5 pt-2 pb-10">
       {/* Hero streak — the one big number moment for students */}
-      <div className="rounded-[12px] border border-hairline bg-ink-900 p-5">
+      <div className="rounded-[14px] border border-hairline bg-ink-900 p-5 shadow-sm">
         <div className="flex items-end justify-between">
           <div>
-            <p className="text-[13px] text-secondary-warm">Hi {firstName}, your streak</p>
-            <p className="display mt-2 num text-[56px] leading-none text-primary-warm">
-              {streakDays}
-              <span className="ml-2 num text-[16px] font-normal text-tertiary-warm">days</span>
+            <p className="text-[13px] text-secondary-warm font-medium">
+              {t("greeting_streak", { name: firstName })}
             </p>
+            <div className="flex items-baseline gap-2 mt-1">
+              <p className="display num text-[56px] leading-none text-primary-warm font-bold">
+                {streakDays}
+              </p>
+              <span className="num text-[16px] font-semibold text-[#3FB8AF] light:text-teal-700">
+                {t("days_count")}
+              </span>
+            </div>
           </div>
           <div className="text-right">
-            <p className="num text-[12px] uppercase tracking-wider text-tertiary-warm">this week</p>
-            <p className="num mt-1 text-[14px] text-secondary-warm">
-              {completedCount} / {totalCount} completed
+            <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">{t("this_week")}</p>
+            <p className="num mt-1 text-[14px] font-semibold text-primary-warm">
+              {t("completed_of", { completed: completedCount, total: totalCount })}
             </p>
           </div>
         </div>
+
+        {/* Motivation note */}
+        <div
+          className={`mt-3 text-[12px] rounded-lg px-3 py-1.5 border transition ${
+            hasRecordedToday
+              ? "bg-ink-950/70 border-hairline/60 light:bg-teal-50 light:border-teal-200"
+              : "bg-ink-950/70 border-hairline/60 light:bg-amber-50 light:border-amber-200"
+          }`}
+        >
+          {hasRecordedToday ? (
+            <span className="text-[#3FB8AF] light:text-teal-800 font-medium">
+              {t("streak_done_msg")}
+            </span>
+          ) : (
+            <span className="text-[#E2A33C] light:text-amber-800 font-medium">
+              {t("streak_pending_msg")}
+            </span>
+          )}
+        </div>
+
         <div className="mt-4 grid grid-cols-7 gap-1.5">
           {streakGraph.map((d, i) => (
-            <div key={i} className={"h-1.5 rounded-full " + (d ? "bg-[#3FB8AF]" : "bg-ink-800")} />
+            <div
+              key={i}
+              className={"h-2 rounded-full transition-all " + (d ? "bg-[#3FB8AF] shadow-[0_0_6px_#3FB8AF]" : "bg-ink-800")}
+              title={i === 6 ? "Today" : `${6 - i} days ago`}
+            />
           ))}
         </div>
       </div>
@@ -252,8 +286,10 @@ function PracticeHubBody() {
       {msgs.length > 0 && (
         <div className="mt-8">
           <div className="flex items-center gap-2 mb-3">
-            <MessageSquare size={16} className="text-[#3FB8AF]" />
-            <h2 className="display text-[18px] text-primary-warm">Teacher Notes</h2>
+            <MessageSquare size={17} className="text-[#3FB8AF]" />
+            <h2 className="display text-[18px] text-primary-warm font-medium">
+              {t("teacher_notes_title")}
+            </h2>
             {msgs.filter((m) => !m.read).length > 0 && (
               <span className="ml-2 flex size-5 items-center justify-center rounded-full bg-[#3FB8AF] num text-[10px] font-bold text-[#100E0C]">
                 {msgs.filter((m) => !m.read).length}
@@ -330,11 +366,13 @@ function PracticeHubBody() {
         <div className="mt-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <BookOpen size={16} className="text-[#3FB8AF]" />
-              <h2 className="display text-[18px] text-primary-warm">Assigned Homework</h2>
+              <BookOpen size={18} className="text-[#3FB8AF] light:text-teal-700" />
+              <h2 className="display text-[18px] text-primary-warm font-medium">
+                {t("assigned_homework_title")}
+              </h2>
             </div>
-            <span className="num text-[11px] rounded-[6px] bg-[#3FB8AF]/20 px-2 py-0.5 font-medium text-[#3FB8AF]">
-              {assignments.length} assigned
+            <span className="num text-[11px] rounded-full bg-[#3FB8AF]/20 px-2.5 py-0.5 font-semibold text-[#3FB8AF] light:bg-teal-100/90 light:text-teal-800 light:border light:border-teal-200">
+              {t("tasks_count", { count: assignments.length })}
             </span>
           </div>
 
@@ -343,12 +381,9 @@ function PracticeHubBody() {
               const isDueValid = !!a.dueDate && !isNaN(new Date(a.dueDate).getTime());
               const isLate = isDueValid ? new Date(a.dueDate!).getTime() < Date.now() : false;
               const dueDateFormatted = isDueValid
-                ? new Date(a.dueDate!).toLocaleString("en-US", {
-                    weekday: "short",
+                ? new Date(a.dueDate!).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
                   })
                 : a.dueDate || "Not set";
 
@@ -364,90 +399,91 @@ function PracticeHubBody() {
               // First submission date from createdAt (attempts are sorted earliest-first in map)
               const submittedDateFormatted =
                 isDone && submission?.createdAt
-                  ? new Date(submission.createdAt).toLocaleString("en-US", {
-                      weekday: "short",
+                  ? new Date(submission.createdAt).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
                     })
                   : null;
 
               return (
                 <div
                   key={a.id}
-                  className={`rounded-[12px] border p-4 transition ${
+                  className={`rounded-[14px] border p-4 transition shadow-sm ${
                     isDone
-                      ? "border-[#3FB8AF]/50 bg-ink-900 shadow-sm"
+                      ? "border-[#3FB8AF]/40 bg-ink-900 hover:border-[#3FB8AF] light:border-slate-200 light:hover:border-teal-600"
                       : isLate
-                        ? "border-[#E2A33C] ring-1 ring-[#E2A33C]/40 bg-ink-900/95 shadow-md shadow-[#E2A33C]/10"
-                        : "border-[#3FB8AF]/30 bg-ink-900/90 hover:border-[#3FB8AF]"
+                        ? "border-[#E2A33C] ring-1 ring-[#E2A33C]/40 bg-ink-900 hover:border-[#E2A33C] light:border-amber-300 light:ring-amber-200"
+                        : "border-[#3FB8AF]/30 bg-ink-900 hover:border-[#3FB8AF] light:border-slate-200 light:hover:border-teal-600"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <span
-                      className={`num text-[11px] uppercase tracking-wider font-medium ${isLate && !isDone ? "text-[#E2A33C]" : "text-[#3FB8AF]"}`}
-                    >
-                      {a.targetSession} · {a.targetBatch} batch
+                    <span className="num text-[11px] font-semibold text-tertiary-warm">
+                      {a.difficulty} · {a.durationSec}s
                     </span>
 
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      <span className="num text-[11px] text-tertiary-warm">
-                        {a.difficulty} · {a.durationSec}s
-                      </span>
+                    <div className="flex items-center gap-2 shrink-0">
                       {isDone ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#3FB8AF]/30 bg-[#3FB8AF]/15 px-2.5 py-0.5 num text-[11px] font-medium text-[#3FB8AF] whitespace-nowrap shrink-0">
-                          <Check size={11} className="shrink-0" />
-                          <span>Done</span>
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#3FB8AF]/40 bg-[#3FB8AF]/20 px-2.5 py-0.5 num text-[11px] font-semibold text-[#3FB8AF] light:border-teal-300 light:bg-teal-50 light:text-teal-800 whitespace-nowrap shrink-0">
+                          <Check size={12} className="shrink-0" />
+                          <span>{t("status_done")}</span>
                           {completionPct !== null && (
-                            <span className="opacity-90 font-semibold">({completionPct}%)</span>
+                            <span className="opacity-90 font-bold">({completionPct}%)</span>
                           )}
                         </span>
                       ) : isLate ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E2A33C]/30 bg-[#E2A33C]/15 px-2.5 py-0.5 num text-[11px] font-medium text-[#E2A33C] whitespace-nowrap shrink-0">
-                          <Clock size={11} className="shrink-0" /> Overdue
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E2A33C]/40 bg-[#E2A33C]/20 px-2.5 py-0.5 num text-[11px] font-semibold text-[#E2A33C] light:border-amber-300 light:bg-amber-50 light:text-amber-800 whitespace-nowrap shrink-0">
+                          <Clock size={12} className="shrink-0" /> {t("status_late")}
                         </span>
-                      ) : null}
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-ink-950 px-2.5 py-0.5 num text-[11px] font-medium text-secondary-warm whitespace-nowrap shrink-0">
+                          ⏱️ {t("status_pending")}
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  <h3 className="display mt-1.5 text-[16px] text-primary-warm">{a.title}</h3>
-                  <p className="mt-1 text-[12px] text-secondary-warm">{a.instructions}</p>
-
-                  <div className="mt-3 rounded-[8px] border border-hairline bg-ink-950/80 p-3">
-                    <p className="num text-[10px] uppercase tracking-wider text-tertiary-warm">
-                      Prompt
-                    </p>
-                    <p className="mt-1 text-[13px] text-primary-warm italic">"{a.prompt}"</p>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between border-t border-hairline pt-2 text-[12px]">
-                    <span
-                      className={`flex items-center gap-1.5 ${isLate && !isDone ? "text-[#E2A33C] font-medium" : "text-tertiary-warm"}`}
+                  <h3 className="display mt-2 text-[16px] text-primary-warm font-medium">
+                    <Link
+                      to="/practice/assignment/$assignmentId"
+                      params={{ assignmentId: a.id }}
+                      className="hover:text-[#3FB8AF] light:hover:text-teal-700 transition"
                     >
-                      <Calendar size={13} />
+                      {a.title}
+                    </Link>
+                  </h3>
+                  {(a.instructions || a.prompt) && (
+                    <p className="mt-1 text-[13px] text-secondary-warm line-clamp-2">
+                      {a.instructions || a.prompt}
+                    </p>
+                  )}
+
+                  <div className="mt-3.5 flex items-center justify-between gap-3 border-t border-hairline pt-3 text-[12px]">
+                    <span
+                      className={`flex items-center gap-1.5 ${isLate && !isDone ? "text-[#E2A33C] light:text-amber-800 font-medium" : "text-tertiary-warm"}`}
+                    >
+                      <Calendar size={13} className="shrink-0" />
                       {isDone
                         ? submittedDateFormatted
-                          ? `Submitted ${submittedDateFormatted}`
-                          : "Submitted"
+                          ? `Submitted: ${submittedDateFormatted}`
+                          : t("status_submitted")
                         : isLate
-                          ? `Past Due: ${dueDateFormatted}`
-                          : `Due: ${dueDateFormatted}`}
+                          ? t("due_date_passed", { date: dueDateFormatted })
+                          : t("due_date", { date: dueDateFormatted })}
                     </span>
 
                     <Link
                       to="/practice/assignment/$assignmentId"
                       params={{ assignmentId: a.id }}
-                      className={`inline-flex items-center gap-1.5 font-medium hover:underline ${
-                        isDone ? "text-[#3FB8AF]" : isLate ? "text-[#E2A33C]" : "text-[#3FB8AF]"
+                      className={`inline-flex items-center justify-center gap-1.5 rounded-[9px] px-3.5 py-2 text-[12.5px] font-semibold transition shrink-0 ${
+                        isDone
+                          ? "border border-[#3FB8AF]/40 bg-[#3FB8AF]/15 text-[#3FB8AF] hover:bg-[#3FB8AF]/25 light:border-teal-300 light:bg-teal-50 light:text-teal-800 light:hover:bg-teal-100/90 light:shadow-xs"
+                          : isLate
+                            ? "bg-[#E2A33C] text-ink-950 hover:brightness-110 shadow-md shadow-[#E2A33C]/20 light:bg-[#D97706] light:text-white light:hover:bg-[#B45309]"
+                            : "bg-[#3FB8AF] text-ink-950 hover:brightness-110 shadow-md shadow-[#3FB8AF]/20 light:bg-[#0D9488] light:text-white light:hover:bg-[#0F766E]"
                       }`}
                     >
-                      <Mic size={13} />
-                      {isDone
-                        ? "Listen & Review (or Retake) →"
-                        : isLate
-                          ? "Record Homework (Late Submission) →"
-                          : "Record Homework →"}
+                      <Mic size={14} />
+                      {isDone ? t("listen_or_retake_btn") : t("record_homework_btn")}
                     </Link>
                   </div>
                 </div>
@@ -459,15 +495,23 @@ function PracticeHubBody() {
 
       {/* Daily Standard Curriculum Prompts */}
       <div className="mt-8 flex items-baseline justify-between">
-        <h2 className="display text-[18px]">Daily curriculum drills</h2>
-        <span className="num text-[12px] text-tertiary-warm">{modules.length} available</span>
+        <div>
+          <h2 className="display text-[18px] text-primary-warm font-medium">
+            {t("practice_drills_title")}
+          </h2>
+          <p className="text-[12px] text-secondary-warm mt-0.5">
+            {t("practice_drills_sub")}
+          </p>
+        </div>
+        <span className="num text-[11px] rounded-full bg-ink-800 px-2 py-0.5 text-secondary-warm">
+          {t("available_count", { count: modules.length })}
+        </span>
       </div>
 
       <ul className="mt-3 flex flex-col gap-3">
         {modules.map((m) => {
           const modSubmission = attemptsByModule.get(m.id);
           const isDone = !!modSubmission;
-          // Completion % = how much of the target duration the student recorded, capped at 100%
           const completionPct =
             isDone && modSubmission && m.durationSec > 0
               ? Math.min(100, Math.round((modSubmission.durationSec / m.durationSec) * 100))
@@ -480,51 +524,40 @@ function PracticeHubBody() {
                 params={{ moduleId: m.id }}
                 className={`group block rounded-[12px] border p-4 transition ${
                   isDone
-                    ? "border-[#3FB8AF]/30 bg-ink-900 hover:border-[#3FB8AF]"
-                    : "border-hairline bg-ink-900 hover:border-[#9C9388]"
+                    ? "border-[#3FB8AF]/40 bg-ink-900 hover:border-[#3FB8AF] light:border-slate-200 light:hover:border-teal-600"
+                    : "border-hairline bg-ink-900 hover:border-[#3FB8AF]/60 light:border-slate-200 light:hover:border-teal-600"
                 }`}
               >
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0 flex-1">
-                    <p className="text-[15px] font-medium text-primary-warm truncate">{m.title}</p>
-                    <p className="mt-1 text-[12px] text-secondary-warm">
+                    <p className="text-[15px] font-medium text-primary-warm truncate transition group-hover:text-[#3FB8AF] light:group-hover:text-teal-700">
+                      {m.title}
+                    </p>
+                    <p className="mt-1 num text-[12px] text-tertiary-warm">
                       {m.difficulty} · {m.durationSec}s
                     </p>
                   </div>
 
-                  <div className="shrink-0 flex items-center gap-3">
+                  <div className="shrink-0 flex items-center gap-2.5">
                     {isDone ? (
-                      <div className="flex items-center gap-3">
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#3FB8AF]/30 bg-[#3FB8AF]/15 px-2.5 py-0.5 num text-[11px] font-medium text-[#3FB8AF] whitespace-nowrap shrink-0">
-                          <Check size={11} className="shrink-0" />
-                          <span>Done</span>
-                          {completionPct !== null && (
-                            <span className="opacity-90 font-semibold">({completionPct}%)</span>
-                          )}
-                        </span>
-                        <div className="hidden sm:block w-16 opacity-80">
-                          <Waveform
-                            mode="thumbnail"
-                            data={
-                              modSubmission?.waveform && modSubmission.waveform.length > 0
-                                ? modSubmission.waveform
-                                : Array.from({ length: 22 }, (_, i) => ({
-                                    v: 0.3 + Math.abs(Math.sin((i + m.id.length) * 0.7)) * 0.5,
-                                    kind: "clear" as const,
-                                  }))
-                            }
-                            height={22}
-                          />
-                        </div>
-                        <span className="num text-[11px] text-[#3FB8AF] group-hover:underline whitespace-nowrap">
-                          Review →
-                        </span>
-                      </div>
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#3FB8AF]/40 bg-[#3FB8AF]/15 px-2.5 py-0.5 num text-[11px] font-semibold text-[#3FB8AF] light:border-teal-300 light:bg-teal-50 light:text-teal-800 whitespace-nowrap">
+                        <Check size={11} className="shrink-0" />
+                        <span>{t("status_done")}</span>
+                        {completionPct !== null && (
+                          <span className="opacity-90 font-bold">({completionPct}%)</span>
+                        )}
+                      </span>
                     ) : (
-                      <span className="num text-[11px] uppercase tracking-wider text-[#3FB8AF] whitespace-nowrap">
-                        start →
+                      <span className="inline-flex items-center gap-1.5 rounded-md bg-[#3FB8AF]/15 px-3 py-1.5 text-[12px] font-semibold text-[#3FB8AF] light:border light:border-teal-300 light:bg-teal-50 light:text-teal-800 group-hover:bg-[#3FB8AF] group-hover:text-ink-950 light:group-hover:bg-[#0D9488] light:group-hover:text-white light:group-hover:border-[#0D9488] transition whitespace-nowrap">
+                        <Mic size={13} className="shrink-0" />
+                        <span>{t("speak_action")}</span>
                       </span>
                     )}
+
+                    <ChevronRight
+                      size={15}
+                      className="text-tertiary-warm transition group-hover:text-[#3FB8AF] light:group-hover:text-teal-700 group-hover:translate-x-0.5 shrink-0"
+                    />
                   </div>
                 </div>
               </Link>

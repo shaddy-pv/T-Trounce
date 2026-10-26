@@ -8,10 +8,14 @@ import {
   Pause,
   RotateCcw,
   Volume2,
+  VolumeX,
   FileText,
   CheckCircle2,
   Award,
   BookOpen,
+  Sparkles,
+  Settings2,
+  Loader2,
 } from "lucide-react";
 import { Waveform } from "@/components/tarang/Waveform";
 import { fetchAssignmentByIdFn, fetchStudentAttemptsFn, saveAttemptFn } from "@/server/data";
@@ -19,6 +23,9 @@ import { useAudioRecorder } from "@/features/practice/hooks/useAudioRecorder";
 import { analyzeAudioSignal, FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
 import { useUser } from "@/lib/auth";
 import { useLiveTranscriptionSetting, usePostTranscriptionSetting } from "@/lib/app-settings";
+import { ThemeToggle } from "@/components/tarang/ThemeToggle";
+import { LanguageSelector } from "@/components/tarang/LanguageSelector";
+import { useLanguage } from "@/lib/i18n";
 import type { AssignmentPublic } from "@/server/services/assignment.service";
 import type { AttemptResult } from "@/types";
 
@@ -67,6 +74,7 @@ function AssignmentRecordingSession() {
   };
   const navigate = useNavigate();
   const user = useUser();
+  const { t } = useLanguage();
 
   const a: AssignmentPublic =
     loaderData?.assignment ??
@@ -89,6 +97,29 @@ function AssignmentRecordingSession() {
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(existingAttempt?.durationSec || 30);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+
+  // Friendly Tier-3 accessibility states
+  const [showMicSettings, setShowMicSettings] = useState(false);
+  const [isSpeakingPrompt, setIsSpeakingPrompt] = useState(false);
+  const [showHint, setShowHint] = useState(false);
+
+  const playPromptAudio = () => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      if (isSpeakingPrompt) {
+        window.speechSynthesis.cancel();
+        setIsSpeakingPrompt(false);
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const textToSpeak = a.prompt || a.title;
+      const utterance = new SpeechSynthesisUtterance(textToSpeak);
+      utterance.rate = 0.88;
+      utterance.onstart = () => setIsSpeakingPrompt(true);
+      utterance.onend = () => setIsSpeakingPrompt(false);
+      utterance.onerror = () => setIsSpeakingPrompt(false);
+      window.speechSynthesis.speak(utterance);
+    }
+  };
 
   const { enabled: liveTranscriptionEnabled } = useLiveTranscriptionSetting();
   const { enabled: postTranscriptionEnabled } = usePostTranscriptionSetting();
@@ -231,18 +262,22 @@ function AssignmentRecordingSession() {
               className="inline-flex items-center gap-1.5 text-[14px] text-secondary-warm hover:text-primary-warm"
             >
               <ArrowLeft size={16} />
-              Back to Practice Hub
+              {t("back_to_hub")}
             </Link>
-            <span className="flex items-center gap-1.5 rounded-full border border-[#3FB8AF]/30 bg-[#3FB8AF]/10 px-2.5 py-1 text-[11px] font-medium text-[#3FB8AF]">
-              <CheckCircle2 size={13} />
-              Completed & Submitted
-            </span>
+            <div className="flex items-center gap-2">
+              <LanguageSelector variant="button" />
+              <ThemeToggle showLabel={false} />
+              <span className="flex items-center gap-1.5 rounded-full border border-[#3FB8AF]/30 bg-[#3FB8AF]/10 light:border-teal-300 light:bg-teal-50 light:text-teal-800 px-2.5 py-1 text-[11px] font-semibold text-[#3FB8AF]">
+                <CheckCircle2 size={13} />
+                {t("completed_submitted")}
+              </span>
+            </div>
           </div>
 
           {/* Assignment Header */}
           <div className="mt-6">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-secondary-warm">
-              <BookOpen size={13} className="text-[#3FB8AF]" />
+              <BookOpen size={13} className="text-[#3FB8AF] light:text-teal-700" />
               Homework Assignment · {a.difficulty}
             </div>
             <h1 className="mt-1 text-[22px] font-bold tracking-tight text-primary-warm">
@@ -315,9 +350,9 @@ function AssignmentRecordingSession() {
                   }
                 }}
                 disabled={!existingAttempt.audioUrl}
-                className={`flex size-10 shrink-0 items-center justify-center rounded-full transition-all ${
+                className={`flex size-10 shrink-0 items-center justify-center rounded-full transition-all cursor-pointer ${
                   existingAttempt.audioUrl
-                    ? "bg-[#3FB8AF] text-[#100E0C] hover:scale-105 active:scale-95 shadow-md shadow-[#3FB8AF]/20"
+                    ? "bg-[#3FB8AF] light:bg-[#0D9488] text-[#100E0C] light:text-white hover:scale-105 active:scale-95 shadow-md shadow-[#3FB8AF]/20 light:shadow-[#0D9488]/20"
                     : "bg-ink-800 text-tertiary-warm cursor-not-allowed opacity-50"
                 }`}
                 title={isPlayingAudio ? "Pause" : "Play"}
@@ -325,34 +360,44 @@ function AssignmentRecordingSession() {
                 {isPlayingAudio ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
               </button>
 
-              <div className="flex-1 flex flex-col gap-1">
-                <div className="flex justify-between text-[10px] num text-tertiary-warm">
-                  <span>{isPlayingAudio ? "Playing..." : "Audio Ready"}</span>
-                  <span>
-                    {formatSecs(audioCurrentTime, 0)} /{" "}
-                    {formatSecs(audioDuration, existingAttempt.durationSec || 30)}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={audioDuration || 1}
-                  step={0.1}
-                  value={audioCurrentTime}
-                  onChange={(e) => {
-                    const t = Number(e.target.value);
-                    setAudioCurrentTime(t);
-                    if (audioPlayerRef.current) audioPlayerRef.current.currentTime = t;
-                  }}
-                  disabled={!existingAttempt.audioUrl}
-                  className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-ink-800 accent-[#3FB8AF]"
-                />
-              </div>
-            </div>
+              {(() => {
+                const effectiveDur =
+                  audioDuration && isFinite(audioDuration) && audioDuration > 0
+                    ? audioDuration
+                    : existingAttempt.durationSec || 30;
+                const progressFraction =
+                  effectiveDur > 0
+                    ? Math.min(1, Math.max(0, audioCurrentTime / effectiveDur))
+                    : 0;
 
-            {/* Waveform */}
-            <div className="mt-4 opacity-95">
-              <Waveform mode="thumbnail" data={existingAttempt.waveform} height={32} />
+                return (
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex justify-between text-[11px] num text-tertiary-warm">
+                      <span className="font-medium text-secondary-warm">{isPlayingAudio ? "Playing Student Recording..." : "Audio Ready"}</span>
+                      <span className="font-mono">
+                        {formatSecs(audioCurrentTime, 0)} /{" "}
+                        {formatSecs(audioDuration, existingAttempt.durationSec || 30)}
+                      </span>
+                    </div>
+
+                    <div className="w-full rounded-md p-1 bg-ink-900/60 light:bg-slate-100/70 border border-hairline/60">
+                      <Waveform
+                        mode="thumbnail"
+                        data={existingAttempt.waveform}
+                        height={38}
+                        playbackProgress={progressFraction}
+                        onSeek={(frac) => {
+                          if (audioPlayerRef.current && existingAttempt.audioUrl) {
+                            const targetTime = frac * effectiveDur;
+                            audioPlayerRef.current.currentTime = targetTime;
+                            setAudioCurrentTime(targetTime);
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Waveform Color Legend */}
@@ -433,7 +478,7 @@ function AssignmentRecordingSession() {
                 setPhase("idle");
                 setIsRetaking(true);
               }}
-              className="flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#3FB8AF] py-3.5 text-[14px] font-semibold text-[#100E0C] transition hover:brightness-110 shadow-md shadow-[#3FB8AF]/20 cursor-pointer"
+              className="flex w-full items-center justify-center gap-2 rounded-[12px] bg-[#3FB8AF] light:bg-[#0D9488] py-3.5 text-[14px] font-semibold text-[#100E0C] light:text-white transition hover:brightness-110 shadow-md shadow-[#3FB8AF]/20 light:shadow-[#0D9488]/20 cursor-pointer"
             >
               <RotateCcw size={16} />
               Retake Homework (Record New Attempt)
@@ -474,38 +519,100 @@ function AssignmentRecordingSession() {
             </Link>
           )}
 
-          <span
-            className={
-              "num text-[14px] tabular-nums " +
-              (phase === "recording" ? "text-primary-warm" : "text-tertiary-warm")
-            }
-          >
-            {formattedTime}
-          </span>
+          <div className="flex items-center gap-2">
+            <LanguageSelector variant="button" />
+            <ThemeToggle showLabel={false} />
+            <span
+              className={
+                "num text-[14px] tabular-nums " +
+                (phase === "recording" ? "text-primary-warm" : "text-tertiary-warm")
+              }
+            >
+              {formattedTime}
+            </span>
+          </div>
         </header>
 
         {/* Prompt */}
-        <section className="px-6 pt-6">
+        <section className="px-6 pt-5">
           <div className="flex items-center justify-between">
-            <p className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
-              Homework Prompt · {a.difficulty}
-            </p>
+            <span className="num text-[11px] uppercase tracking-[0.18em] text-[#3FB8AF] font-semibold bg-[#3FB8AF]/15 px-2.5 py-0.5 rounded-full">
+              Homework · {a.difficulty}
+            </span>
             {isRetaking && (
-              <span className="num text-[11px] rounded bg-[#E2A33C]/20 px-2 py-0.5 font-medium text-[#E2A33C]">
-                Retake Mode
+              <span className="num text-[11px] rounded bg-[#E2A33C]/20 px-2.5 py-0.5 font-medium text-[#E2A33C]">
+                🔄 {t("retaking_indicator")}
               </span>
             )}
           </div>
-          <h1 className="display mt-3 text-[26px] leading-[1.2] text-primary-warm">“{a.prompt}”</h1>
-          <p className="mt-3 text-[13px] text-secondary-warm">
-            Aim for ~{a.durationSec} seconds. Speak naturally. Pause if you need to think.
-          </p>
-        </section>
 
-        {/* Microphone Device Picker (External Mic Support) */}
-        {phase === "idle" && (
-          <section className="mt-4 px-5">
-            <div className="rounded-[10px] border border-hairline bg-ink-900 p-3">
+          <div className="mt-3 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-[13px] font-semibold uppercase tracking-wider text-secondary-warm">
+                {a.title}
+              </h2>
+              <h1 className="display mt-1 text-[22px] sm:text-[25px] leading-[1.25] text-primary-warm font-medium">
+                “{a.prompt}”
+              </h1>
+            </div>
+            <button
+              type="button"
+              onClick={playPromptAudio}
+              className={`shrink-0 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition cursor-pointer ${
+                isSpeakingPrompt
+                  ? "border-[#3FB8AF] bg-[#3FB8AF] text-ink-950 animate-pulse"
+                  : "border-hairline bg-ink-900 text-secondary-warm hover:text-primary-warm hover:border-[#3FB8AF]"
+              }`}
+              title="Listen to prompt"
+            >
+              {isSpeakingPrompt ? <VolumeX size={14} /> : <Volume2 size={14} className="text-[#3FB8AF]" />}
+              <span>{isSpeakingPrompt ? t("stop_listen_btn") : t("listen_prompt_btn")}</span>
+            </button>
+          </div>
+
+          <div className="mt-2.5 flex items-center justify-between text-[12px] text-secondary-warm">
+            <span>{t("speak_target_hint", { sec: a.durationSec })}</span>
+            <button
+              type="button"
+              onClick={() => setShowHint(!showHint)}
+              className="text-[#E2A33C] hover:underline flex items-center gap-1 font-medium cursor-pointer"
+            >
+              <Sparkles size={12} />
+              <span>{showHint ? t("hide_tips_btn") : t("speaking_tips_btn")}</span>
+            </button>
+          </div>
+
+          {/* Friendly Speaking Hint */}
+          {showHint && (
+            <div className="mt-3 rounded-[10px] border border-[#E2A33C]/40 bg-[#E2A33C]/10 p-3 text-[12px] text-primary-warm animate-in fade-in duration-200">
+              <p className="font-semibold text-[#E2A33C] flex items-center gap-1.5">
+                <Sparkles size={13} />
+                {t("tips_starter_label")}
+              </p>
+              <ul className="mt-1.5 space-y-1 list-disc list-inside text-secondary-warm">
+                <li><span className="text-primary-warm">"Regarding this topic, my opinion is..."</span></li>
+                <li><span className="text-primary-warm">"I would like to explain that..."</span></li>
+                <li>{t("tips_point_1")}</li>
+              </ul>
+            </div>
+          )}
+
+          {/* Compact Microphone Device Picker Toggle */}
+          {phase === "idle" && (
+            <div className="mt-3 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setShowMicSettings(!showMicSettings)}
+                className="inline-flex items-center gap-1.5 text-[11px] text-tertiary-warm hover:text-secondary-warm transition cursor-pointer"
+              >
+                <Settings2 size={12} />
+                <span>{showMicSettings ? t("hide_mic_settings_btn") : t("mic_settings_btn")}</span>
+              </button>
+            </div>
+          )}
+
+          {phase === "idle" && showMicSettings && (
+            <div className="mt-2 rounded-[10px] border border-hairline bg-ink-900 p-3 text-[12px]">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-tertiary-warm num">
                   <Mic size={13} className="text-[#3FB8AF]" />
@@ -533,8 +640,8 @@ function AssignmentRecordingSession() {
                 )}
               </select>
             </div>
-          </section>
-        )}
+          )}
+        </section>
 
         {/* Live Waveform & Input Meter */}
         <section className="mt-6 px-5">
@@ -621,7 +728,7 @@ function AssignmentRecordingSession() {
                 !transcript &&
                 liveEngine !== "local-whisper" ? (
                   <span className="italic text-[#E2A33C]/90 text-[13px]">
-                    Live captions unavailable — Google speech servers unreachable on this network.
+                    Live captions unavailable: Google speech servers unreachable on this network.
                     Your recording is being captured and will be accurately transcribed when you
                     stop.
                   </span>
@@ -699,31 +806,51 @@ function AssignmentRecordingSession() {
         )}
 
         {/* Mic control */}
-        <section className="mt-auto px-5 pb-12 pt-6">
+        <section className="mt-auto px-5 pb-10 pt-4">
+          {phase === "recording" && (
+            <div className="mb-3 flex items-center justify-between rounded-[10px] border border-[#3FB8AF]/40 bg-[#3FB8AF]/10 px-3.5 py-2 text-[12px] text-primary-warm">
+              <span className="flex items-center gap-2 font-medium text-[#3FB8AF]">
+                <span className="size-2 rounded-full bg-[#3FB8AF] animate-ping" />
+                {t("recording_live_banner")}
+              </span>
+              <span className="num font-semibold text-primary-warm">
+                {formattedTime}
+              </span>
+            </div>
+          )}
+
           {phase === "idle" && (
-            <button
-              onClick={() => startRecording()}
-              className="flex w-full items-center justify-center gap-2.5 rounded-[12px] bg-[#3FB8AF] py-4 text-[15px] font-semibold text-[#100E0C] transition hover:brightness-110 shadow-lg shadow-[#3FB8AF]/20 cursor-pointer"
-            >
-              <Mic size={18} />
-              {isRetaking ? "Start New Recording" : "Start Recording"}
-            </button>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => startRecording()}
+                className="flex w-full items-center justify-center gap-3 rounded-[16px] bg-[#3FB8AF] py-4 text-[16px] font-bold text-ink-950 transition hover:brightness-110 shadow-xl shadow-[#3FB8AF]/25 cursor-pointer active:scale-[0.98]"
+              >
+                <div className="flex size-7 items-center justify-center rounded-full bg-ink-950/15">
+                  <Mic size={18} className="text-ink-950" />
+                </div>
+                <span>{isRetaking ? t("retaking_indicator") : t("tap_to_speak")}</span>
+              </button>
+            </div>
           )}
 
           {phase === "recording" && (
             <button
+              type="button"
               onClick={handleStop}
-              className="flex w-full items-center justify-center gap-2.5 rounded-[12px] bg-[#C1503B] py-4 text-[15px] font-semibold text-primary-warm transition hover:brightness-110 shadow-lg shadow-[#C1503B]/20 cursor-pointer"
+              className="flex w-full items-center justify-center gap-3 rounded-[16px] bg-[#C1503B] py-4 text-[16px] font-bold text-primary-warm transition hover:brightness-110 shadow-xl shadow-[#C1503B]/25 cursor-pointer active:scale-[0.98]"
             >
-              <Square size={18} />
-              Finish & Submit Homework
+              <div className="flex size-7 items-center justify-center rounded-full bg-black/20">
+                <Square size={16} className="text-primary-warm" />
+              </div>
+              <span>{t("tap_to_finish")}</span>
             </button>
           )}
 
           {phase === "uploading" && (
-            <div className="flex w-full items-center justify-center gap-2 rounded-[12px] border border-hairline bg-ink-900 py-4 text-[14px] text-secondary-warm">
-              <span className="size-2 animate-ping rounded-full bg-[#3FB8AF]" />
-              Analyzing Speech & Uploading...
+            <div className="flex w-full items-center justify-center gap-2.5 rounded-[14px] border border-hairline bg-ink-900 py-4 text-[14px] text-primary-warm font-medium">
+              <Loader2 size={18} className="animate-spin text-[#3FB8AF]" />
+              <span>{t("analyzing_progress")}</span>
             </div>
           )}
         </section>

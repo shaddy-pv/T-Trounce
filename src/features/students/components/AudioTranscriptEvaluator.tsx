@@ -14,6 +14,7 @@ import {
 import { Waveform } from "@/components/tarang/Waveform";
 import { saveTeacherFeedbackFn } from "@/server/data";
 import type { AttemptResult } from "@/types";
+import { useLanguage } from "@/lib/i18n";
 
 export function AudioTranscriptEvaluator({
   attempt,
@@ -24,6 +25,7 @@ export function AudioTranscriptEvaluator({
   index: number;
   isLate?: boolean;
 }) {
+  const { t } = useLanguage();
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const initialDuration =
@@ -80,34 +82,15 @@ export function AudioTranscriptEvaluator({
       audioRef.current.pause();
       setIsPlaying(false);
     } else {
-      // Force duration resolution if browser reports Infinity on WebM
-      if (audioRef.current.duration === Infinity) {
-        audioRef.current.currentTime = 1e101;
-        audioRef.current.ontimeupdate = () => {
-          if (audioRef.current) {
-            audioRef.current.ontimeupdate = handleTimeUpdate;
-            audioRef.current.currentTime = 0;
-            audioRef.current
-              .play()
-              .then(() => setIsPlaying(true))
-              .catch((e) => {
-                console.warn("Audio playback issue:", e);
-                setAudioError("Click to interact & play recording");
-                setIsPlaying(false);
-              });
-          }
-        };
-      } else {
-        const playPromise = audioRef.current.play();
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => setIsPlaying(true))
-            .catch((e) => {
-              console.warn("Audio playback issue:", e);
-              setAudioError("Click to interact & play recording");
-              setIsPlaying(false);
-            });
-        }
+      const playPromise = audioRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => setIsPlaying(true))
+          .catch((e) => {
+            console.warn("Audio playback issue:", e);
+            setAudioError("Click to interact & play recording");
+            setIsPlaying(false);
+          });
       }
     }
   };
@@ -128,14 +111,6 @@ export function AudioTranscriptEvaluator({
   const handleEnded = () => {
     setIsPlaying(false);
     setCurrentTime(0);
-  };
-
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = Number(e.target.value);
-    setCurrentTime(time);
-    if (audioRef.current) {
-      audioRef.current.currentTime = time;
-    }
   };
 
   const formatTime = (secs: number, fallback: number = 30) => {
@@ -296,17 +271,29 @@ export function AudioTranscriptEvaluator({
               </span>
             </div>
 
-            {/* Scrubber bar */}
-            <input
-              type="range"
-              min={0}
-              max={duration && isFinite(duration) ? duration : attempt.durationSec || 30}
-              step={0.1}
-              value={currentTime}
-              onChange={handleSeek}
-              disabled={!attempt.audioUrl}
-              className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-ink-800 accent-[#3FB8AF]"
-            />
+            {/* Waveform timeline as the sole seekable audio visualizer */}
+            {(() => {
+              const effectiveDur = duration && isFinite(duration) && duration > 0 ? duration : attempt.durationSec || 30;
+              const progressFraction = effectiveDur > 0 ? Math.min(1, Math.max(0, currentTime / effectiveDur)) : 0;
+
+              return (
+                <div className="w-full rounded-md p-1.5 bg-ink-900/70 light:bg-slate-100 border border-hairline/60">
+                  <Waveform
+                    mode="thumbnail"
+                    data={attempt.waveform}
+                    height={40}
+                    playbackProgress={progressFraction}
+                    onSeek={(frac) => {
+                      if (audioRef.current && attempt.audioUrl) {
+                        const targetTime = frac * effectiveDur;
+                        audioRef.current.currentTime = targetTime;
+                        setCurrentTime(targetTime);
+                      }
+                    }}
+                  />
+                </div>
+              );
+            })()}
           </div>
 
           <button
@@ -327,11 +314,6 @@ export function AudioTranscriptEvaluator({
         {audioError && (
           <p className="mt-2 text-[11px] text-alert-amber text-center">{audioError}</p>
         )}
-
-        {/* Waveform Visualization */}
-        <div className="mt-3.5 opacity-95">
-          <Waveform mode="thumbnail" data={attempt.waveform} height={32} />
-        </div>
       </div>
 
       {/* Spoken Transcript Evaluation */}
@@ -411,16 +393,37 @@ export function AudioTranscriptEvaluator({
         </div>
 
         <p className="mt-1 text-[12px] text-secondary-warm">
-          Write feedback for this recording. The student will see this note directly on their
-          homework screen.
+          {t("evaluator_note_prompt")}
         </p>
+
+        {/* Quick Feedback Preset Pills */}
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {[
+            { label: t("evaluator_preset_1_label"), text: t("evaluator_preset_1_text") },
+            { label: t("evaluator_preset_2_label"), text: t("evaluator_preset_2_text") },
+            { label: t("evaluator_preset_3_label"), text: t("evaluator_preset_3_text") },
+            { label: t("evaluator_preset_4_label"), text: t("evaluator_preset_4_text") },
+            { label: t("evaluator_preset_5_label"), text: t("evaluator_preset_5_text") },
+          ].map((preset, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => {
+                setFeedbackText((prev) => (prev ? `${prev} ${preset.text}` : preset.text));
+              }}
+              className="rounded-full border border-hairline bg-ink-950 px-2.5 py-1 text-[11px] text-secondary-warm hover:border-[#3FB8AF] hover:text-primary-warm transition cursor-pointer"
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
 
         <div className="mt-3 flex flex-col sm:flex-row gap-2.5">
           <textarea
             rows={2}
             value={feedbackText}
             onChange={(e) => setFeedbackText(e.target.value)}
-            placeholder="e.g. Great pace and articulation! Try pausing briefly before introducing your second point."
+            placeholder={t("evaluator_placeholder")}
             className="w-full flex-1 rounded-[8px] border border-hairline bg-ink-950 p-3 text-[13px] text-primary-warm placeholder:text-tertiary-warm focus:border-[#3FB8AF] focus:outline-none resize-none"
           />
           <button

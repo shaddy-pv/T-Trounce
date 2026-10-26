@@ -14,10 +14,18 @@ import {
   GraduationCap,
   RotateCcw,
   Check,
+  CheckCircle2,
   Eye,
   EyeOff,
   AlertCircle,
+  MessageSquare,
+  Copy,
+  Phone,
 } from "lucide-react";
+import {
+  generateUserCredentialsWhatsAppUrl,
+  formatCredentialsPlainText,
+} from "@/features/users/lib/whatsapp-credentials";
 
 export const Route = createFileRoute("/users")({
   head: () => ({
@@ -79,6 +87,7 @@ function UsersManagementPage() {
   // Form State for New User Creation
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [newPhone, setNewPhone] = useState("");
   const [newRole, setNewRole] = useState<"teacher" | "student">("student");
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -87,6 +96,16 @@ function UsersManagementPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [createdAccountData, setCreatedAccountData] = useState<{
+    name: string;
+    email: string;
+    phone?: string;
+    role: "teacher" | "student";
+    passwordPlain: string;
+    sessionSeason: string;
+    batchTime: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Filtered Users
   const filteredUsers = users.filter((u) => {
@@ -124,6 +143,7 @@ function UsersManagementPage() {
         data: {
           name: newName.trim(),
           email: newEmail.trim().toLowerCase(),
+          phone: newPhone.trim() || undefined,
           role: newRole,
           passwordPlain: newPassword.trim(),
           sessionSeason: newSession,
@@ -133,13 +153,23 @@ function UsersManagementPage() {
       })) as UserPublic;
 
       setUsers([created, ...users]);
-      setSuccessMessage(
-        `Successfully created ${newRole} account for ${created.name} (${newSession.toUpperCase()} · ${newBatchTime.toUpperCase()})!`,
-      );
+      
+      // Save credentials for the WhatsApp dispatch modal
+      setCreatedAccountData({
+        name: created.name,
+        email: created.email,
+        phone: newPhone.trim() || undefined,
+        role: newRole,
+        passwordPlain: newPassword.trim(),
+        sessionSeason: newSession,
+        batchTime: newBatchTime,
+      });
+
       setShowCreateModal(false);
       // Reset form
       setNewName("");
       setNewEmail("");
+      setNewPhone("");
       setNewPassword("");
       invalidateClientDataCache("users");
       invalidateClientDataCache("student-roster");
@@ -429,7 +459,14 @@ function UsersManagementPage() {
                         ) : (
                           <div className="font-medium text-primary-warm">{u.name}</div>
                         )}
-                        <div className="text-[12px] text-tertiary-warm">{u.email}</div>
+                        <div className="text-[12px] text-tertiary-warm flex items-center gap-1.5 flex-wrap">
+                          <span>{u.email}</span>
+                          {u.phone && (
+                            <span className="text-[#3FB8AF] light:text-teal-700 font-mono text-[11px] font-medium">
+                              · 📱 +91 {u.phone.replace(/^91/, "")}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-4">
                         {isSuperAdmin ? (
@@ -457,6 +494,19 @@ function UsersManagementPage() {
                         {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "Active"}
                       </td>
                       <td className="px-5 py-4 text-right">
+                        {u.phone && (
+                          <a
+                            href={`https://api.whatsapp.com/send?phone=${u.phone.startsWith("91") ? u.phone : "91" + u.phone}&text=${encodeURIComponent(
+                              `Namaste ${u.name}! 🙏\nMessage from ${currentUser?.name || "Teacher"}${currentUser?.phone ? ` (${currentUser.phone})` : ""}, Trounce Spoken English Institute.`
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded px-2 py-1 text-[12px] text-emerald-400 light:text-emerald-700 hover:bg-emerald-500/10 mr-1.5 transition"
+                            title={`Chat directly with ${u.name} on WhatsApp (+91 ${u.phone.replace(/^91/, "")})`}
+                          >
+                            <MessageSquare size={13} />
+                          </a>
+                        )}
                         {!isSuperAdmin && !isCurrent && (
                           <button
                             onClick={() => handleDeleteUser(u.id, u.name)}
@@ -572,6 +622,27 @@ function UsersManagementPage() {
                   />
                 </div>
 
+                {/* Phone Number (WhatsApp) */}
+                <div>
+                  <label className="block text-[11px] uppercase tracking-wider text-tertiary-warm">
+                    WhatsApp Phone Number
+                  </label>
+                  <div className="relative mt-1.5">
+                    <span className="absolute left-3 top-2.5 text-[13px] text-tertiary-warm font-mono">+91</span>
+                    <input
+                      type="tel"
+                      placeholder="98765 43210"
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value.replace(/[^0-9]/g, ""))}
+                      maxLength={10}
+                      className="h-10 w-full rounded-[8px] border border-hairline bg-ink-900 pl-11 pr-3 text-[13px] text-primary-warm placeholder:text-tertiary-warm focus:border-[#3FB8AF] focus:outline-none font-mono"
+                    />
+                  </div>
+                  <p className="mt-1 text-[11px] text-secondary-warm">
+                    Login credentials will be sent to this WhatsApp number on creation.
+                  </p>
+                </div>
+
                 {/* Permanent Password */}
                 <div>
                   <div className="flex items-center justify-between">
@@ -619,10 +690,10 @@ function UsersManagementPage() {
                       }
                       className="mt-1.5 h-10 w-full rounded-[8px] border border-hairline bg-ink-900 px-3 text-[13px] text-primary-warm focus:border-[#3FB8AF] focus:outline-none"
                     >
-                      <option value="summer">Summer (Apr–Jun)</option>
-                      <option value="autumn">Autumn (Jul–Sep)</option>
-                      <option value="winter">Winter (Oct–Dec)</option>
-                      <option value="spring">Spring (Jan–Mar)</option>
+                      <option value="summer">Summer (Apr - Jun)</option>
+                      <option value="autumn">Autumn (Jul - Sep)</option>
+                      <option value="winter">Winter (Oct - Dec)</option>
+                      <option value="spring">Spring (Jan - Mar)</option>
                     </select>
                   </div>
 
@@ -660,6 +731,109 @@ function UsersManagementPage() {
                   </TButton>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: WhatsApp Credentials Dispatch */}
+        {createdAccountData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-fade-in">
+            <div className="w-full max-w-[500px] rounded-[16px] border border-hairline bg-ink-950 light:bg-white p-6 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-hairline pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="size-9 rounded-full bg-emerald-500/15 light:bg-emerald-100 text-emerald-400 light:text-emerald-700 flex items-center justify-center font-bold">
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <div>
+                    <h2 className="display text-[18px] text-primary-warm">Account Created!</h2>
+                    <p className="text-[12px] text-secondary-warm">
+                      Dispatch login credentials directly via WhatsApp
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCreatedAccountData(null)}
+                  className="rounded-[6px] p-1 text-tertiary-warm hover:text-primary-warm text-[14px] cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Credentials Summary Box */}
+              <div className="mt-4 rounded-[10px] border border-hairline bg-ink-900 light:bg-slate-50 p-4 space-y-2.5 text-[13px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-secondary-warm">Name:</span>
+                  <span className="font-semibold text-primary-warm">{createdAccountData.name}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-secondary-warm">Role:</span>
+                  <span className="px-2 py-0.5 rounded text-[11px] font-semibold uppercase bg-ink-950 light:bg-slate-200 text-primary-warm">
+                    {createdAccountData.role}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-secondary-warm">Email / User ID:</span>
+                  <span className="font-mono text-primary-warm">{createdAccountData.email}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-secondary-warm">Permanent Password:</span>
+                  <span className="font-mono font-bold text-[#3FB8AF] light:text-teal-700 bg-ink-950 light:bg-white px-2 py-0.5 rounded border border-hairline">
+                    {createdAccountData.passwordPlain}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-secondary-warm">WhatsApp Number:</span>
+                  <span className="font-mono text-primary-warm">
+                    {createdAccountData.phone ? `+91 ${createdAccountData.phone}` : "Not provided"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-secondary-warm">Batch:</span>
+                  <span className="text-primary-warm">
+                    {createdAccountData.sessionSeason.toUpperCase()} · {createdAccountData.batchTime.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="mt-5 space-y-2.5">
+                <a
+                  href={generateUserCredentialsWhatsAppUrl({
+                    ...createdAccountData,
+                    senderName: currentUser?.name,
+                    senderPhone: currentUser?.phone,
+                  })}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 h-11 w-full rounded-[8px] bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[13px] transition shadow-md cursor-pointer"
+                >
+                  <MessageSquare size={16} />
+                  <span>Send Credentials on WhatsApp</span>
+                </a>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(formatCredentialsPlainText(createdAccountData));
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 3000);
+                    }}
+                    className="flex items-center justify-center gap-1.5 h-9 rounded-[8px] border border-hairline bg-ink-900 light:bg-slate-100 hover:bg-ink-800 text-[12px] font-medium text-primary-warm transition cursor-pointer"
+                  >
+                    {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                    <span>{copied ? "Copied!" : "Copy Details"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCreatedAccountData(null)}
+                    className="flex items-center justify-center h-9 rounded-[8px] border border-hairline bg-ink-900 light:bg-slate-100 hover:bg-ink-800 text-[12px] text-secondary-warm hover:text-primary-warm transition cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

@@ -3,33 +3,36 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant light (&:is(.light *));
 
 /*
  * Tarang Design System
  *
- * Functional color, not decorative. Warm near-black ink, parchment text,
- * single teal accent, amber/rust used only for status meaning.
+ * Functional color, not decorative.
+ * Dark Mode: Warm near-black ink, parchment text.
+ * Light Mode: Crisp slate-50 canvas, pure white cards, sharp slate-900 text.
+ * Single teal accent, amber/rust used only for status meaning.
  * Two radius systems: 4px (teacher / data) vs 12px (student / mic deck).
  */
 
-@theme inline {
-  /* Surfaces */
+:root {
+  /* Default Surfaces (Dark Mode) */
   --color-ink-950: #100e0c;
   --color-ink-900: #1b1815;
   --color-ink-800: #242019;
-  --color-hairline: #2e2a26;
+  --color-hairline: #38342f;
 
-  /* Text */
-  --color-text-primary: #ede7dd;
-  --color-text-secondary: #9c9388;
-  --color-text-tertiary: #6b645a;
+  /* Default Text (Dark Mode) */
+  --color-text-primary: #f2eee6;
+  --color-text-secondary: #b8afa5;
+  --color-text-tertiary: #8e867b;
 
   /* Functional accents */
   --color-signal-teal: #3fb8af;
   --color-static-amber: #e2a33c;
   --color-alert-rust: #c1503b;
 
-  /* Shadcn semantic mappings — kept so shadcn primitives don't break */
+  /* Shadcn semantic mappings */
   --color-background: var(--color-ink-950);
   --color-foreground: var(--color-text-primary);
   --color-card: var(--color-ink-900);
@@ -37,7 +40,7 @@
   --color-popover: var(--color-ink-900);
   --color-popover-foreground: var(--color-text-primary);
   --color-primary: var(--color-signal-teal);
-  --color-primary-foreground: var(--color-ink-950);
+  --color-primary-foreground: #100e0c;
   --color-secondary: var(--color-ink-800);
   --color-secondary-foreground: var(--color-text-primary);
   --color-muted: var(--color-ink-800);
@@ -51,16 +54,88 @@
   --color-ring: var(--color-signal-teal);
   --color-ring-offset-background: var(--color-ink-950);
 
-  /* Type — three roles */
+  /* Radius */
+  --radius-deck: 12px;
+  --radius-console: 4px;
+  --radius: 4px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  /* Type */
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+html.light,
+[data-theme="light"] {
+  /* Light Surfaces: clean, daylight-ready, high readability */
+  --color-ink-950: #f8fafc; /* Canvas background: soft slate-50 */
+  --color-ink-900: #ffffff; /* Card / Panel background: crisp pure white */
+  --color-ink-800: #f1f5f9; /* Inset / Hover background: slate-100 */
+  --color-hairline: #cbd5e1; /* Borders: slate-300, clear & high contrast */
+
+  /* Light Text: sharp contrast for bright daylight readability */
+  --color-text-primary: #0f172a; /* Slate 900 */
+  --color-text-secondary: #334155; /* Slate 700 */
+  --color-text-tertiary: #64748b; /* Slate 500 */
+
+  /* Functional accents tuned for light backgrounds */
+  --color-signal-teal: #0d9488; /* Teal 600 */
+  --color-static-amber: #d97706; /* Amber 600 */
+  --color-alert-rust: #dc2626; /* Red 600 */
+
+  color-scheme: light;
+}
+
+html.dark,
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-ink-950: var(--color-ink-950);
+  --color-ink-900: var(--color-ink-900);
+  --color-ink-800: var(--color-ink-800);
+  --color-hairline: var(--color-hairline);
+
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-tertiary: var(--color-text-tertiary);
+
+  --color-signal-teal: var(--color-signal-teal);
+  --color-static-amber: var(--color-static-amber);
+  --color-alert-rust: var(--color-alert-rust);
+
+  --color-background: var(--color-ink-950);
+  --color-foreground: var(--color-text-primary);
+  --color-card: var(--color-ink-900);
+  --color-card-foreground: var(--color-text-primary);
+  --color-popover: var(--color-ink-900);
+  --color-popover-foreground: var(--color-text-primary);
+  --color-primary: var(--color-signal-teal);
+  --color-primary-foreground: #100e0c;
+  --color-secondary: var(--color-ink-800);
+  --color-secondary-foreground: var(--color-text-primary);
+  --color-muted: var(--color-ink-800);
+  --color-muted-foreground: var(--color-text-secondary);
+  --color-accent: var(--color-ink-800);
+  --color-accent-foreground: var(--color-text-primary);
+  --color-destructive: var(--color-alert-rust);
+  --color-destructive-foreground: var(--color-text-primary);
+  --color-border: var(--color-hairline);
+  --color-input: var(--color-hairline);
+  --color-ring: var(--color-signal-teal);
+  --color-ring-offset-background: var(--color-ink-950);
+
   --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
 
-  /* Radius — two systems, intentional */
   --radius-deck: 12px;
   --radius-console: 4px;
-
-  /* Shadcn radius tokens (fall back to console scale) */
   --radius: 4px;
   --radius-sm: 2px;
   --radius-md: 4px;
@@ -79,9 +154,9 @@
     color: var(--color-text-primary);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    transition: background-color 0.15s ease, color 0.15s ease;
   }
 
-  /* Numbers are measurement → mono everywhere they appear in a .num */
   .num {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
@@ -93,7 +168,6 @@
     letter-spacing: -0.01em;
   }
 
-  /* Focus rings — visible, teal, never removed */
   :focus-visible {
     outline: 2px solid var(--color-signal-teal);
     outline-offset: 2px;
@@ -129,7 +203,92 @@
   }
 }
 
-/* Recording pulse — amber, calm, not frantic */
+/* Light Theme Enhancements : Rich, Contrast-Safe, and Tactile */
+html.light {
+  /* Crisp card styling with subtle elevation and defined borders */
+  .bg-ink-900 {
+    background-color: #ffffff;
+    border-color: #e2e8f0;
+    box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+  }
+
+  .bg-ink-950\/95,
+  .bg-ink-950\/98 {
+    background-color: rgba(255, 255, 255, 0.96);
+  }
+
+  /* Make sure hardcoded teal text has strong AAA/AA readable contrast on light backgrounds */
+  .text-\[\#3FB8AF\] {
+    color: #0f766e !important;
+  }
+
+  /* Make sure hardcoded amber text has strong readable contrast on light backgrounds */
+  .text-\[\#E2A33C\] {
+    color: #b45309 !important;
+  }
+
+  /* Boost soft badges and secondary buttons in light mode */
+  .bg-\[\#3FB8AF\]\/10,
+  .bg-\[\#3FB8AF\]\/15,
+  .bg-\[\#3FB8AF\]\/20 {
+    background-color: #f0fdfa !important;
+    color: #0f766e !important;
+    border-color: #99f6e4 !important;
+  }
+
+  .bg-\[\#E2A33C\]\/10,
+  .bg-\[\#E2A33C\]\/15,
+  .bg-\[\#E2A33C\]\/20 {
+    background-color: #fffbeb !important;
+    color: #b45309 !important;
+    border-color: #fde68a !important;
+  }
+
+  /* Solid primary teal buttons : punchy with crisp white text */
+  .bg-\[\#3FB8AF\] {
+    background-color: #0d9488 !important;
+    color: #ffffff !important;
+  }
+  .bg-\[\#3FB8AF\]:hover {
+    background-color: #0f766e !important;
+  }
+
+  /* Solid primary amber buttons : punchy with crisp white text */
+  .bg-\[\#E2A33C\] {
+    background-color: #d97706 !important;
+    color: #ffffff !important;
+  }
+  .bg-\[\#E2A33C\]:hover {
+    background-color: #b45309 !important;
+  }
+
+  /* Hover borders & text */
+  .hover\:border-\[\#3FB8AF\]:hover {
+    border-color: #0d9488 !important;
+  }
+  .hover\:text-\[\#3FB8AF\]:hover,
+  .group:hover .group-hover\:text-\[\#3FB8AF\] {
+    color: #0f766e !important;
+  }
+  .group:hover .group-hover\:bg-\[\#3FB8AF\] {
+    background-color: #0d9488 !important;
+    color: #ffffff !important;
+  }
+
+  /* Bottom Nav active tab in light mode */
+  nav a.text-\[\#3FB8AF\] {
+    color: #0f766e !important;
+    background-color: rgba(13, 148, 136, 0.08) !important;
+  }
+
+  /* Selection highlight */
+  ::selection {
+    background: rgba(13, 148, 136, 0.22);
+    color: #0f172a;
+  }
+}
+
+/* Recording pulse : amber, calm, not frantic */
 @keyframes tarang-pulse {
   0%,
   100% {
@@ -149,4 +308,83 @@
   .tarang-pulse {
     animation: none;
   }
+}
+
+/* Audio Scrubber & Progress Bar: Real-time track fill in both Light and Dark mode */
+.audio-scrubber {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  outline: none;
+  cursor: pointer;
+  background: linear-gradient(
+    to right,
+    var(--scrubber-fill, #3fb8af) 0%,
+    var(--scrubber-fill, #3fb8af) var(--scrubber-pct, 0%),
+    var(--scrubber-empty, #242019) var(--scrubber-pct, 0%),
+    var(--scrubber-empty, #242019) 100%
+  );
+  border: 1px solid var(--scrubber-border, #38342f);
+  transition: height 0.15s ease;
+}
+
+:root:not(.light) .audio-scrubber,
+.dark .audio-scrubber {
+  --scrubber-fill: #3fb8af;
+  --scrubber-empty: #1f1b17;
+  --scrubber-border: #38342f;
+}
+
+:root.light .audio-scrubber,
+.light .audio-scrubber {
+  --scrubber-fill: #0d9488;
+  --scrubber-empty: #e2e8f0;
+  --scrubber-border: #cbd5e1;
+}
+
+.audio-scrubber:hover {
+  height: 8px;
+}
+
+.audio-scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--scrubber-fill, #3fb8af);
+  box-shadow: 0 0 0 2px #ffffff, 0 2px 6px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dark .audio-scrubber::-webkit-slider-thumb,
+:root:not(.light) .audio-scrubber::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px #100e0c, 0 0 8px rgba(63, 184, 175, 0.6);
+}
+
+.audio-scrubber::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+}
+
+.audio-scrubber::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--scrubber-fill, #3fb8af);
+  box-shadow: 0 0 0 2px #ffffff, 0 2px 6px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  border: none;
+  transition: transform 0.15s ease;
+}
+
+.dark .audio-scrubber::-moz-range-thumb,
+:root:not(.light) .audio-scrubber::-moz-range-thumb {
+  box-shadow: 0 0 0 2px #100e0c, 0 0 8px rgba(63, 184, 175, 0.6);
+}
+
+.audio-scrubber::-moz-range-thumb:hover {
+  transform: scale(1.25);
 }

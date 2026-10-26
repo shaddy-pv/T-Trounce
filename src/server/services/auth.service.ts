@@ -13,6 +13,7 @@ export interface SessionPayload {
   name: string;
   role: "admin" | "teacher" | "student";
   isAdmin?: boolean;
+  phone?: string;
   batchId?: string;
   sessionSeason?: string;
   batchTime?: string;
@@ -82,6 +83,7 @@ export class AuthService {
       name: user.name,
       role: user.role,
       isAdmin,
+      phone: user.phone,
       batchId: user.batchId,
       sessionSeason: user.sessionSeason,
       batchTime: user.batchTime,

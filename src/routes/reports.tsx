@@ -9,6 +9,8 @@ import { StatusDot } from "@/components/tarang/StatusDot";
 import { ParentReportCard } from "@/features/reports/components/ParentReportCard";
 import { generateParentReportWhatsAppLink } from "@/features/reports/lib/whatsapp";
 import type { StudentRow, StudentWeeklyReport } from "@/types";
+import { useLanguage } from "@/lib/i18n";
+import { useUser } from "@/lib/auth";
 
 export const Route = createFileRoute("/reports")({
   head: () => ({
@@ -59,6 +61,7 @@ function ReportsSkeleton() {
 
 function ReportsPage() {
   const { studentRoster, initialReport } = Route.useLoaderData();
+  const { t } = useLanguage();
   const [selectedId, setSelectedId] = useState<string>(studentRoster[0]?.id ?? "");
   const [sentIds, setSentIds] = useState<string[]>([]);
   const [reportCache, setReportCache] = useState<Record<string, StudentWeeklyReport>>(
@@ -105,9 +108,18 @@ function ReportsPage() {
     };
   }, [selectedId, reportCache]);
 
+  const [reportLang, setReportLang] = useState<"hi" | "en">("hi");
+  const currentUser = useUser();
+
   const sendWhatsApp = () => {
     setSentIds((arr) => [...new Set([...arr, s.id])]);
-    const url = generateParentReportWhatsAppLink(s, currentReport);
+    const url = generateParentReportWhatsAppLink(
+      s,
+      currentReport,
+      reportLang,
+      currentUser?.name,
+      currentUser?.phone,
+    );
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -183,7 +195,36 @@ function ReportsPage() {
 
           <ParentReportCard student={s} report={currentReport} />
 
-          <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-center gap-3 w-full max-w-[420px] mx-auto">
+          {/* WhatsApp Language Selector */}
+          <div className="mt-4 flex items-center justify-between rounded-[8px] border border-hairline bg-ink-900 px-3.5 py-2 w-full max-w-[420px] mx-auto text-[12px]">
+            <span className="text-secondary-warm font-medium">{t("whatsapp_lang_label")}</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setReportLang("hi")}
+                className={`px-3 py-1 rounded text-[11px] font-semibold transition cursor-pointer ${
+                  reportLang === "hi"
+                    ? "bg-[#3FB8AF] text-ink-950 shadow-sm"
+                    : "bg-ink-950 border border-hairline text-secondary-warm hover:text-primary-warm"
+                }`}
+              >
+                Hindi
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportLang("en")}
+                className={`px-3 py-1 rounded text-[11px] font-semibold transition cursor-pointer ${
+                  reportLang === "en"
+                    ? "bg-[#3FB8AF] text-ink-950 shadow-sm"
+                    : "bg-ink-950 border border-hairline text-secondary-warm hover:text-primary-warm"
+                }`}
+              >
+                English
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-center gap-2.5 w-full max-w-[420px] mx-auto">
             <TButton
               variant="secondary"
               surface="console"
@@ -198,10 +239,10 @@ function ReportsPage() {
               surface="console"
               size="md"
               onClick={sendWhatsApp}
-              className="w-full sm:w-auto whitespace-nowrap cursor-pointer"
+              className="w-full sm:w-auto whitespace-nowrap cursor-pointer font-semibold"
             >
               <Send size={14} />
-              {sentIds.includes(s.id) ? "Resend to WhatsApp" : "Share via WhatsApp"}
+              {sentIds.includes(s.id) ? "Resend to WhatsApp" : t("share_on_whatsapp_btn")}
             </TButton>
           </div>
         </div>
