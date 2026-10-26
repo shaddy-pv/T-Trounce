@@ -59,15 +59,15 @@ function devAudioStreamingPlugin(): Plugin {
   };
 }
 
-import { nitro } from "nitro/vite";
-
 export default defineConfig({
   plugins: [
     devAudioStreamingPlugin(),
     tanstackStart({
-      server: { entry: "server" },
+      server: {
+        entry: "server",
+        preset: "node-server",
+      },
     }),
-    nitro(),
     viteReact(),
     tailwindcss(),
     tsconfigPaths(),
