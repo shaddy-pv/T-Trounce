@@ -65,7 +65,10 @@ export default defineConfig({
     tanstackStart({
       server: {
         entry: "server",
-        preset: "node-server",
+        // Set NITRO_PRESET env var at build time to control deployment target:
+        // Vercel: NITRO_PRESET=vercel
+        // Render/Fly.io/Railway: NITRO_PRESET=node-server (default)
+        preset: (process.env.NITRO_PRESET as "vercel" | "node-server") || "node-server",
       },
     }),
     viteReact(),
