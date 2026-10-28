@@ -16,19 +16,19 @@ const PUBLIC_DIR = resolve(__dirname, "public");
 // MIME type map for static assets
 const MIME = {
   ".html": "text/html; charset=utf-8",
-  ".js":   "application/javascript; charset=utf-8",
-  ".mjs":  "application/javascript; charset=utf-8",
-  ".css":  "text/css; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
-  ".png":  "image/png",
-  ".jpg":  "image/jpeg",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
-  ".svg":  "image/svg+xml",
-  ".ico":  "image/x-icon",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
   ".webp": "image/webp",
   ".woff": "font/woff",
-  ".woff2":"font/woff2",
-  ".ttf":  "font/ttf",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
   ".webmanifest": "application/manifest+json; charset=utf-8",
 };
 
@@ -41,9 +41,7 @@ function serveStatic(filePath, res, immutable = false) {
   res.setHeader("Content-Length", stat.size);
   res.setHeader(
     "Cache-Control",
-    immutable
-      ? "public, max-age=31536000, immutable"
-      : "public, max-age=86400"
+    immutable ? "public, max-age=31536000, immutable" : "public, max-age=86400",
   );
   createReadStream(filePath).pipe(res);
   return true;
@@ -67,7 +65,13 @@ const server = createServer((req, res) => {
   }
 
   // 2. Serve icons, manifest, sw.js from dist/client or public
-  const publicPaths = ["/icons/", "/manifest.webmanifest", "/sw.js", "/offline.html", "/favicon.ico"];
+  const publicPaths = [
+    "/icons/",
+    "/manifest.webmanifest",
+    "/sw.js",
+    "/offline.html",
+    "/favicon.ico",
+  ];
   if (publicPaths.some((p) => urlPath.startsWith(p) || urlPath === p)) {
     const inClient = join(CLIENT_DIR, urlPath);
     const inPublic = join(PUBLIC_DIR, urlPath);
@@ -82,9 +86,7 @@ const server = createServer((req, res) => {
   req.on("data", (chunk) => chunks.push(chunk));
   req.on("end", async () => {
     try {
-      const proto =
-        req.headers["x-forwarded-proto"] ||
-        (req.socket?.encrypted ? "https" : "http");
+      const proto = req.headers["x-forwarded-proto"] || (req.socket?.encrypted ? "https" : "http");
       const host = req.headers.host || `localhost:${PORT}`;
       const url = `${proto}://${host}${req.url}`;
 
@@ -95,8 +97,7 @@ const server = createServer((req, res) => {
 
       const headers = new Headers();
       for (const [key, val] of Object.entries(req.headers)) {
-        if (val != null)
-          headers.set(key, Array.isArray(val) ? val.join(", ") : val);
+        if (val != null) headers.set(key, Array.isArray(val) ? val.join(", ") : val);
       }
 
       const request = new Request(url, {
