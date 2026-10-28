@@ -34,13 +34,12 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 WORKDIR /app
 
-# Copy application dependencies, configurations, and compiled distribution
+# Copy production deps, built assets, and HTTP server wrapper
 COPY --chown=trounce:nodejs --from=deps /app/node_modules ./node_modules
 COPY --chown=trounce:nodejs --from=builder /app/package.json ./package.json
-COPY --chown=trounce:nodejs --from=builder /app/tsconfig.json ./tsconfig.json
-COPY --chown=trounce:nodejs --from=builder /app/vite.config.ts ./vite.config.ts
 COPY --chown=trounce:nodejs --from=builder /app/dist ./dist
-COPY --chown=trounce:nodejs --from=builder /app/src ./src
+COPY --chown=trounce:nodejs --from=builder /app/server.node.mjs ./server.node.mjs
+COPY --chown=trounce:nodejs --from=builder /app/public ./public
 
 # Create storage directory and grant full ownership to trounce user across /app
 RUN mkdir -p /app/.storage/audio && \
@@ -54,5 +53,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
   CMD wget -qO- http://localhost:${PORT:-3000}/ || exit 1
 
-# Run the Nitro production server built by TanStack Start
-CMD ["sh", "-c", "node dist/server/server.js"]
+# Start the production HTTP server
+CMD ["node", "server.node.mjs"]
