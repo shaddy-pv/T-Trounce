@@ -68,6 +68,7 @@ export default defineConfig({
         // Set NITRO_PRESET env var at build time to control deployment target:
         // Vercel: NITRO_PRESET=vercel
         // Render/Fly.io/Railway: NITRO_PRESET=node-server (default)
+        // @ts-expect-error Nitro preset option supported at runtime/build by vinxi/nitro
         preset: (process.env.NITRO_PRESET as "vercel" | "node-server") || "node-server",
       },
     }),

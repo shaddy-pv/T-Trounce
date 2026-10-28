@@ -50,7 +50,10 @@ function SettingsPage() {
   const initialSettings = Route.useLoaderData();
   const user = useUser();
   const { t } = useLanguage();
-  const isMasterAdmin = user?.email?.toLowerCase() === "shadanmd566@gmail.com";
+  const isMasterAdmin =
+    user?.role === "admin" ||
+    user?.isAdmin ||
+    user?.email?.toLowerCase() === "shadanmd566@gmail.com";
 
   const {
     enabled: liveEnabled,
@@ -493,16 +496,12 @@ function SettingsPage() {
                 <h2 className="text-[16px] font-semibold text-primary-warm">
                   {t("lang_pref_title")}
                 </h2>
-                <p className="text-[12px] text-tertiary-warm mt-0.5">
-                  {t("lang_pref_desc")}
-                </p>
+                <p className="text-[12px] text-tertiary-warm mt-0.5">{t("lang_pref_desc")}</p>
               </div>
             </div>
             <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
-                <p className="text-[14px] font-medium text-primary-warm">
-                  System Display Language
-                </p>
+                <p className="text-[14px] font-medium text-primary-warm">System Display Language</p>
                 <p className="text-[12px] text-tertiary-warm">
                   Choose between English, Hinglish, or Hindi
                 </p>
@@ -518,19 +517,13 @@ function SettingsPage() {
                 <h2 className="text-[16px] font-semibold text-primary-warm">
                   {t("theme_pref_title")}
                 </h2>
-                <p className="text-[12px] text-tertiary-warm mt-0.5">
-                  {t("theme_pref_desc")}
-                </p>
+                <p className="text-[12px] text-tertiary-warm mt-0.5">{t("theme_pref_desc")}</p>
               </div>
             </div>
             <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
-                <p className="text-[14px] font-medium text-primary-warm">
-                  Color Theme Mode
-                </p>
-                <p className="text-[12px] text-tertiary-warm">
-                  Light, Dark, or System preference
-                </p>
+                <p className="text-[14px] font-medium text-primary-warm">Color Theme Mode</p>
+                <p className="text-[12px] text-tertiary-warm">Light, Dark, or System preference</p>
               </div>
               <ThemeToggle variant="segmented" />
             </div>

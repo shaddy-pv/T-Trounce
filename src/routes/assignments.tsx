@@ -314,7 +314,9 @@ function AssignmentsPage() {
                   <h3 className="display mt-3 text-[17px] text-primary-warm group-hover:text-[#3FB8AF] light:group-hover:text-teal-700 transition-colors">
                     {a.title}
                   </h3>
-                  <p className="mt-1 text-[12px] text-tertiary-warm line-clamp-2">{a.instructions}</p>
+                  <p className="mt-1 text-[12px] text-tertiary-warm line-clamp-2">
+                    {a.instructions}
+                  </p>
 
                   <div className="mt-3 rounded-[8px] border border-hairline bg-ink-950/80 light:bg-slate-50 p-3">
                     <p className="num text-[10px] uppercase tracking-wider text-tertiary-warm">

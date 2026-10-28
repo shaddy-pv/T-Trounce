@@ -583,7 +583,8 @@ export const translations = {
   },
   tip_filler: {
     en: "You used 'umm/aah' {count} time(s). Next time, take a 1-second silent pause before speaking.",
-    hinglish: "Aapne {count} baar 'umm/aah' bola. Next time bolne se pehle 1 second ka silent pause lein.",
+    hinglish:
+      "Aapne {count} baar 'umm/aah' bola. Next time bolne se pehle 1 second ka silent pause lein.",
     hi: "आपने {count} बार 'umm/aah' बोला। अगली बार बोलने से पहले 1 सेकंड का ठहराव लें।",
   },
   tip_flow: {
@@ -824,7 +825,8 @@ export const translations = {
   },
   report_summary_zero: {
     en: "{name} has not practiced this week yet. Please encourage daily practice.",
-    hinglish: "{name} ne is hafte abhi tak practice nahi kiya. Kripya daily practice ke liye kahein.",
+    hinglish:
+      "{name} ne is hafte abhi tak practice nahi kiya. Kripya daily practice ke liye kahein.",
     hi: "{name} ने इस हफ्ते अभ्यास नहीं किया है। कृपया नियमित अभ्यास के लिए प्रेरित करें।",
   },
 
@@ -867,7 +869,9 @@ export function setStoredLanguage(lang: Language) {
   try {
     localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
     window.dispatchEvent(new CustomEvent(LANGUAGE_EVENT, { detail: { lang } }));
-  } catch {}
+  } catch {
+    // Ignore storage errors in private browsing / restricted contexts
+  }
 }
 
 /**

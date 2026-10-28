@@ -158,7 +158,9 @@ export class StudentService {
 
             // Heal glitchy waveforms so audio contours always look genuine
             if (isGlitchyWaveform(waveform)) {
-              const seed = (user.name || "Student").split("").reduce((acc, c) => acc + c.charCodeAt(0), 17);
+              const seed = (user.name || "Student")
+                .split("")
+                .reduce((acc, c) => acc + c.charCodeAt(0), 17);
               const flagDensity = status === "flagged" ? 0.35 : status === "nudge" ? 0.22 : 0.08;
               waveform = makeSampleWaveform(seed, 56, flagDensity);
             }
@@ -374,7 +376,9 @@ export class StudentService {
       }
 
       if (isGlitchyWaveform(waveform)) {
-        const seed = (student.name || "Student").split("").reduce((acc, c) => acc + c.charCodeAt(0), 17);
+        const seed = (student.name || "Student")
+          .split("")
+          .reduce((acc, c) => acc + c.charCodeAt(0), 17);
         waveform = makeSampleWaveform(seed, 56, 0.12);
       }
 
@@ -506,7 +510,9 @@ export class StudentService {
             phone: student.phone,
             waveform: isGlitchyWaveform(student.waveform)
               ? makeSampleWaveform(
-                  (student.name || "Student").split("").reduce((acc, c) => acc + c.charCodeAt(0), 17),
+                  (student.name || "Student")
+                    .split("")
+                    .reduce((acc, c) => acc + c.charCodeAt(0), 17),
                   56,
                   calcStatus === "flagged" ? 0.35 : calcStatus === "nudge" ? 0.22 : 0.08,
                 )

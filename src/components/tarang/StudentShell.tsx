@@ -89,7 +89,12 @@ export function StudentShell({ children }: { children: ReactNode }) {
                       : "text-secondary-warm hover:text-primary-warm")
                   }
                 >
-                  <Icon size={18} className={active ? "text-[#3FB8AF] light:text-teal-700" : "text-secondary-warm"} />
+                  <Icon
+                    size={18}
+                    className={
+                      active ? "text-[#3FB8AF] light:text-teal-700" : "text-secondary-warm"
+                    }
+                  />
                   <span className="text-[12px] font-medium leading-tight">{n.label}</span>
                 </Link>
               );

@@ -10,7 +10,11 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
     if (error instanceof Response) {
       throw error;
     }
-    if (error != null && typeof error === "object" && ("statusCode" in error || "status" in error)) {
+    if (
+      error != null &&
+      typeof error === "object" &&
+      ("statusCode" in error || "status" in error)
+    ) {
       throw error;
     }
     console.error("[start.ts errorMiddleware]", error);

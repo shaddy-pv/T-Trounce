@@ -70,20 +70,25 @@ export function useLiveTranscriptionSetting() {
   const [enabled, setEnabled] = useState<boolean>(() => getStoredLiveTranscriptionSetting());
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Sync from server on mount
+  // Sync from server on mount and window focus
   useEffect(() => {
     let isMounted = true;
-    getAppSettingsFn()
-      .then((settings) => {
-        if (isMounted) {
-          const val = Boolean(settings.liveTranscriptionEnabled);
-          setEnabled(val);
-          setStoredLiveTranscriptionSetting(val);
-        }
-      })
-      .catch((err) => {
-        console.debug("[useLiveTranscriptionSetting] Initial fetch note:", err);
-      });
+
+    const syncFromServer = () => {
+      getAppSettingsFn()
+        .then((settings) => {
+          if (isMounted) {
+            const val = Boolean(settings.liveTranscriptionEnabled);
+            setEnabled(val);
+            setStoredLiveTranscriptionSetting(val);
+          }
+        })
+        .catch((err) => {
+          console.debug("[useLiveTranscriptionSetting] Initial fetch note:", err);
+        });
+    };
+
+    syncFromServer();
 
     const handleStorageOrCustom = (e: Event) => {
       if (e instanceof CustomEvent && e.detail && e.detail.liveTranscriptionEnabled !== undefined) {
@@ -93,10 +98,14 @@ export function useLiveTranscriptionSetting() {
       }
     };
 
+    const pollInterval = window.setInterval(syncFromServer, 5000);
+    window.addEventListener("focus", syncFromServer);
     window.addEventListener(SETTINGS_EVENT, handleStorageOrCustom);
     window.addEventListener("storage", handleStorageOrCustom);
     return () => {
       isMounted = false;
+      window.clearInterval(pollInterval);
+      window.removeEventListener("focus", syncFromServer);
       window.removeEventListener(SETTINGS_EVENT, handleStorageOrCustom);
       window.removeEventListener("storage", handleStorageOrCustom);
     };
@@ -140,20 +149,25 @@ export function usePostTranscriptionSetting() {
   const [enabled, setEnabled] = useState<boolean>(() => getStoredPostTranscriptionSetting());
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Sync from server on mount
+  // Sync from server on mount and window focus
   useEffect(() => {
     let isMounted = true;
-    getAppSettingsFn()
-      .then((settings) => {
-        if (isMounted) {
-          const val = settings.postTranscriptionEnabled ?? true;
-          setEnabled(val);
-          setStoredPostTranscriptionSetting(val);
-        }
-      })
-      .catch((err) => {
-        console.debug("[usePostTranscriptionSetting] Initial fetch note:", err);
-      });
+
+    const syncFromServer = () => {
+      getAppSettingsFn()
+        .then((settings) => {
+          if (isMounted) {
+            const val = settings.postTranscriptionEnabled ?? true;
+            setEnabled(val);
+            setStoredPostTranscriptionSetting(val);
+          }
+        })
+        .catch((err) => {
+          console.debug("[usePostTranscriptionSetting] Initial fetch note:", err);
+        });
+    };
+
+    syncFromServer();
 
     const handleStorageOrCustom = (e: Event) => {
       if (e instanceof CustomEvent && e.detail && e.detail.postTranscriptionEnabled !== undefined) {
@@ -163,10 +177,14 @@ export function usePostTranscriptionSetting() {
       }
     };
 
+    const pollInterval = window.setInterval(syncFromServer, 5000);
+    window.addEventListener("focus", syncFromServer);
     window.addEventListener(SETTINGS_EVENT, handleStorageOrCustom);
     window.addEventListener("storage", handleStorageOrCustom);
     return () => {
       isMounted = false;
+      window.clearInterval(pollInterval);
+      window.removeEventListener("focus", syncFromServer);
       window.removeEventListener(SETTINGS_EVENT, handleStorageOrCustom);
       window.removeEventListener("storage", handleStorageOrCustom);
     };

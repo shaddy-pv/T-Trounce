@@ -397,7 +397,10 @@ function drawStatic(
 
   // Draw luminous playhead needle if audio is actively playing or scrubbed
   if (playbackProgress !== undefined && playbackProgress >= 0 && playbackProgress <= 1) {
-    const playheadX = Math.min(w - 2, Math.max(startX, startX + playbackProgress * actualWaveWidth));
+    const playheadX = Math.min(
+      w - 2,
+      Math.max(startX, startX + playbackProgress * actualWaveWidth),
+    );
     const needleH = Math.min(h, maxH + 4);
     ctx.fillStyle = colors.clear;
     roundRect(ctx, playheadX - 1, mid - needleH / 2, 2, needleH, 1);

@@ -1,0 +1,56 @@
+# ==============================================================================
+# Tarang (Signal Speak Studio) — Fly.io Deployment Config
+# Deploy with: fly deploy
+# ==============================================================================
+
+app = "tarang-app"        # ← change to your actual fly app name
+primary_region = "bom"    # Mumbai — closest to India
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV       = "production"
+  PORT           = "3000"
+  MONGODB_DB_NAME = "tarang"
+  # MONGODB_URI    → set via: fly secrets set MONGODB_URI="mongodb+srv://..."
+  # SESSION_SECRET → set via: fly secrets set SESSION_SECRET="..."
+  # ADMIN_EMAIL    → set via: fly secrets set ADMIN_EMAIL="shadanmd566@gmail.com"
+  # ADMIN_INITIAL_PASSWORD → set via: fly secrets set ADMIN_INITIAL_PASSWORD="..."
+  # GEMINI_API_KEY → set via: fly secrets set GEMINI_API_KEY="..."
+  # WHISPER_SIDECAR_URL → set via: fly secrets set WHISPER_SIDECAR_URL="https://tarang-sidecar.fly.dev"
+
+[[services]]
+  protocol    = "tcp"
+  internal_port = 3000
+
+  [[services.ports]]
+    port     = 80
+    handlers = ["http"]
+
+  [[services.ports]]
+    port     = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type       = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+  [[services.http_checks]]
+    interval = 30000
+    timeout  = 10000
+    grace_period = "20s"
+    method   = "GET"
+    path     = "/"
+
+# Persistent volume for audio storage
+# Create first with: fly volumes create tarang_audio --region bom --size 3
+[[mounts]]
+  source      = "tarang_audio"
+  destination = "/app/.storage/audio"
+
+[vm]
+  cpu_kind = "shared"
+  cpus     = 1
+  memory_mb = 512

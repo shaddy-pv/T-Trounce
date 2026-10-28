@@ -213,7 +213,9 @@ export class AssignmentService {
               : Math.round(
                   ((att.pronunciation ?? 75) + (att.vocabulary ?? 75) + (att.grammar ?? 75)) / 3,
                 ),
-          submittedAt: att.createdAt ? new Date(att.createdAt).toISOString() : new Date().toISOString(),
+          submittedAt: att.createdAt
+            ? new Date(att.createdAt).toISOString()
+            : new Date().toISOString(),
           audioUrl: att.audioUrl,
           transcript: att.transcript,
           attemptId: att.id,
@@ -236,14 +238,16 @@ export class AssignmentService {
         seenStudentIds.add(att.studentId);
         completed.push({
           studentId: att.studentId,
-          studentName: att.studentName || "Student",
+          studentName: (att as unknown as { studentName?: string }).studentName || "Student",
           scorePct:
             att.targetDurationSec && att.targetDurationSec > 0
               ? Math.min(100, Math.round((att.durationSec / att.targetDurationSec) * 100))
               : Math.round(
                   ((att.pronunciation ?? 75) + (att.vocabulary ?? 75) + (att.grammar ?? 75)) / 3,
                 ),
-          submittedAt: att.createdAt ? new Date(att.createdAt).toISOString() : new Date().toISOString(),
+          submittedAt: att.createdAt
+            ? new Date(att.createdAt).toISOString()
+            : new Date().toISOString(),
           audioUrl: att.audioUrl,
           transcript: att.transcript,
           attemptId: att.id,

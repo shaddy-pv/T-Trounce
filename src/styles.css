@@ -154,7 +154,9 @@ html.dark,
     color: var(--color-text-primary);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
   }
 
   .num {
@@ -209,7 +211,9 @@ html.light {
   .bg-ink-900 {
     background-color: #ffffff;
     border-color: #e2e8f0;
-    box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+    box-shadow:
+      0 1px 3px 0 rgba(15, 23, 42, 0.05),
+      0 1px 2px -1px rgba(15, 23, 42, 0.04);
   }
 
   .bg-ink-950\/95,
@@ -355,14 +359,20 @@ html.light {
   height: 15px;
   border-radius: 50%;
   background: var(--scrubber-fill, #3fb8af);
-  box-shadow: 0 0 0 2px #ffffff, 0 2px 6px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 2px 6px rgba(0, 0, 0, 0.35);
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .dark .audio-scrubber::-webkit-slider-thumb,
 :root:not(.light) .audio-scrubber::-webkit-slider-thumb {
-  box-shadow: 0 0 0 2px #100e0c, 0 0 8px rgba(63, 184, 175, 0.6);
+  box-shadow:
+    0 0 0 2px #100e0c,
+    0 0 8px rgba(63, 184, 175, 0.6);
 }
 
 .audio-scrubber::-webkit-slider-thumb:hover {
@@ -374,7 +384,9 @@ html.light {
   height: 15px;
   border-radius: 50%;
   background: var(--scrubber-fill, #3fb8af);
-  box-shadow: 0 0 0 2px #ffffff, 0 2px 6px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 2px 6px rgba(0, 0, 0, 0.35);
   cursor: pointer;
   border: none;
   transition: transform 0.15s ease;
@@ -382,7 +394,9 @@ html.light {
 
 .dark .audio-scrubber::-moz-range-thumb,
 :root:not(.light) .audio-scrubber::-moz-range-thumb {
-  box-shadow: 0 0 0 2px #100e0c, 0 0 8px rgba(63, 184, 175, 0.6);
+  box-shadow:
+    0 0 0 2px #100e0c,
+    0 0 8px rgba(63, 184, 175, 0.6);
 }
 
 .audio-scrubber::-moz-range-thumb:hover {

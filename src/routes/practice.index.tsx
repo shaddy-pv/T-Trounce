@@ -11,7 +11,16 @@ import {
 } from "@/server/data";
 import { cachedClientFetch } from "@/lib/client-cache";
 import { useUser } from "@/lib/auth";
-import { BookOpen, Calendar, Mic, MessageSquare, Check, Send, Clock, ChevronRight } from "lucide-react";
+import {
+  BookOpen,
+  Calendar,
+  Mic,
+  MessageSquare,
+  Check,
+  Send,
+  Clock,
+  ChevronRight,
+} from "lucide-react";
 import { useState, useMemo } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { useLanguage } from "@/lib/i18n";
@@ -245,7 +254,9 @@ function PracticeHubBody() {
             </div>
           </div>
           <div className="text-right">
-            <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">{t("this_week")}</p>
+            <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">
+              {t("this_week")}
+            </p>
             <p className="num mt-1 text-[14px] font-semibold text-primary-warm">
               {t("completed_of", { completed: completedCount, total: totalCount })}
             </p>
@@ -275,7 +286,10 @@ function PracticeHubBody() {
           {streakGraph.map((d, i) => (
             <div
               key={i}
-              className={"h-2 rounded-full transition-all " + (d ? "bg-[#3FB8AF] shadow-[0_0_6px_#3FB8AF]" : "bg-ink-800")}
+              className={
+                "h-2 rounded-full transition-all " +
+                (d ? "bg-[#3FB8AF] shadow-[0_0_6px_#3FB8AF]" : "bg-ink-800")
+              }
               title={i === 6 ? "Today" : `${6 - i} days ago`}
             />
           ))}
@@ -499,9 +513,7 @@ function PracticeHubBody() {
           <h2 className="display text-[18px] text-primary-warm font-medium">
             {t("practice_drills_title")}
           </h2>
-          <p className="text-[12px] text-secondary-warm mt-0.5">
-            {t("practice_drills_sub")}
-          </p>
+          <p className="text-[12px] text-secondary-warm mt-0.5">{t("practice_drills_sub")}</p>
         </div>
         <span className="num text-[11px] rounded-full bg-ink-800 px-2 py-0.5 text-secondary-warm">
           {t("available_count", { count: modules.length })}

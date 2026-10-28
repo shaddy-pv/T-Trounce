@@ -153,7 +153,7 @@ function UsersManagementPage() {
       })) as UserPublic;
 
       setUsers([created, ...users]);
-      
+
       // Save credentials for the WhatsApp dispatch modal
       setCreatedAccountData({
         name: created.name,
@@ -497,7 +497,7 @@ function UsersManagementPage() {
                         {u.phone && (
                           <a
                             href={`https://api.whatsapp.com/send?phone=${u.phone.startsWith("91") ? u.phone : "91" + u.phone}&text=${encodeURIComponent(
-                              `Namaste ${u.name}! 🙏\nMessage from ${currentUser?.name || "Teacher"}${currentUser?.phone ? ` (${currentUser.phone})` : ""}, Trounce Spoken English Institute.`
+                              `Namaste ${u.name}! 🙏\nMessage from ${currentUser?.name || "Teacher"}${currentUser?.phone ? ` (${currentUser.phone})` : ""}, Trounce Spoken English Institute.`,
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"
@@ -628,7 +628,9 @@ function UsersManagementPage() {
                     WhatsApp Phone Number
                   </label>
                   <div className="relative mt-1.5">
-                    <span className="absolute left-3 top-2.5 text-[13px] text-tertiary-warm font-mono">+91</span>
+                    <span className="absolute left-3 top-2.5 text-[13px] text-tertiary-warm font-mono">
+                      +91
+                    </span>
                     <input
                       type="tel"
                       placeholder="98765 43210"
@@ -790,7 +792,8 @@ function UsersManagementPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-secondary-warm">Batch:</span>
                   <span className="text-primary-warm">
-                    {createdAccountData.sessionSeason.toUpperCase()} · {createdAccountData.batchTime.toUpperCase()}
+                    {createdAccountData.sessionSeason.toUpperCase()} ·{" "}
+                    {createdAccountData.batchTime.toUpperCase()}
                   </span>
                 </div>
               </div>

@@ -200,9 +200,7 @@ export function AssignmentSubmissionsModal({ assignmentId, onClose }: Props) {
             <div className="mt-4 pt-3.5 border-t border-hairline/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex-1 max-w-md">
                 <div className="flex items-center justify-between text-[12px] mb-1.5">
-                  <span className="font-medium text-secondary-warm">
-                    Batch Completion Rate:
-                  </span>
+                  <span className="font-medium text-secondary-warm">Batch Completion Rate:</span>
                   <span className="num font-semibold text-primary-warm">
                     {data.completedCount} of {data.totalStudents} submitted ({data.submissionRate}%)
                   </span>
@@ -223,7 +221,10 @@ export function AssignmentSubmissionsModal({ assignmentId, onClose }: Props) {
                   </span>
                   {currentUser?.phone ? (
                     <span className="num font-medium text-emerald-500 light:text-emerald-700 bg-emerald-500/10 light:bg-emerald-100 px-1.5 py-0.2 rounded text-[11px]">
-                      +{currentUser.phone.startsWith("91") ? currentUser.phone : `91 ${currentUser.phone}`}
+                      +
+                      {currentUser.phone.startsWith("91")
+                        ? currentUser.phone
+                        : `91 ${currentUser.phone}`}
                     </span>
                   ) : (
                     <span className="text-[11px] text-tertiary-warm italic">
@@ -299,7 +300,10 @@ export function AssignmentSubmissionsModal({ assignmentId, onClose }: Props) {
 
           {/* Filter Search Input */}
           <div className="relative w-full sm:w-56">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-tertiary-warm pointer-events-none" />
+            <Search
+              size={14}
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-tertiary-warm pointer-events-none"
+            />
             <input
               type="text"
               value={searchQuery}
@@ -330,7 +334,10 @@ export function AssignmentSubmissionsModal({ assignmentId, onClose }: Props) {
             /* ================= PENDING STUDENTS TAB ================= */
             filteredPending.length === 0 ? (
               <div className="py-12 text-center rounded-[8px] border border-dashed border-hairline bg-ink-900/40 light:bg-slate-50">
-                <CheckCircle2 size={36} className="mx-auto text-[#3FB8AF] light:text-teal-600 mb-2" />
+                <CheckCircle2
+                  size={36}
+                  className="mx-auto text-[#3FB8AF] light:text-teal-600 mb-2"
+                />
                 <h4 className="text-[15px] font-semibold text-primary-warm">
                   {searchQuery ? "No matching students found" : "All students have submitted!"}
                 </h4>
@@ -383,9 +390,7 @@ export function AssignmentSubmissionsModal({ assignmentId, onClose }: Props) {
                               📱 {student.phone}
                             </span>
                           ) : (
-                            <span className="text-tertiary-warm italic">
-                              No phone enrolled
-                            </span>
+                            <span className="text-tertiary-warm italic">No phone enrolled</span>
                           )}
                         </div>
                       </div>
@@ -411,9 +416,7 @@ export function AssignmentSubmissionsModal({ assignmentId, onClose }: Props) {
 
                       {/* In-App Alert / Nudge Button */}
                       <button
-                        onClick={() =>
-                          handleInAppNudge(student.studentId, student.studentName)
-                        }
+                        onClick={() => handleInAppNudge(student.studentId, student.studentName)}
                         className={
                           "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] text-[12px] font-semibold transition cursor-pointer " +
                           (isNudged
@@ -439,80 +442,76 @@ export function AssignmentSubmissionsModal({ assignmentId, onClose }: Props) {
                 );
               })
             )
+          ) : /* ================= COMPLETED STUDENTS TAB ================= */
+          filteredCompleted.length === 0 ? (
+            <div className="py-12 text-center rounded-[8px] border border-dashed border-hairline bg-ink-900/40 light:bg-slate-50">
+              <Users size={36} className="mx-auto text-tertiary-warm mb-2 opacity-50" />
+              <h4 className="text-[15px] font-semibold text-primary-warm">No submissions yet</h4>
+              <p className="mt-1 text-[12px] text-secondary-warm max-w-sm mx-auto">
+                Students will appear here once they record and submit their response to this prompt.
+              </p>
+              <button
+                onClick={() => setActiveTab("pending")}
+                className="mt-3 text-[12px] font-semibold text-[#3FB8AF] light:text-teal-700 hover:underline cursor-pointer"
+              >
+                View pending students to send reminders ➜
+              </button>
+            </div>
           ) : (
-            /* ================= COMPLETED STUDENTS TAB ================= */
-            filteredCompleted.length === 0 ? (
-              <div className="py-12 text-center rounded-[8px] border border-dashed border-hairline bg-ink-900/40 light:bg-slate-50">
-                <Users size={36} className="mx-auto text-tertiary-warm mb-2 opacity-50" />
-                <h4 className="text-[15px] font-semibold text-primary-warm">No submissions yet</h4>
-                <p className="mt-1 text-[12px] text-secondary-warm max-w-sm mx-auto">
-                  Students will appear here once they record and submit their response to this prompt.
-                </p>
-                <button
-                  onClick={() => setActiveTab("pending")}
-                  className="mt-3 text-[12px] font-semibold text-[#3FB8AF] light:text-teal-700 hover:underline cursor-pointer"
-                >
-                  View pending students to send reminders ➜
-                </button>
-              </div>
-            ) : (
-              filteredCompleted.map((student) => (
-                <div
-                  key={student.studentId}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-[8px] border border-hairline bg-ink-900 light:bg-slate-50 hover:border-hairline/80 transition-all shadow-xs"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="size-9 rounded-full bg-[#3FB8AF]/15 light:bg-teal-100 text-[#3FB8AF] light:text-teal-800 font-bold flex items-center justify-center text-[13px] shrink-0 border border-[#3FB8AF]/30">
-                      {student.studentName.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-primary-warm text-[14px] truncate">
-                          {student.studentName}
-                        </span>
-                        <span className="num px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#3FB8AF]/15 light:bg-teal-100 text-[#3FB8AF] light:text-teal-800 border border-[#3FB8AF]/30 shrink-0">
-                          {student.scorePct}% Score
-                        </span>
-                      </div>
-                      <p className="num text-[11px] text-secondary-warm mt-0.5">
-                        Submitted:{" "}
-                        {student.submittedAt
-                          ? new Date(student.submittedAt).toLocaleString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })
-                          : "Recently"}
-                      </p>
-                      {student.transcript && (
-                        <p className="text-[12px] text-tertiary-warm italic truncate max-w-md mt-1">
-                          "{student.transcript}"
-                        </p>
-                      )}
-                    </div>
+            filteredCompleted.map((student) => (
+              <div
+                key={student.studentId}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-[8px] border border-hairline bg-ink-900 light:bg-slate-50 hover:border-hairline/80 transition-all shadow-xs"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="size-9 rounded-full bg-[#3FB8AF]/15 light:bg-teal-100 text-[#3FB8AF] light:text-teal-800 font-bold flex items-center justify-center text-[13px] shrink-0 border border-[#3FB8AF]/30">
+                    {student.studentName.charAt(0).toUpperCase()}
                   </div>
-
-                  <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                    <Link
-                      to="/students/$id"
-                      params={{ id: student.studentId }}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-[6px] text-[12px] font-semibold text-[#3FB8AF] light:text-teal-700 bg-ink-800/80 light:bg-slate-200/80 border border-hairline hover:bg-[#3FB8AF] hover:text-[#100E0C] hover:border-[#3FB8AF] transition"
-                    >
-                      Review Dossier <ChevronRight size={13} />
-                    </Link>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-primary-warm text-[14px] truncate">
+                        {student.studentName}
+                      </span>
+                      <span className="num px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#3FB8AF]/15 light:bg-teal-100 text-[#3FB8AF] light:text-teal-800 border border-[#3FB8AF]/30 shrink-0">
+                        {student.scorePct}% Score
+                      </span>
+                    </div>
+                    <p className="num text-[11px] text-secondary-warm mt-0.5">
+                      Submitted:{" "}
+                      {student.submittedAt
+                        ? new Date(student.submittedAt).toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })
+                        : "Recently"}
+                    </p>
+                    {student.transcript && (
+                      <p className="text-[12px] text-tertiary-warm italic truncate max-w-md mt-1">
+                        "{student.transcript}"
+                      </p>
+                    )}
                   </div>
                 </div>
-              ))
-            )
+
+                <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                  <Link
+                    to="/students/$id"
+                    params={{ id: student.studentId }}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-[6px] text-[12px] font-semibold text-[#3FB8AF] light:text-teal-700 bg-ink-800/80 light:bg-slate-200/80 border border-hairline hover:bg-[#3FB8AF] hover:text-[#100E0C] hover:border-[#3FB8AF] transition"
+                  >
+                    Review Dossier <ChevronRight size={13} />
+                  </Link>
+                </div>
+              </div>
+            ))
           )}
         </div>
 
         {/* Modal Footer */}
         <div className="border-t border-hairline bg-ink-900/60 light:bg-slate-50 px-4 py-3 flex items-center justify-between text-[12px] text-secondary-warm">
-          <span>
-            {assignment?.title} · Trounce Speech Console
-          </span>
+          <span>{assignment?.title} · Trounce Speech Console</span>
           <button
             onClick={onClose}
             className="px-3 py-1 rounded-[4px] bg-ink-800 light:bg-slate-200 hover:text-primary-warm text-secondary-warm transition cursor-pointer"

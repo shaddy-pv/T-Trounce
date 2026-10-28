@@ -1,5 +1,8 @@
 import type { StudentRow, StudentWeeklyReport } from "@/types";
-import { cleanIndianPhoneNumber, formatPhoneDisplay } from "@/features/assignments/lib/whatsapp-reminders";
+import {
+  cleanIndianPhoneNumber,
+  formatPhoneDisplay,
+} from "@/features/assignments/lib/whatsapp-reminders";
 
 export function generateParentReportWhatsAppLink(
   student: StudentRow,

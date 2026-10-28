@@ -38,8 +38,8 @@ log = logging.getLogger("whisper_sidecar")
 # ──────────────────────────────────────────────
 # Config from environment
 # ──────────────────────────────────────────────
-MODEL_SIZE = os.environ.get("WHISPER_MODEL", "tiny.en" if DEVICE == "cpu" else "base")
 DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
+MODEL_SIZE = os.environ.get("WHISPER_MODEL", "tiny.en" if DEVICE == "cpu" else "base")
 HOST = os.environ.get("WHISPER_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT") or os.environ.get("WHISPER_PORT") or "8765")
 LANG = os.environ.get("WHISPER_LANG", "en")

@@ -273,8 +273,12 @@ export function AudioTranscriptEvaluator({
 
             {/* Waveform timeline as the sole seekable audio visualizer */}
             {(() => {
-              const effectiveDur = duration && isFinite(duration) && duration > 0 ? duration : attempt.durationSec || 30;
-              const progressFraction = effectiveDur > 0 ? Math.min(1, Math.max(0, currentTime / effectiveDur)) : 0;
+              const effectiveDur =
+                duration && isFinite(duration) && duration > 0
+                  ? duration
+                  : attempt.durationSec || 30;
+              const progressFraction =
+                effectiveDur > 0 ? Math.min(1, Math.max(0, currentTime / effectiveDur)) : 0;
 
               return (
                 <div className="w-full rounded-md p-1.5 bg-ink-900/70 light:bg-slate-100 border border-hairline/60">
@@ -392,9 +396,7 @@ export function AudioTranscriptEvaluator({
           )}
         </div>
 
-        <p className="mt-1 text-[12px] text-secondary-warm">
-          {t("evaluator_note_prompt")}
-        </p>
+        <p className="mt-1 text-[12px] text-secondary-warm">{t("evaluator_note_prompt")}</p>
 
         {/* Quick Feedback Preset Pills */}
         <div className="mt-2.5 flex flex-wrap gap-1.5">

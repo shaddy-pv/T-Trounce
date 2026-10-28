@@ -318,23 +318,31 @@ function PracticeModuleSession() {
           {/* Performance Quick Stats */}
           <div className="mt-5 grid grid-cols-3 gap-2.5 text-center">
             <div className="rounded-[10px] border border-hairline bg-ink-900 p-2.5">
-              <span className="text-[10px] uppercase tracking-wider text-tertiary-warm block">Spoken Time</span>
+              <span className="text-[10px] uppercase tracking-wider text-tertiary-warm block">
+                Spoken Time
+              </span>
               <p className="mt-1 num text-[14px] font-semibold text-primary-warm">
                 {formatSecs(existingAttempt.durationSec || 0, 0)}
               </p>
             </div>
             <div className="rounded-[10px] border border-hairline bg-ink-900 p-2.5">
-              <span className="text-[10px] uppercase tracking-wider text-tertiary-warm block">Filler Sounds</span>
+              <span className="text-[10px] uppercase tracking-wider text-tertiary-warm block">
+                Filler Sounds
+              </span>
               <p
                 className={`mt-1 num text-[14px] font-semibold ${
-                  (existingAttempt.fillerCount ?? 0) > 0 ? "text-[#E2A33C] light:text-amber-800" : "text-[#3FB8AF] light:text-teal-800"
+                  (existingAttempt.fillerCount ?? 0) > 0
+                    ? "text-[#E2A33C] light:text-amber-800"
+                    : "text-[#3FB8AF] light:text-teal-800"
                 }`}
               >
                 {existingAttempt.fillerCount ?? 0}
               </p>
             </div>
             <div className="rounded-[10px] border border-hairline bg-ink-900 p-2.5">
-              <span className="text-[10px] uppercase tracking-wider text-tertiary-warm block">Pauses</span>
+              <span className="text-[10px] uppercase tracking-wider text-tertiary-warm block">
+                Pauses
+              </span>
               <p className="mt-1 num text-[14px] font-semibold text-secondary-warm">
                 {existingAttempt.pauseCount ?? 0}
               </p>
@@ -380,14 +388,14 @@ function PracticeModuleSession() {
                     ? audioDuration
                     : existingAttempt.durationSec || 30;
                 const progressFraction =
-                  effectiveDur > 0
-                    ? Math.min(1, Math.max(0, audioCurrentTime / effectiveDur))
-                    : 0;
+                  effectiveDur > 0 ? Math.min(1, Math.max(0, audioCurrentTime / effectiveDur)) : 0;
 
                 return (
                   <div className="flex-1 space-y-1.5">
                     <div className="flex items-center justify-between font-mono text-[11px] text-tertiary-warm">
-                      <span className="font-medium text-secondary-warm">{isPlayingAudio ? "Playing..." : "Audio Ready"}</span>
+                      <span className="font-medium text-secondary-warm">
+                        {isPlayingAudio ? "Playing..." : "Audio Ready"}
+                      </span>
                       <span>
                         {formatSecs(audioCurrentTime, 0)} /{" "}
                         {formatSecs(audioDuration, existingAttempt.durationSec || 30)}
@@ -433,44 +441,43 @@ function PracticeModuleSession() {
             </div>
           </div>
 
-          {/* Transcript Box */}
-          <div className="mt-4 rounded-[12px] border border-hairline bg-ink-900 p-4">
-            <div className="flex items-center justify-between mb-2.5">
-              <span className="flex items-center gap-1.5 text-[12px] font-medium text-secondary-warm">
-                <FileText size={14} className="text-[#3FB8AF] light:text-teal-700" />
-                Verbatim Transcript
-              </span>
-            </div>
+          {/* Transcript Box — show only when transcription is enabled and a transcript exists */}
+          {(postTranscriptionEnabled || liveTranscriptionEnabled) &&
+            Boolean(existingAttempt.transcript && existingAttempt.transcript.trim().length > 0) && (
+              <div className="mt-4 rounded-[12px] border border-hairline bg-ink-900 p-4">
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="flex items-center gap-1.5 text-[12px] font-medium text-secondary-warm">
+                    <FileText size={14} className="text-[#3FB8AF] light:text-teal-700" />
+                    Verbatim Transcript
+                  </span>
+                </div>
 
-            <div className="text-[13.5px] leading-relaxed text-primary-warm">
-              {words.length > 0 && words[0].length > 0 ? (
-                words.map((word, i) => {
-                  const clean = word.toLowerCase().replace(/[^a-z]/g, "");
-                  const isFiller = FILLER_KEYWORDS.has(clean);
-                  if (isFiller) {
-                    return (
-                      <span
-                        key={i}
-                        className="rounded bg-[#E2A33C]/20 light:bg-amber-100 light:text-amber-900 px-1 py-0.5 font-medium text-[#E2A33C]"
-                      >
-                        {word}
-                      </span>
-                    );
-                  }
-                  return <span key={i}>{word}</span>;
-                })
-              ) : (
-                <span className="italic text-tertiary-warm">
-                  Spoken recording captured and saved securely.
-                </span>
-              )}
-            </div>
-          </div>
+                <div className="text-[13.5px] leading-relaxed text-primary-warm">
+                  {words.map((word, i) => {
+                    const clean = word.toLowerCase().replace(/[^a-z]/g, "");
+                    const isFiller = FILLER_KEYWORDS.has(clean);
+                    if (isFiller) {
+                      return (
+                        <span
+                          key={i}
+                          className="rounded bg-[#E2A33C]/20 light:bg-amber-100 light:text-amber-900 px-1 py-0.5 font-medium text-[#E2A33C]"
+                        >
+                          {word}
+                        </span>
+                      );
+                    }
+                    return <span key={i}>{word}</span>;
+                  })}
+                </div>
+              </div>
+            )}
 
           {/* Teacher Feedback Card (only shown if teacher has actually provided feedback) */}
           {existingAttempt.teacherFeedback && (
             <div className="mt-4 rounded-[10px] border border-[#3FB8AF]/30 bg-[#3FB8AF]/10 light:border-teal-300 light:bg-teal-50 p-3.5 text-[12px] text-secondary-warm">
-              <span className="font-semibold text-[#3FB8AF] light:text-teal-800 block mb-1">Teacher Feedback:</span>
+              <span className="font-semibold text-[#3FB8AF] light:text-teal-800 block mb-1">
+                Teacher Feedback:
+              </span>
               <p className="text-primary-warm">{existingAttempt.teacherFeedback}</p>
             </div>
           )}
@@ -559,7 +566,11 @@ function PracticeModuleSession() {
               }`}
               title="Listen to prompt"
             >
-              {isSpeakingPrompt ? <VolumeX size={14} /> : <Volume2 size={14} className="text-[#3FB8AF]" />}
+              {isSpeakingPrompt ? (
+                <VolumeX size={14} />
+              ) : (
+                <Volume2 size={14} className="text-[#3FB8AF]" />
+              )}
               <span>{isSpeakingPrompt ? t("stop_listen_btn") : t("listen_prompt_btn")}</span>
             </button>
           </div>
@@ -584,8 +595,14 @@ function PracticeModuleSession() {
                 {t("tips_starter_label")}
               </p>
               <ul className="mt-1.5 space-y-1 list-disc list-inside text-secondary-warm">
-                <li><span className="text-primary-warm">"Hello, today I want to share my thoughts on this..."</span></li>
-                <li><span className="text-primary-warm">"In my daily life, I find that..."</span></li>
+                <li>
+                  <span className="text-primary-warm">
+                    "Hello, today I want to share my thoughts on this..."
+                  </span>
+                </li>
+                <li>
+                  <span className="text-primary-warm">"In my daily life, I find that..."</span>
+                </li>
                 <li>{t("tips_point_1")}</li>
               </ul>
             </div>
@@ -814,9 +831,7 @@ function PracticeModuleSession() {
                 <span className="size-2 rounded-full bg-[#3FB8AF] animate-ping" />
                 {t("recording_live_banner")}
               </span>
-              <span className="num font-semibold text-primary-warm">
-                {formattedTime}
-              </span>
+              <span className="num font-semibold text-primary-warm">{formattedTime}</span>
             </div>
           )}
 

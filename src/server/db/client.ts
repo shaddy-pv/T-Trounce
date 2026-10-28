@@ -138,33 +138,30 @@ export async function autoSeedDatabase(db: Db) {
       await modulesCol.insertMany(moduleDocs);
     }
 
-    // Ensure real admin account exists if users collection is empty
+    // Ensure master admin account always exists (upsert on every startup)
     const usersCol = db.collection<UserDoc>("users");
-    const userCount = await usersCol.countDocuments();
-    if (userCount === 0) {
-      const bcrypt = (await import("bcryptjs")).default;
-      const adminEmail = env.ADMIN_EMAIL;
-      const adminPassword = env.ADMIN_INITIAL_PASSWORD;
-      const passwordHash = await bcrypt.hash(adminPassword, 10);
-      await usersCol.insertOne({
-        id: "admin-master",
-        email: adminEmail.toLowerCase(),
-        username: "admin",
-        passwordHash,
-        name: "Shadan (Admin)",
-        phone: "9876543210",
-        role: "admin",
-        sessionSeason: "summer",
-        batchTime: "morning",
-        batchId: "summer-morning",
-        createdAt: new Date(),
-      });
-    } else {
-      await usersCol.updateOne(
-        { id: "admin-master", phone: { $exists: false } },
-        { $set: { phone: "9876543210" } },
-      );
-    }
+    const bcrypt = (await import("bcryptjs")).default;
+    const adminEmail = env.ADMIN_EMAIL;
+    const adminPassword = env.ADMIN_INITIAL_PASSWORD;
+    const passwordHash = await bcrypt.hash(adminPassword, 10);
+    await usersCol.updateOne(
+      { id: "admin-master" },
+      {
+        $set: {
+          email: adminEmail.toLowerCase(),
+          username: "admin",
+          passwordHash,
+          name: "Shadan (Admin)",
+          phone: "9876543210",
+          role: "admin",
+          sessionSeason: "summer",
+          batchTime: "morning",
+          batchId: "summer-morning",
+        },
+        $setOnInsert: { id: "admin-master", createdAt: new Date() },
+      },
+      { upsert: true },
+    );
 
     const realUsers = await usersCol.find({}).toArray();
     const realUserIds = new Set(realUsers.map((u) => u.id));

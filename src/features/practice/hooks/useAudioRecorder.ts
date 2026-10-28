@@ -983,7 +983,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     }
 
     // Extract genuine acoustic PCM samples directly from the recorded audio Blob
-    let genuineSamples: number[] = [];
+    const genuineSamples: number[] = [];
     if (blob && blob.size > 1000) {
       try {
         const arrayBuf = await blob.arrayBuffer();

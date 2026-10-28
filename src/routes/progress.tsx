@@ -87,10 +87,10 @@ function ProgressPage() {
   return (
     <StudentShell>
       <div className="px-5 pt-2 pb-10">
-        <h1 className="display text-[26px] font-medium text-primary-warm">{t("your_progress_title")}</h1>
-        <p className="mt-1 text-[13px] text-secondary-warm">
-          {t("your_progress_sub")}
-        </p>
+        <h1 className="display text-[26px] font-medium text-primary-warm">
+          {t("your_progress_title")}
+        </h1>
+        <p className="mt-1 text-[13px] text-secondary-warm">{t("your_progress_sub")}</p>
 
         {history.length > 0 ? (
           <>
@@ -100,13 +100,12 @@ function ProgressPage() {
                   {t("trajectory_title")}
                 </p>
                 <p className="num text-[15px] font-bold text-primary-warm">
-                  {firstScore}% <span className="text-tertiary-warm">➜</span> <span className="text-[#3FB8AF]">{latestScore}%</span>
+                  {firstScore}% <span className="text-tertiary-warm">➜</span>{" "}
+                  <span className="text-[#3FB8AF]">{latestScore}%</span>
                 </p>
               </div>
               <p className="mt-1 text-[12px] text-secondary-warm">
-                {latestScore >= firstScore
-                  ? t("trajectory_good")
-                  : t("trajectory_start")}
+                {latestScore >= firstScore ? t("trajectory_good") : t("trajectory_start")}
               </p>
             </div>
 
@@ -116,7 +115,9 @@ function ProgressPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-[13px] font-medium text-primary-warm">{h.date}</p>
-                      <p className="text-[12px] text-secondary-warm line-clamp-1 italic">"{h.prompt}"</p>
+                      <p className="text-[12px] text-secondary-warm line-clamp-1 italic">
+                        "{h.prompt}"
+                      </p>
                     </div>
                     <div className="text-right">
                       <p className="display num text-[16px] font-bold text-[#3FB8AF]">{h.score}%</p>
@@ -142,9 +143,7 @@ function ProgressPage() {
         ) : (
           <div className="mt-12 text-center rounded-[12px] border border-hairline bg-ink-900 p-8">
             <p className="text-[15px] font-medium text-primary-warm">{t("no_recordings_yet")}</p>
-            <p className="mt-1 text-[12px] text-secondary-warm">
-              {t("no_recordings_sub")}
-            </p>
+            <p className="mt-1 text-[12px] text-secondary-warm">{t("no_recordings_sub")}</p>
             <Link
               to="/practice"
               className="mt-4 inline-flex items-center justify-center rounded-[10px] bg-[#3FB8AF] px-5 py-2.5 text-[13px] font-bold text-ink-950 shadow-md shadow-[#3FB8AF]/20"

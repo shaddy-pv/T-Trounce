@@ -49,7 +49,9 @@ export function ParentReportCard({
         </span>
       </div>
 
-      <p className="num mt-5 text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">{t("report_student_label")}</p>
+      <p className="num mt-5 text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
+        {t("report_student_label")}
+      </p>
       <p className="mt-1 text-[20px] font-semibold text-primary-warm">{student.name}</p>
       <p className="text-[12px] text-secondary-warm capitalize">{batchDisplay}</p>
 

@@ -329,9 +329,7 @@ function ResultPage() {
           </div>
           <div className="mt-2 rounded-[10px] bg-[#3FB8AF]/10 border border-[#3FB8AF]/30 p-2.5 flex items-center gap-2">
             <Sparkles size={16} className="text-[#3FB8AF] shrink-0" />
-            <p className="text-[12px] font-medium text-primary-warm">
-              {t("congrats_saved")}
-            </p>
+            <p className="text-[12px] font-medium text-primary-warm">{t("congrats_saved")}</p>
           </div>
           <p className="mt-3 text-[16px] font-medium text-primary-warm leading-snug">
             “{result.prompt}”
@@ -348,14 +346,18 @@ function ResultPage() {
                   <h2 className="display text-[15px] font-semibold text-primary-warm">
                     {t("speaking_score_title")}
                   </h2>
-                  <p className="text-[11px] text-secondary-warm">
-                    {t("speaking_score_sub")}
-                  </p>
+                  <p className="text-[11px] text-secondary-warm">{t("speaking_score_sub")}</p>
                 </div>
               </div>
               <div className="text-right">
                 <span className="display num text-[26px] font-bold text-[#3FB8AF]">
-                  {Math.round(((result.pronunciation || 75) + (result.vocabulary || 70) + (result.grammar || 75)) / 3)}%
+                  {Math.round(
+                    ((result.pronunciation || 75) +
+                      (result.vocabulary || 70) +
+                      (result.grammar || 75)) /
+                      3,
+                  )}
+                  %
                 </span>
               </div>
             </div>
@@ -389,13 +391,9 @@ function ResultPage() {
               <div>
                 <span className="font-semibold text-primary-warm">{t("tip_label")} </span>
                 {result.fillerCount > 0 ? (
-                  <span>
-                    {t("tip_filler", { count: result.fillerCount })}
-                  </span>
+                  <span>{t("tip_filler", { count: result.fillerCount })}</span>
                 ) : (
-                  <span>
-                    {t("tip_flow")}
-                  </span>
+                  <span>{t("tip_flow")}</span>
                 )}
               </div>
             </div>
@@ -422,9 +420,7 @@ function ResultPage() {
                   ? audioDuration
                   : result.durationSec || 30;
               const progressFraction =
-                effectiveDur > 0
-                  ? Math.min(1, Math.max(0, audioCurrentTime / effectiveDur))
-                  : 0;
+                effectiveDur > 0 ? Math.min(1, Math.max(0, audioCurrentTime / effectiveDur)) : 0;
 
               return (
                 <div className="mt-3 flex items-center gap-3">
@@ -484,7 +480,9 @@ function ResultPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-secondary-warm">
                 <FileText size={14} className="text-[#3FB8AF]" />
-                <p className="num text-[11px] uppercase tracking-[0.14em]">{t("verbatim_transcript")}</p>
+                <p className="num text-[11px] uppercase tracking-[0.14em]">
+                  {t("verbatim_transcript")}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 {result.transcript && (
@@ -498,8 +496,14 @@ function ResultPage() {
                     }`}
                     title="Listen to full transcript"
                   >
-                    {isSpeakingFull ? <VolumeX size={11} /> : <Volume2 size={11} className="text-[#3FB8AF]" />}
-                    <span>{isSpeakingFull ? t("stop_listen_btn") : t("listen_full_transcript")}</span>
+                    {isSpeakingFull ? (
+                      <VolumeX size={11} />
+                    ) : (
+                      <Volume2 size={11} className="text-[#3FB8AF]" />
+                    )}
+                    <span>
+                      {isSpeakingFull ? t("stop_listen_btn") : t("listen_full_transcript")}
+                    </span>
                   </button>
                 )}
 
@@ -534,9 +538,7 @@ function ResultPage() {
               </div>
             </div>
 
-            <p className="mt-1 text-[11px] text-tertiary-warm">
-              {t("tap_word_tip")}
-            </p>
+            <p className="mt-1 text-[11px] text-tertiary-warm">{t("tap_word_tip")}</p>
 
             {isEditingTranscript ? (
               <div className="mt-2.5 space-y-2.5">
@@ -595,7 +597,9 @@ function ResultPage() {
                           type="button"
                           onClick={() => speakWord(word)}
                           className={`rounded px-1.5 py-0.5 font-semibold text-[#E2A33C] transition cursor-pointer ${
-                            isBeingSpoken ? "bg-[#E2A33C] text-ink-950 ring-2 ring-[#E2A33C]" : "bg-[#E2A33C]/25 hover:bg-[#E2A33C]/40"
+                            isBeingSpoken
+                              ? "bg-[#E2A33C] text-ink-950 ring-2 ring-[#E2A33C]"
+                              : "bg-[#E2A33C]/25 hover:bg-[#E2A33C]/40"
                           }`}
                           title="Click to hear pronunciation"
                         >
@@ -610,7 +614,9 @@ function ResultPage() {
                           type="button"
                           onClick={() => speakWord(word)}
                           className={`transition px-0.5 rounded cursor-pointer ${
-                            isBeingSpoken ? "bg-[#3FB8AF] text-ink-950 font-bold" : "hover:text-[#3FB8AF] hover:underline"
+                            isBeingSpoken
+                              ? "bg-[#3FB8AF] text-ink-950 font-bold"
+                              : "hover:text-[#3FB8AF] hover:underline"
                           }`}
                           title="Click to hear pronunciation"
                         >
@@ -625,14 +631,10 @@ function ResultPage() {
                     {result.transcriptionStatus === "processing" ? (
                       <>
                         <Loader2 size={13} className="animate-spin text-[#3FB8AF]" />
-                        <span className="italic">
-                          {t("generating_transcript_banner")}
-                        </span>
+                        <span className="italic">{t("generating_transcript_banner")}</span>
                       </>
                     ) : (
-                      <span className="text-tertiary-warm">
-                        {t("no_audio_detected_banner")}
-                      </span>
+                      <span className="text-tertiary-warm">{t("no_audio_detected_banner")}</span>
                     )}
                   </div>
                 )}

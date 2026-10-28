@@ -150,9 +150,7 @@ function ProfilePage() {
               <Globe size={15} className="text-[#3FB8AF]" />
               {t("lang_pref_title")}
             </p>
-            <p className="text-[12px] text-tertiary-warm mt-0.5">
-              {t("lang_pref_desc")}
-            </p>
+            <p className="text-[12px] text-tertiary-warm mt-0.5">{t("lang_pref_desc")}</p>
           </div>
           <LanguageSelector variant="segmented" className="w-full justify-between" />
         </div>
@@ -164,9 +162,7 @@ function ProfilePage() {
               <Sun size={15} className="text-[#E2A33C]" />
               {t("theme_pref_title")}
             </p>
-            <p className="text-[12px] text-tertiary-warm mt-0.5">
-              {t("theme_pref_desc")}
-            </p>
+            <p className="text-[12px] text-tertiary-warm mt-0.5">{t("theme_pref_desc")}</p>
           </div>
           <ThemeToggle variant="segmented" className="w-full justify-between" />
         </div>

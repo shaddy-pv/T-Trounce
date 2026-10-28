@@ -366,14 +366,14 @@ function AssignmentRecordingSession() {
                     ? audioDuration
                     : existingAttempt.durationSec || 30;
                 const progressFraction =
-                  effectiveDur > 0
-                    ? Math.min(1, Math.max(0, audioCurrentTime / effectiveDur))
-                    : 0;
+                  effectiveDur > 0 ? Math.min(1, Math.max(0, audioCurrentTime / effectiveDur)) : 0;
 
                 return (
                   <div className="flex-1 space-y-1.5">
                     <div className="flex justify-between text-[11px] num text-tertiary-warm">
-                      <span className="font-medium text-secondary-warm">{isPlayingAudio ? "Playing Student Recording..." : "Audio Ready"}</span>
+                      <span className="font-medium text-secondary-warm">
+                        {isPlayingAudio ? "Playing Student Recording..." : "Audio Ready"}
+                      </span>
                       <span className="font-mono">
                         {formatSecs(audioCurrentTime, 0)} /{" "}
                         {formatSecs(audioDuration, existingAttempt.durationSec || 30)}
@@ -419,44 +419,43 @@ function AssignmentRecordingSession() {
             </div>
           </div>
 
-          {/* Transcript Card */}
-          <div className="mt-5 rounded-[12px] border border-hairline bg-ink-900 p-4">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-[12px] font-medium text-secondary-warm">
-                <FileText size={14} className="text-[#3FB8AF]" />
-                Verbatim Spoken Transcript
-              </span>
-              <div className="flex items-center gap-2 num text-[11px] text-tertiary-warm">
-                <span className="text-[#E2A33C]">{existingAttempt.fillerCount ?? 0} fillers</span>
-                <span>·</span>
-                <span>{existingAttempt.pauseCount ?? 0} pauses</span>
-              </div>
-            </div>
+          {/* Transcript Card — show only when transcription is enabled and a transcript was generated */}
+          {(postTranscriptionEnabled || liveTranscriptionEnabled) &&
+            Boolean(existingAttempt.transcript && existingAttempt.transcript.trim().length > 0) && (
+              <div className="mt-5 rounded-[12px] border border-hairline bg-ink-900 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[12px] font-medium text-secondary-warm">
+                    <FileText size={14} className="text-[#3FB8AF]" />
+                    Verbatim Spoken Transcript
+                  </span>
+                  <div className="flex items-center gap-2 num text-[11px] text-tertiary-warm">
+                    <span className="text-[#E2A33C]">
+                      {existingAttempt.fillerCount ?? 0} fillers
+                    </span>
+                    <span>·</span>
+                    <span>{existingAttempt.pauseCount ?? 0} pauses</span>
+                  </div>
+                </div>
 
-            <div className="mt-3 rounded-[8px] border border-hairline bg-ink-950 p-3.5 text-[13px] leading-relaxed text-primary-warm">
-              {words.length > 0 && words[0].length > 0 ? (
-                words.map((word, i) => {
-                  const clean = word.toLowerCase().replace(/[^a-z]/g, "");
-                  const isFiller = FILLER_KEYWORDS.has(clean);
-                  if (isFiller) {
-                    return (
-                      <span
-                        key={i}
-                        className="rounded bg-[#E2A33C]/25 px-1 py-0.5 font-medium text-[#E2A33C]"
-                      >
-                        {word}
-                      </span>
-                    );
-                  }
-                  return <span key={i}>{word}</span>;
-                })
-              ) : (
-                <span className="italic text-tertiary-warm">
-                  Spoken recording captured and saved securely.
-                </span>
-              )}
-            </div>
-          </div>
+                <div className="mt-3 rounded-[8px] border border-hairline bg-ink-950 p-3.5 text-[13px] leading-relaxed text-primary-warm">
+                  {words.map((word, i) => {
+                    const clean = word.toLowerCase().replace(/[^a-z]/g, "");
+                    const isFiller = FILLER_KEYWORDS.has(clean);
+                    if (isFiller) {
+                      return (
+                        <span
+                          key={i}
+                          className="rounded bg-[#E2A33C]/25 px-1 py-0.5 font-medium text-[#E2A33C]"
+                        >
+                          {word}
+                        </span>
+                      );
+                    }
+                    return <span key={i}>{word}</span>;
+                  })}
+                </div>
+              </div>
+            )}
 
           {/* Teacher Feedback Card */}
           <div className="mt-4 rounded-[8px] border border-hairline bg-ink-900 p-3.5 text-[12px] text-secondary-warm">
@@ -565,7 +564,11 @@ function AssignmentRecordingSession() {
               }`}
               title="Listen to prompt"
             >
-              {isSpeakingPrompt ? <VolumeX size={14} /> : <Volume2 size={14} className="text-[#3FB8AF]" />}
+              {isSpeakingPrompt ? (
+                <VolumeX size={14} />
+              ) : (
+                <Volume2 size={14} className="text-[#3FB8AF]" />
+              )}
               <span>{isSpeakingPrompt ? t("stop_listen_btn") : t("listen_prompt_btn")}</span>
             </button>
           </div>
@@ -590,8 +593,14 @@ function AssignmentRecordingSession() {
                 {t("tips_starter_label")}
               </p>
               <ul className="mt-1.5 space-y-1 list-disc list-inside text-secondary-warm">
-                <li><span className="text-primary-warm">"Regarding this topic, my opinion is..."</span></li>
-                <li><span className="text-primary-warm">"I would like to explain that..."</span></li>
+                <li>
+                  <span className="text-primary-warm">
+                    "Regarding this topic, my opinion is..."
+                  </span>
+                </li>
+                <li>
+                  <span className="text-primary-warm">"I would like to explain that..."</span>
+                </li>
                 <li>{t("tips_point_1")}</li>
               </ul>
             </div>
@@ -813,9 +822,7 @@ function AssignmentRecordingSession() {
                 <span className="size-2 rounded-full bg-[#3FB8AF] animate-ping" />
                 {t("recording_live_banner")}
               </span>
-              <span className="num font-semibold text-primary-warm">
-                {formattedTime}
-              </span>
+              <span className="num font-semibold text-primary-warm">{formattedTime}</span>
             </div>
           )}
 

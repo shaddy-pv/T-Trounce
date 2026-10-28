@@ -98,7 +98,10 @@ export function analyzeAudioSignal(
   for (let barIdx = 0; barIdx < targetBarCount; barIdx++) {
     // Window of samples corresponding to this bar along the audio timeline
     const startIdx = Math.floor(barIdx * windowRatio);
-    const endIdx = Math.max(startIdx + 1, Math.min(sampleCount, Math.ceil((barIdx + 1) * windowRatio)));
+    const endIdx = Math.max(
+      startIdx + 1,
+      Math.min(sampleCount, Math.ceil((barIdx + 1) * windowRatio)),
+    );
 
     let sumSquares = 0;
     let localPeak = 0;
@@ -117,10 +120,7 @@ export function analyzeAudioSignal(
 
     // Relative volume normalized from 0.08 to 1.0 against noise floor and peak amplitude
     const dynamicRange = Math.max(0.06, peakAmp - noiseFloor * 0.5);
-    const normalizedVal = Math.min(
-      1.0,
-      Math.max(0.08, (rawVal - noiseFloor * 0.5) / dynamicRange),
-    );
+    const normalizedVal = Math.min(1.0, Math.max(0.08, (rawVal - noiseFloor * 0.5) / dynamicRange));
 
     let kind: "clear" | "pause" | "filler" = "clear";
 

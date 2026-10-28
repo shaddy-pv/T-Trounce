@@ -47,9 +47,12 @@ export function ChannelStripTable({
         <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-ink-800 light:bg-slate-100 text-tertiary-warm mb-3">
           <Users size={22} />
         </div>
-        <h3 className="text-[15px] font-semibold text-primary-warm">No students match your criteria</h3>
+        <h3 className="text-[15px] font-semibold text-primary-warm">
+          No students match your criteria
+        </h3>
         <p className="mt-1 text-[13px] text-secondary-warm max-w-md mx-auto">
-          Try clearing your search term, changing the session or batch filter, or resetting the status filter.
+          Try clearing your search term, changing the session or batch filter, or resetting the
+          status filter.
         </p>
         {onResetFilters && (
           <button
@@ -98,7 +101,9 @@ export function ChannelStripTable({
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 <StatusBadge status={s.status} />
-                <span className="font-semibold text-primary-warm truncate text-[14px]">{s.name}</span>
+                <span className="font-semibold text-primary-warm truncate text-[14px]">
+                  {s.name}
+                </span>
               </div>
               <span className="num text-[11px] text-secondary-warm shrink-0">{s.lastActive}</span>
             </div>
@@ -155,12 +160,24 @@ export function ChannelStripTable({
           <thead className="bg-ink-800/60 light:bg-slate-100/80 border-b border-hairline">
             <tr className="num text-[10px] uppercase tracking-[0.14em] text-tertiary-warm">
               <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">Status</th>
-              <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">{t("col_name")}</th>
-              <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">{t("col_waveform")}</th>
-              <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">{t("col_focus")}</th>
-              <th className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">{t("col_score")}</th>
-              <th className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">{t("col_trend")}</th>
-              <th className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">{t("col_last_practice")}</th>
+              <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">
+                {t("col_name")}
+              </th>
+              <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">
+                {t("col_waveform")}
+              </th>
+              <th className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">
+                {t("col_focus")}
+              </th>
+              <th className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">
+                {t("col_score")}
+              </th>
+              <th className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">
+                {t("col_trend")}
+              </th>
+              <th className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">
+                {t("col_last_practice")}
+              </th>
               <th className="px-4 py-2.5 text-right font-semibold whitespace-nowrap">Action</th>
             </tr>
           </thead>

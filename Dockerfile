@@ -51,5 +51,8 @@ USER trounce
 
 EXPOSE 3000
 
-# Dynamically listen on $PORT provided by Render/PaaS or default to 3000
-CMD ["sh", "-c", "npx vite preview --host 0.0.0.0 --port ${PORT:-3000}"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+  CMD wget -qO- http://localhost:${PORT:-3000}/ || exit 1
+
+# Run the Nitro production server built by TanStack Start
+CMD ["sh", "-c", "node dist/server/server.js"]

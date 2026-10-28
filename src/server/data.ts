@@ -555,10 +555,12 @@ export const updateAppSettingsFn = createServerFn({ method: "POST" })
   .validator((input: unknown) => UpdateAppSettingsInputSchema.parse(input))
   .handler(async ({ data, context }): Promise<AppSettings> => {
     const user = (context as { user: SessionPayload }).user;
-    if (user.email?.toLowerCase() !== "shadanmd566@gmail.com") {
-      throw new Error(
-        "Forbidden: System settings can only be modified by master administrator (shadanmd566@gmail.com).",
-      );
+    const isAuthorized =
+      user.role === "admin" ||
+      user.isAdmin ||
+      user.email?.toLowerCase() === "shadanmd566@gmail.com";
+    if (!isAuthorized) {
+      throw new Error("Forbidden: System settings can only be modified by administrators.");
     }
     return await SettingsService.updateSettings(data, user.userId);
   });
