@@ -10,7 +10,7 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 # 2. Builder stage: compile frontend and server code
 FROM node:20-alpine AS builder
