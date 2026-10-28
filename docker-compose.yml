@@ -1,33 +1,42 @@
 # ==============================================================================
-# Trounce (Signal Speak Studio) — Multi-Container Production Composition
-# 100% Free / Self-Hostable Stack (Zero AWS or Paid Cloud Required)
+# Tarang (Signal Speak Studio) — Production Docker Compose
+# Oracle Cloud Always Free ARM VM
+# Usage: docker compose --env-file .env.production up -d --build
 # ==============================================================================
 
-version: "3.8"
-
 services:
-  # 1. Main Web Application
+  # 1. Main Web Application (TanStack Start SSR)
   trounce-web:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: trounce_web
-    restart: always
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - MONGODB_URI=mongodb://trounce-mongo:27017/trounce
-      - MONGODB_DB_NAME=trounce
-      - WHISPER_SIDECAR_URL=http://trounce-sidecar:8765
-      - SESSION_SECRET=${SESSION_SECRET}
-      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD}
-      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      NODE_ENV: production
+      PORT: "3000"
+      MONGODB_URI: mongodb://trounce-mongo:27017/tarang
+      MONGODB_DB_NAME: ${MONGODB_DB_NAME:-tarang}
+      WHISPER_SIDECAR_URL: http://trounce-sidecar:8765
+      SESSION_SECRET: ${SESSION_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     volumes:
       - audio_storage:/app/.storage/audio
     depends_on:
-      - trounce-mongo
-      - trounce-sidecar
+      trounce-mongo:
+        condition: service_healthy
+      trounce-sidecar:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # 2. Local AI Speech Recognition Sidecar (Offline FastWhisper)
   trounce-sidecar:
@@ -35,26 +44,39 @@ services:
       context: .
       dockerfile: Dockerfile.sidecar
     container_name: trounce_sidecar
-    restart: always
+    restart: unless-stopped
     ports:
-      - "8765:8765"
+      - "127.0.0.1:8765:8765"
     environment:
-      - WHISPER_MODEL=base
-      - WHISPER_DEVICE=cpu
-      - WHISPER_HOST=0.0.0.0
-      - WHISPER_PORT=8765
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      WHISPER_DEVICE: cpu
+      WHISPER_HOST: "0.0.0.0"
+      WHISPER_PORT: "8765"
+      WHISPER_LANG: en
     volumes:
       - whisper_cache:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8765/health"]
+      interval: 60s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
 
-  # 3. Persistent Database (MongoDB)
+  # 3. Persistent Database (MongoDB 6.0)
   trounce-mongo:
     image: mongo:6.0
     container_name: trounce_mongo
-    restart: always
+    restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
 volumes:
   audio_storage:
