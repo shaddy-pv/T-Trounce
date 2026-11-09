@@ -20,7 +20,7 @@ graph TD
     subgraph Server ["Nitro / Node.js SSR Engine"]
         StartHandler["TanStack Start SSR Handler"]
         ServerFns["Server Functions RPC (createServerFn)"]
-        DBHelper["MongoDB Connection Pool (src/lib/db.ts)"]
+        DBHelper["MongoDB Connection Pool (src/server/db/client.ts)"]
 
         StartHandler --> ServerFns
         ServerFns --> DBHelper

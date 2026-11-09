@@ -6,6 +6,8 @@ import { fetchUsersFn, createUserFn, deleteUserFn } from "@/server/data";
 import { cachedClientFetch, invalidateClientDataCache } from "@/lib/client-cache";
 import type { UserPublic } from "@/server/services/user.service";
 import { useUser } from "@/lib/auth";
+import { cleanIndianPhoneNumber, formatPhoneDisplay } from "@/lib/phone";
+import { isAdmin } from "@/lib/roles";
 import {
   UserPlus,
   Trash2,
@@ -20,7 +22,6 @@ import {
   AlertCircle,
   MessageSquare,
   Copy,
-  Phone,
 } from "lucide-react";
 import {
   generateUserCredentialsWhatsAppUrl,
@@ -121,9 +122,13 @@ function UsersManagementPage() {
 
   const generateRandomPassword = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+    // Rejection sampling, so every character is equally likely.
+    const limit = Math.floor(256 / chars.length) * chars.length;
     let pwd = "";
-    for (let i = 0; i < 10; i++) {
-      pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    while (pwd.length < 12) {
+      for (const byte of crypto.getRandomValues(new Uint8Array(24))) {
+        if (byte < limit && pwd.length < 12) pwd += chars[byte % chars.length];
+      }
     }
     setNewPassword(pwd);
   };
@@ -153,7 +158,7 @@ function UsersManagementPage() {
       })) as UserPublic;
 
       setUsers([created, ...users]);
-      
+
       // Save credentials for the WhatsApp dispatch modal
       setCreatedAccountData({
         name: created.name,
@@ -390,7 +395,7 @@ function UsersManagementPage() {
                       <span className="text-[11px] text-tertiary-warm">Staff Account</span>
                     )}
 
-                    {!isSuperAdmin && !isCurrent && (
+                    {isAdmin(currentUser) && !isSuperAdmin && !isCurrent && (
                       <button
                         onClick={() => handleDeleteUser(u.id, u.name)}
                         className="inline-flex items-center gap-1 rounded border border-alert-rust/30 px-2.5 py-1 text-[11px] text-alert-rust transition hover:bg-alert-rust/10 shrink-0 cursor-pointer"
@@ -463,7 +468,7 @@ function UsersManagementPage() {
                           <span>{u.email}</span>
                           {u.phone && (
                             <span className="text-[#3FB8AF] light:text-teal-700 font-mono text-[11px] font-medium">
-                              · 📱 +91 {u.phone.replace(/^91/, "")}
+                              · {formatPhoneDisplay(u.phone)}
                             </span>
                           )}
                         </div>
@@ -496,18 +501,18 @@ function UsersManagementPage() {
                       <td className="px-5 py-4 text-right">
                         {u.phone && (
                           <a
-                            href={`https://api.whatsapp.com/send?phone=${u.phone.startsWith("91") ? u.phone : "91" + u.phone}&text=${encodeURIComponent(
-                              `Namaste ${u.name}! 🙏\nMessage from ${currentUser?.name || "Teacher"}${currentUser?.phone ? ` (${currentUser.phone})` : ""}, Trounce Spoken English Institute.`
+                            href={`https://api.whatsapp.com/send?phone=${cleanIndianPhoneNumber(u.phone)}&text=${encodeURIComponent(
+                              `Namaste ${u.name}! 🙏\nMessage from ${currentUser?.name || "Teacher"}${currentUser?.phone ? ` (${currentUser.phone})` : ""}, Trounce Spoken English Institute.`,
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 rounded px-2 py-1 text-[12px] text-emerald-400 light:text-emerald-700 hover:bg-emerald-500/10 mr-1.5 transition"
-                            title={`Chat directly with ${u.name} on WhatsApp (+91 ${u.phone.replace(/^91/, "")})`}
+                            title={`Chat directly with ${u.name} on WhatsApp (${formatPhoneDisplay(u.phone)})`}
                           >
                             <MessageSquare size={13} />
                           </a>
                         )}
-                        {!isSuperAdmin && !isCurrent && (
+                        {isAdmin(currentUser) && !isSuperAdmin && !isCurrent && (
                           <button
                             onClick={() => handleDeleteUser(u.id, u.name)}
                             className="inline-flex items-center gap-1 rounded px-2.5 py-1 text-[12px] text-alert-rust transition hover:bg-alert-rust/10"
@@ -628,7 +633,9 @@ function UsersManagementPage() {
                     WhatsApp Phone Number
                   </label>
                   <div className="relative mt-1.5">
-                    <span className="absolute left-3 top-2.5 text-[13px] text-tertiary-warm font-mono">+91</span>
+                    <span className="absolute left-3 top-2.5 text-[13px] text-tertiary-warm font-mono">
+                      +91
+                    </span>
                     <input
                       type="tel"
                       placeholder="98765 43210"
@@ -790,7 +797,8 @@ function UsersManagementPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-secondary-warm">Batch:</span>
                   <span className="text-primary-warm">
-                    {createdAccountData.sessionSeason.toUpperCase()} · {createdAccountData.batchTime.toUpperCase()}
+                    {createdAccountData.sessionSeason.toUpperCase()} ·{" "}
+                    {createdAccountData.batchTime.toUpperCase()}
                   </span>
                 </div>
               </div>

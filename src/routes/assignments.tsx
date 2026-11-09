@@ -5,17 +5,14 @@ import { TButton } from "@/components/tarang/Button";
 import { fetchAssignmentsFn, createAssignmentFn, deleteAssignmentFn } from "@/server/data";
 import { cachedClientFetch, invalidateClientDataCache } from "@/lib/client-cache";
 import type { AssignmentPublic } from "@/server/services/assignment.service";
-import { useUser } from "@/lib/auth";
 import {
   BookOpen,
   Plus,
   Trash2,
   Calendar,
-  Clock,
   Check,
   AlertCircle,
   Layers,
-  Send,
   ChevronRight,
 } from "lucide-react";
 import { AssignmentSubmissionsModal } from "@/features/assignments/components/AssignmentSubmissionsModal";
@@ -73,7 +70,6 @@ function AssignmentsSkeleton() {
 
 function AssignmentsPage() {
   const { assignments: initialAssignments } = Route.useLoaderData();
-  const currentUser = useUser();
   const router = useRouter();
 
   const [assignments, setAssignments] = useState<AssignmentPublic[]>(initialAssignments || []);
@@ -139,8 +135,6 @@ function AssignmentsPage() {
           durationSec,
           targetSession,
           targetBatch,
-          teacherId: currentUser?.userId || "teacher-1",
-          teacherName: currentUser?.name || "Faculty",
           dueDate: parsedDueDate,
         },
       })) as AssignmentPublic;
@@ -314,7 +308,9 @@ function AssignmentsPage() {
                   <h3 className="display mt-3 text-[17px] text-primary-warm group-hover:text-[#3FB8AF] light:group-hover:text-teal-700 transition-colors">
                     {a.title}
                   </h3>
-                  <p className="mt-1 text-[12px] text-tertiary-warm line-clamp-2">{a.instructions}</p>
+                  <p className="mt-1 text-[12px] text-tertiary-warm line-clamp-2">
+                    {a.instructions}
+                  </p>
 
                   <div className="mt-3 rounded-[8px] border border-hairline bg-ink-950/80 light:bg-slate-50 p-3">
                     <p className="num text-[10px] uppercase tracking-wider text-tertiary-warm">

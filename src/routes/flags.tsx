@@ -12,17 +12,7 @@ import {
 } from "@/server/data";
 import { cachedClientFetch, invalidateClientDataCache } from "@/lib/client-cache";
 import type { StudentRow, FlagItem } from "@/types";
-import {
-  Check,
-  BellRing,
-  Play,
-  Pause,
-  MessageSquare,
-  Send,
-  AlertTriangle,
-  HelpCircle,
-  CheckCircle2,
-} from "lucide-react";
+import { Check, BellRing, Play, Pause, AlertTriangle, HelpCircle } from "lucide-react";
 
 export const Route = createFileRoute("/flags")({
   head: () => ({
@@ -75,6 +65,7 @@ function FlagsPage() {
   const [actingId, setActingId] = useState<string | null>(null);
   const [replyNotes, setReplyNotes] = useState<Record<string, string>>({});
   const [nudgeSuccess, setNudgeSuccess] = useState<Record<string, boolean>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Audio Playback in flag cards
   const [activeAudioId, setActiveAudioId] = useState<string | null>(null);
@@ -101,6 +92,7 @@ function FlagsPage() {
     status: "resolved" | "dismissed" = "resolved",
   ) => {
     setActingId(flagId);
+    setActionError(null);
     const feedback = replyNotes[flagId]?.trim() || "";
     try {
       await resolveFlagFn({
@@ -112,9 +104,11 @@ function FlagsPage() {
       });
       setFlags((prev) => prev.filter((f) => f.id !== flagId));
       invalidateClientDataCache("flags");
+      invalidateClientDataCache("student-roster");
       router.invalidate();
     } catch (err) {
       console.error("Failed to resolve flag:", err);
+      setActionError("Could not update this flag. Please check your connection and try again.");
     } finally {
       setActingId(null);
     }
@@ -122,6 +116,7 @@ function FlagsPage() {
 
   const sendNudge = async (studentId: string, studentName: string) => {
     setActingId(studentId);
+    setActionError(null);
     try {
       await sendDirectMessageFn({
         data: {
@@ -137,6 +132,7 @@ function FlagsPage() {
       );
     } catch (err) {
       console.error("Failed to send nudge:", err);
+      setActionError("Could not send the nudge. Please check your connection and try again.");
     } finally {
       setActingId(null);
     }
@@ -144,6 +140,7 @@ function FlagsPage() {
 
   const resolveStudentStatus = async (studentId: string) => {
     setActingId(studentId);
+    setActionError(null);
     try {
       await updateStudentStatusFn({ data: { studentId, status: "on-track" } });
       setRoster((prev) =>
@@ -153,16 +150,15 @@ function FlagsPage() {
       );
       invalidateClientDataCache("student-roster");
       router.invalidate();
+    } catch (err) {
+      console.error("Failed to update student status:", err);
+      setActionError("Could not update this student. Please check your connection and try again.");
     } finally {
       setActingId(null);
     }
   };
 
   const studentRequests = flags.filter((f) => f.type === "student_request");
-  const academicAlertFlags = flags.filter(
-    (f) => f.type === "low_score" || f.type === "severe_drop",
-  );
-
   // Also include students in roster with status flagged that may not have explicit FlagDoc
   const flaggedStudents = roster.filter(
     (s) => s.status === "flagged" && !studentRequests.some((f) => f.studentId === s.id),
@@ -188,6 +184,15 @@ function FlagsPage() {
           with low fluency scores.
         </p>
       </div>
+
+      {actionError && (
+        <p
+          role="alert"
+          className="mt-4 rounded-[8px] border border-[#C1503B]/50 bg-[#C1503B]/10 px-3 py-2 text-[13px] text-[#C1503B]"
+        >
+          {actionError}
+        </p>
+      )}
 
       {/* SECTION 1: STUDENT HELP REQUESTS */}
       <section className="mt-8">

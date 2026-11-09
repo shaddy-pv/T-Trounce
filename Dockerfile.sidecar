@@ -1,6 +1,6 @@
 # ==============================================================================
-# Trounce — FastWhisper Sidecar Dockerfile
-# Self-hosted, zero-cost, local offline speech inference
+# Trounce: FastWhisper sidecar image
+# Self-hosted, offline speech inference. Runs as a non-root user.
 # ==============================================================================
 
 FROM python:3.11-slim
@@ -9,7 +9,8 @@ ENV PYTHONUNBUFFERED=1 \
     WHISPER_MODEL=base \
     WHISPER_DEVICE=cpu \
     WHISPER_HOST=0.0.0.0 \
-    WHISPER_PORT=8765
+    WHISPER_PORT=8765 \
+    HF_HOME=/home/whisper/.cache/huggingface
 
 WORKDIR /app
 
@@ -22,6 +23,12 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY whisper_sidecar.py ./
+
+RUN useradd --create-home --uid 1001 whisper && \
+    mkdir -p /home/whisper/.cache/huggingface && \
+    chown -R whisper:whisper /home/whisper
+
+USER whisper
 
 EXPOSE 8765
 

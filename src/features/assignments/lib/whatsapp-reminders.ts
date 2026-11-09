@@ -2,31 +2,8 @@
  * WhatsApp Reminder utilities for targeted homework assignments
  */
 
-/**
- * Format any entered phone into clean digits with country code 91
- */
-export function cleanIndianPhoneNumber(phone?: string): string {
-  if (!phone) return "";
-  let digits = phone.replace(/\D/g, "");
-  if (digits.length === 10) {
-    digits = `91${digits}`;
-  } else if (digits.length === 11 && digits.startsWith("0")) {
-    digits = `91${digits.slice(1)}`;
-  } else if (digits.length === 12 && digits.startsWith("91")) {
-    // already 91 prefixed
-  }
-  return digits;
-}
-
-export function formatPhoneDisplay(phone?: string): string {
-  if (!phone) return "";
-  const digits = phone.replace(/\D/g, "");
-  const core = digits.length >= 10 ? digits.slice(-10) : digits;
-  if (core.length === 10) {
-    return `+91 ${core.slice(0, 5)} ${core.slice(5)}`;
-  }
-  return phone;
-}
+import { appUrl } from "@/lib/app-url";
+import { cleanIndianPhoneNumber, formatPhoneDisplay } from "@/lib/phone";
 
 export function generateIndividualHomeworkReminderUrl(params: {
   studentName: string;
@@ -60,7 +37,7 @@ export function generateIndividualHomeworkReminderUrl(params: {
     `⏰ *Due Date:* ${dueStr}\n` +
     `🎙️ *Speaking Prompt:* "${params.prompt}"\n\n` +
     `Kripya Trounce portal open karke apni voice recording submit karein:\n` +
-    `👉 https://trounce.app/practice\n\n` +
+    `👉 ${appUrl("/practice")}\n\n` +
     `_Teacher: ${teacherContact}_\n` +
     `_Trounce Spoken English Institute_`;
 
@@ -101,7 +78,7 @@ export function generateBatchBroadcastReminderUrl(params: {
     `⏰ *Deadline:* ${dueStr}\n` +
     `🎙️ *Prompt:* "${params.prompt}"\n\n` +
     `Jin students ne abhi tak submit nahi kiya hai (${params.pendingCount} students pending), kripya aaj hi record karein!\n\n` +
-    `👉 Practice Now: https://trounce.app/practice\n\n` +
+    `👉 Practice Now: ${appUrl("/practice")}\n\n` +
     `_Teacher: ${teacherContact}_\n` +
     `_Trounce Spoken English Institute_`;
 

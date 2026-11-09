@@ -64,6 +64,8 @@ export interface AttemptDoc {
   audioMimeType?: string; // e.g. "audio/webm", "audio/mp4", "audio/wav"
   audioSize?: number; // File size in bytes
   transcriptionStatus?: "pending" | "processing" | "completed" | "failed";
+  /** A person corrected this transcript, so automated passes must not overwrite it. */
+  manuallyEdited?: boolean;
   durationSec: number;
   targetDurationSec?: number; // Target prompt duration (used for completion%)
   pronunciation: number;

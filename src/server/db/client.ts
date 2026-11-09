@@ -1,187 +1,218 @@
+import dns from "node:dns";
 import { MongoClient, Db } from "mongodb";
 import { env } from "@/config/env";
 import { modules } from "@/lib/tarang-data";
-import type { ModuleDoc, BatchDoc, UserDoc, StudentDoc, AssignmentDoc } from "./schemas";
+import { serviceUnavailable } from "../errors";
+import type { ModuleDoc, BatchDoc, UserDoc, AssignmentDoc } from "./schemas";
+
+// Ensure Node.js can resolve MongoDB Atlas SRV records, especially on Windows where
+// the default stub resolver points to 127.0.0.1 and causes querySrv ECONNREFUSED.
+try {
+  const currentServers = dns.getServers();
+  if (!currentServers.length || currentServers.includes("127.0.0.1")) {
+    dns.setServers(["8.8.8.8", "1.1.1.1", ...currentServers.filter((s) => s !== "127.0.0.1")]);
+  }
+} catch {
+  // Ignore in restricted environments
+}
 
 declare global {
   var _mongoClient: MongoClient | undefined;
   var _mongoDb: Db | undefined;
-  var _mongoSeeded: boolean | undefined;
-  var _mongoIndexesEnsured: boolean | undefined;
+  var _mongoInit: Promise<Db> | undefined;
+  var _mongoLastFailureAt: number | undefined;
 }
 
+/** After a failed connection, callers fail fast for this long instead of each waiting 5s. */
+const RECONNECT_BACKOFF_MS = 3000;
+
+type IndexSpec = readonly [
+  collection: string,
+  keys: Record<string, 1 | -1>,
+  options: { name: string; unique?: boolean; sparse?: boolean },
+];
+
+const INDEXES: readonly IndexSpec[] = [
+  // Attempts: student history, reports and homework lookups
+  ["attempts", { studentId: 1, createdAt: -1 }, { name: "idx_attempts_student_created" }],
+  ["attempts", { assignmentId: 1, studentId: 1 }, { name: "idx_attempts_assignment_student" }],
+  ["attempts", { id: 1 }, { unique: true, name: "uniq_attempts_id" }],
+  ["attempts", { audioId: 1 }, { sparse: true, name: "idx_attempts_audio" }],
+  // Users: authentication and profile lookup
+  ["users", { email: 1 }, { unique: true, name: "uniq_users_email" }],
+  ["users", { id: 1 }, { unique: true, name: "uniq_users_id" }],
+  ["users", { username: 1 }, { sparse: true, name: "idx_users_username" }],
+  // Flags: faculty console and intervention queues
+  ["flags", { status: 1, createdAt: -1 }, { name: "idx_flags_status_created" }],
+  ["flags", { studentId: 1, createdAt: -1 }, { name: "idx_flags_student_created" }],
+  ["flags", { id: 1 }, { unique: true, name: "uniq_flags_id" }],
+  // Roster
+  ["students", { id: 1 }, { unique: true, name: "uniq_students_id" }],
+  ["students", { batchId: 1 }, { name: "idx_students_batch" }],
+  ["batches", { id: 1 }, { unique: true, name: "uniq_batches_id" }],
+  // Messages
+  ["messages", { studentId: 1, createdAt: 1 }, { name: "idx_messages_student_created" }],
+  ["messages", { id: 1 }, { unique: true, name: "uniq_messages_id" }],
+  // Assignments
+  ["assignments", { id: 1 }, { unique: true, name: "uniq_assignments_id" }],
+  ["assignments", { batchId: 1 }, { name: "idx_assignments_batchId" }],
+  ["assignments", { targetSession: 1, targetBatch: 1 }, { name: "idx_assignments_session_batch" }],
+  // Curriculum and settings: prevents duplicates from concurrent first-run writes
+  ["modules", { id: 1 }, { unique: true, name: "uniq_modules_id" }],
+  ["settings", { id: 1 }, { unique: true, name: "uniq_settings_id" }],
+  // Audio lookups by id
+  ["audio_recordings.files", { "metadata.audioId": 1 }, { name: "idx_audio_files_audio_id" }],
+];
+
 /**
- * Ensures optimal compound and unique indexes exist for production performance.
- * Eliminates unindexed collection scans (COLLSCAN).
+ * Ensures indexes exist. Each is created independently, so one failure (such as existing
+ * duplicates blocking a unique index) is logged without skipping the others.
  */
 export async function ensureDatabaseIndexes(db: Db) {
-  try {
-    // 1. Attempts indexes (critical for high-frequency student history & reports)
-    const attemptsCol = db.collection("attempts");
-    await attemptsCol.createIndex(
-      { studentId: 1, createdAt: -1 },
-      { name: "idx_attempts_student_created" },
-    );
-    await attemptsCol.createIndex(
-      { assignmentId: 1, studentId: 1 },
-      { name: "idx_attempts_assignment_student" },
-    );
-    await attemptsCol.createIndex({ id: 1 }, { unique: true, name: "uniq_attempts_id" });
+  const results = await Promise.allSettled(
+    INDEXES.map(([collection, keys, options]) =>
+      db.collection(collection).createIndex(keys, options),
+    ),
+  );
+  results.forEach((result, i) => {
+    if (result.status === "rejected") {
+      console.warn(
+        `[MongoDB] Could not create index ${INDEXES[i][2].name}:`,
+        (result.reason as Error).message,
+      );
+    }
+  });
+}
 
-    // 2. Users indexes (authentication and profile lookup)
-    const usersCol = db.collection("users");
-    await usersCol.createIndex({ email: 1 }, { unique: true, name: "uniq_users_email" });
-    await usersCol.createIndex({ id: 1 }, { unique: true, name: "uniq_users_id" });
-    await usersCol.createIndex({ username: 1 }, { sparse: true, name: "idx_users_username" });
+async function connectAndPrepare(): Promise<Db> {
+  const isTestEnv =
+    process.env.NODE_ENV === "test" || Boolean(process.env.VITEST) || process.env.CI === "true";
 
-    // 3. Flags indexes (faculty console and intervention queues)
-    const flagsCol = db.collection("flags");
-    await flagsCol.createIndex({ status: 1, createdAt: -1 }, { name: "idx_flags_status_created" });
-    await flagsCol.createIndex(
-      { studentId: 1, createdAt: -1 },
-      { name: "idx_flags_student_created" },
-    );
-    await flagsCol.createIndex({ id: 1 }, { unique: true, name: "uniq_flags_id" });
-
-    // 4. Students roster indexes
-    const studentsCol = db.collection("students");
-    await studentsCol.createIndex({ id: 1 }, { unique: true, name: "uniq_students_id" });
-    await studentsCol.createIndex({ batchId: 1 }, { name: "idx_students_batch" });
-
-    // 5. Batches & Messages indexes
-    const batchesCol = db.collection("batches");
-    await batchesCol.createIndex({ id: 1 }, { unique: true, name: "uniq_batches_id" });
-
-    const messagesCol = db.collection("messages");
-    await messagesCol.createIndex(
-      { studentId: 1, createdAt: 1 },
-      { name: "idx_messages_student_created" },
-    );
-    await messagesCol.createIndex({ id: 1 }, { unique: true, name: "uniq_messages_id" });
-
-    // 6. Assignments indexes (fast lookup by batch and session)
-    const assignmentsCol = db.collection("assignments");
-    await assignmentsCol.createIndex({ id: 1 }, { unique: true, name: "uniq_assignments_id" });
-    await assignmentsCol.createIndex({ batchId: 1 }, { name: "idx_assignments_batchId" });
-    await assignmentsCol.createIndex(
-      { targetSession: 1, targetBatch: 1 },
-      { name: "idx_assignments_session_batch" },
-    );
-
-    console.log("[MongoDB] Production database compound indexes verified.");
-  } catch (err) {
-    console.warn("[MongoDB Index Warning]", (err as Error).message);
+  if (!global._mongoClient) {
+    global._mongoClient = new MongoClient(env.MONGODB_URI, {
+      maxPoolSize: 10,
+      minPoolSize: 1,
+      maxIdleTimeMS: 30000,
+      serverSelectionTimeoutMS: isTestEnv ? 1500 : 5000,
+      connectTimeoutMS: isTestEnv ? 1500 : 5000,
+    });
   }
+
+  try {
+    await global._mongoClient.connect();
+  } catch (error) {
+    // Drop the failed client so the next attempt starts clean.
+    const failed = global._mongoClient;
+    global._mongoClient = undefined;
+    await failed.close().catch(() => {});
+    throw error;
+  }
+
+  const db = global._mongoClient.db(env.MONGODB_DB_NAME);
+  await ensureDatabaseIndexes(db);
+  await autoSeedDatabase(db);
+  return db;
 }
 
 /**
- * Returns the singleton MongoDB database instance with connection pooling
+ * Returns the shared database instance, or null if MongoDB is unreachable.
+ * Concurrent callers share one initialization, and a failure is retried on a later call.
  */
 export async function getDb(): Promise<Db | null> {
-  if (global._mongoDb) {
-    return global._mongoDb;
+  if (global._mongoDb) return global._mongoDb;
+
+  if (
+    global._mongoLastFailureAt &&
+    Date.now() - global._mongoLastFailureAt < RECONNECT_BACKOFF_MS
+  ) {
+    return null;
+  }
+
+  if (!global._mongoInit) {
+    global._mongoInit = connectAndPrepare().finally(() => {
+      global._mongoInit = undefined;
+    });
   }
 
   try {
-    if (!global._mongoClient) {
-      const isTestEnv =
-        process.env.NODE_ENV === "test" || Boolean(process.env.VITEST) || process.env.CI === "true";
-      global._mongoClient = new MongoClient(env.MONGODB_URI, {
-        maxPoolSize: 10,
-        minPoolSize: 1,
-        maxIdleTimeMS: 30000,
-        serverSelectionTimeoutMS: isTestEnv ? 1500 : 5000,
-        connectTimeoutMS: isTestEnv ? 1500 : 5000,
-      });
-      await global._mongoClient.connect();
-    }
-
-    global._mongoDb = global._mongoClient.db(env.MONGODB_DB_NAME);
-
-    // Ensure production database indexes exist
-    if (!global._mongoIndexesEnsured) {
-      await ensureDatabaseIndexes(global._mongoDb);
-      global._mongoIndexesEnsured = true;
-    }
-
-    // Auto-seed collections if empty
-    if (!global._mongoSeeded) {
-      await autoSeedDatabase(global._mongoDb);
-      global._mongoSeeded = true;
-    }
-
+    global._mongoDb = await global._mongoInit;
+    global._mongoLastFailureAt = undefined;
     return global._mongoDb;
   } catch (error) {
-    console.warn("[MongoDB] Operating in resilient fallback mode:", (error as Error).message);
+    global._mongoLastFailureAt = Date.now();
+    console.warn("[MongoDB] Connection unavailable:", (error as Error).message);
     return null;
   }
 }
 
+/** For operations that cannot do anything useful without the database. */
+export async function requireDb(): Promise<Db> {
+  const db = await getDb();
+  if (!db) throw serviceUnavailable();
+  return db;
+}
+
 /**
- * Seeds default data into MongoDB if collections are empty
+ * First-run setup. An atomic marker document ensures this runs once per database, even with
+ * several instances starting together, and never again after that. Demo homework is only added
+ * to a brand-new database, so deleted assignments do not come back on the next restart.
  */
 export async function autoSeedDatabase(db: Db) {
-  try {
-    const modulesCol = db.collection<ModuleDoc>("modules");
-    const moduleCount = await modulesCol.countDocuments();
-    if (moduleCount === 0) {
-      const moduleDocs: ModuleDoc[] = modules.map((m, idx) => ({
-        id: m.id,
-        title: m.title,
-        prompt: m.prompt,
-        difficulty: m.difficulty,
-        durationSec: m.durationSec,
-        completed: Boolean(m.completed),
-        order: idx,
-        createdAt: new Date(),
-      }));
-      await modulesCol.insertMany(moduleDocs);
-    }
+  const SEED_MARKER = "seed-v1";
 
-    // Ensure real admin account exists if users collection is empty
+  try {
+    const meta = db.collection<{ _id: string; at: Date }>("_meta");
+    const claim = await meta.updateOne(
+      { _id: SEED_MARKER },
+      { $setOnInsert: { at: new Date() } },
+      { upsert: true },
+    );
+    if (claim.upsertedCount === 0) return; // Already done, by this or another instance.
+
     const usersCol = db.collection<UserDoc>("users");
-    const userCount = await usersCol.countDocuments();
-    if (userCount === 0) {
-      const bcrypt = (await import("bcryptjs")).default;
-      const adminEmail = env.ADMIN_EMAIL;
-      const adminPassword = env.ADMIN_INITIAL_PASSWORD;
-      const passwordHash = await bcrypt.hash(adminPassword, 10);
-      await usersCol.insertOne({
-        id: "admin-master",
-        email: adminEmail.toLowerCase(),
-        username: "admin",
-        passwordHash,
-        name: "Shadan (Admin)",
-        phone: "9876543210",
-        role: "admin",
-        sessionSeason: "summer",
-        batchTime: "morning",
-        batchId: "summer-morning",
-        createdAt: new Date(),
-      });
-    } else {
-      await usersCol.updateOne(
-        { id: "admin-master", phone: { $exists: false } },
-        { $set: { phone: "9876543210" } },
+    const isFreshDatabase = (await usersCol.countDocuments({}, { limit: 1 })) === 0;
+
+    const modulesCol = db.collection<ModuleDoc>("modules");
+    if ((await modulesCol.countDocuments({}, { limit: 1 })) === 0) {
+      await modulesCol.insertMany(
+        modules.map((m, idx): ModuleDoc => ({
+          id: m.id,
+          title: m.title,
+          prompt: m.prompt,
+          difficulty: m.difficulty,
+          durationSec: m.durationSec,
+          completed: false,
+          order: idx,
+          createdAt: new Date(),
+        })),
       );
     }
 
-    const realUsers = await usersCol.find({}).toArray();
-    const realUserIds = new Set(realUsers.map((u) => u.id));
-    const realEmails = new Set(realUsers.map((u) => u.email.toLowerCase()));
-
-    const studentsCol = db.collection<StudentDoc>("students");
-    // Remove any student doc where id is neither a real user ID nor a real email
-    const allStudents = await studentsCol.find({}).toArray();
-    for (const st of allStudents) {
-      if (!realUserIds.has(st.id) && !realEmails.has(st.id.toLowerCase())) {
-        await studentsCol.deleteOne({ _id: st._id });
+    if (isFreshDatabase) {
+      if (env.ADMIN_EMAIL && env.ADMIN_INITIAL_PASSWORD) {
+        const bcrypt = (await import("bcryptjs")).default;
+        await usersCol.insertOne({
+          id: "admin-master",
+          email: env.ADMIN_EMAIL.toLowerCase(),
+          username: "admin",
+          passwordHash: await bcrypt.hash(env.ADMIN_INITIAL_PASSWORD, 10),
+          name: "Shadan (Admin)",
+          role: "admin",
+          sessionSeason: "summer",
+          batchTime: "morning",
+          batchId: "summer-morning",
+          createdAt: new Date(),
+        });
+      } else {
+        console.error(
+          "[MongoDB] No admin account was created: set ADMIN_EMAIL and ADMIN_INITIAL_PASSWORD, then seed again.",
+        );
+        await meta.deleteOne({ _id: SEED_MARKER }); // Allow a retry once they are configured.
       }
     }
 
     const batchesCol = db.collection<BatchDoc>("batches");
-    const batchCount = await batchesCol.countDocuments();
-    if (batchCount === 0) {
+    if ((await batchesCol.countDocuments({}, { limit: 1 })) === 0) {
       await batchesCol.insertOne({
         id: "summer-morning",
         season: "summer",
@@ -194,14 +225,10 @@ export async function autoSeedDatabase(db: Db) {
       });
     }
 
-    // Auto-seed default homework assignments if collection is empty
     const assignmentsCol = db.collection<AssignmentDoc>("assignments");
-    const assignmentCount = await assignmentsCol.countDocuments();
-    if (assignmentCount === 0) {
-      const twoDaysFromNow = new Date(Date.now() + 86400000 * 2).toISOString();
-      const fourDaysFromNow = new Date(Date.now() + 86400000 * 4).toISOString();
-      const fiveDaysFromNow = new Date(Date.now() + 86400000 * 5).toISOString();
-      const sixDaysFromNow = new Date(Date.now() + 86400000 * 6).toISOString();
+    if (isFreshDatabase && (await assignmentsCol.countDocuments({}, { limit: 1 })) === 0) {
+      const daysFromNow = (days: number) => new Date(Date.now() + 86400000 * days).toISOString();
+      const teacher = { teacherId: "teacher-1", teacherName: "Mr. Sharma" };
 
       await assignmentsCol.insertMany([
         {
@@ -216,9 +243,8 @@ export async function autoSeedDatabase(db: Db) {
           targetSession: "summer",
           targetBatch: "morning",
           batchId: "summer-morning",
-          teacherId: "teacher-1",
-          teacherName: "Mr. Sharma",
-          dueDate: twoDaysFromNow,
+          ...teacher,
+          dueDate: daysFromNow(2),
           createdAt: new Date(),
         },
         {
@@ -233,9 +259,8 @@ export async function autoSeedDatabase(db: Db) {
           targetSession: "summer",
           targetBatch: "morning",
           batchId: "summer-morning",
-          teacherId: "teacher-1",
-          teacherName: "Mr. Sharma",
-          dueDate: fourDaysFromNow,
+          ...teacher,
+          dueDate: daysFromNow(4),
           createdAt: new Date(),
         },
         {
@@ -250,9 +275,8 @@ export async function autoSeedDatabase(db: Db) {
           targetSession: "summer",
           targetBatch: "evening",
           batchId: "summer-evening",
-          teacherId: "teacher-1",
-          teacherName: "Mr. Sharma",
-          dueDate: fiveDaysFromNow,
+          ...teacher,
+          dueDate: daysFromNow(5),
           createdAt: new Date(),
         },
         {
@@ -267,15 +291,13 @@ export async function autoSeedDatabase(db: Db) {
           targetSession: "autumn",
           targetBatch: "morning",
           batchId: "autumn-morning",
-          teacherId: "teacher-1",
-          teacherName: "Mr. Sharma",
-          dueDate: sixDaysFromNow,
+          ...teacher,
+          dueDate: daysFromNow(6),
           createdAt: new Date(),
         },
       ]);
-      console.log("[MongoDB] Default homework assignments auto-seeded.");
     }
   } catch (err) {
-    console.warn("[MongoDB Auto-Seed Warning]", (err as Error).message);
+    console.warn("[MongoDB] First-run setup warning:", (err as Error).message);
   }
 }

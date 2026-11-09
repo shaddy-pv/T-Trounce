@@ -2,7 +2,9 @@ import { createFileRoute, useNavigate, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { TButton } from "@/components/tarang/Button";
-import { Waveform, makeSampleWaveform } from "@/components/tarang/Waveform";
+import { Waveform } from "@/components/tarang/Waveform";
+import { makeSampleWaveform } from "@/lib/sample-waveform";
+import { InstallLoginLink } from "@/features/pwa/components/InstallApp";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -181,6 +183,8 @@ function LoginPage() {
                 ? "Signing in..."
                 : `Sign in as ${role === "teacher" ? "Teacher / Admin" : "Student"}`}
             </TButton>
+
+            <InstallLoginLink />
           </form>
         </div>
       </div>

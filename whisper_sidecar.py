@@ -13,13 +13,15 @@ Env vars (optional):
     WHISPER_DEVICE  — compute device: cpu | cuda       (default: cpu)
     WHISPER_PORT    — port to listen on                (default: 8765)
     WHISPER_LANG    — language hint                    (default: en)
+    WHISPER_SIDECAR_TOKEN — shared secret required on /transcribe when set
+    WHISPER_MAX_BODY_BYTES — largest accepted request  (default: 32 MB)
 
 Requirements:
     pip install -r requirements.txt
 """
 
 import base64
-import io
+import hmac
 import json
 import logging
 import os
@@ -38,11 +40,15 @@ log = logging.getLogger("whisper_sidecar")
 # ──────────────────────────────────────────────
 # Config from environment
 # ──────────────────────────────────────────────
-MODEL_SIZE = os.environ.get("WHISPER_MODEL", "tiny.en" if DEVICE == "cpu" else "base")
 DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
+MODEL_SIZE = os.environ.get("WHISPER_MODEL", "tiny.en" if DEVICE == "cpu" else "base")
 HOST = os.environ.get("WHISPER_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT") or os.environ.get("WHISPER_PORT") or "8765")
 LANG = os.environ.get("WHISPER_LANG", "en")
+# When set, /transcribe requires "Authorization: Bearer <token>". Set this on any public deployment.
+AUTH_TOKEN = os.environ.get("WHISPER_SIDECAR_TOKEN", "")
+# Largest accepted request body. Matches the app's own upload limit.
+MAX_BODY_BYTES = int(os.environ.get("WHISPER_MAX_BODY_BYTES") or str(32 * 1024 * 1024))
 
 # ──────────────────────────────────────────────
 # Load model once at startup (downloaded to ~/.cache/huggingface on first run)
@@ -109,7 +115,7 @@ def transcribe_audio_bytes(audio_bytes: bytes, mime: str = "audio/wav", prompt: 
             # beam_size: default 1 on CPU for fast sub-5s response on Render free tier, or 5 if CUDA/configured
             beam_size = int(os.getenv("WHISPER_BEAM_SIZE", "1" if DEVICE == "cpu" else "5"))
             best_of = int(os.getenv("WHISPER_BEST_OF", "1" if DEVICE == "cpu" else "5"))
-            segments, info = _model.transcribe(
+            lazy_segments, info = _model.transcribe(
                 tmp_path,
                 language=LANG,
                 beam_size=beam_size,
@@ -129,6 +135,9 @@ def transcribe_audio_bytes(audio_bytes: bytes, mime: str = "audio/wav", prompt: 
                 word_timestamps=False,
                 condition_on_previous_text=False,  # each chunk is independent
             )
+            # transcribe() returns a lazy generator and the real work happens while iterating,
+            # so this must stay inside the lock for it to serialize anything.
+            segments = list(lazy_segments)
 
         texts = []
         avg_logprob_sum = 0.0
@@ -180,35 +189,26 @@ class WhisperHandler(BaseHTTPRequestHandler):
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(body)
         except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, OSError):
             pass
 
-    def do_OPTIONS(self):
-        """Handle CORS preflight"""
-        self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "POST, GET, HEAD, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.end_headers()
+    def _is_authorized(self) -> bool:
+        if not AUTH_TOKEN:
+            return True
+        supplied = self.headers.get("Authorization", "")
+        return hmac.compare_digest(supplied.encode("utf-8"), f"Bearer {AUTH_TOKEN}".encode("utf-8"))
 
     def do_HEAD(self):
         """Handle HEAD requests for uptime monitoring (UptimeRobot, Render health checks)"""
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
 
     def do_GET(self):
         if self.path in ("/", "/health", "/ping"):
-            self._send_json({
-                "status": "ok",
-                "service": "Trounce FastWhisper Sidecar",
-                "model": MODEL_SIZE,
-                "device": DEVICE,
-            })
+            self._send_json({"status": "ok", "service": "Trounce FastWhisper Sidecar"})
         else:
             self._send_json({"error": "Not found"}, 404)
 
@@ -217,9 +217,23 @@ class WhisperHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "Not found"}, 404)
             return
 
-        content_length = int(self.headers.get("Content-Length", 0))
-        if content_length == 0:
+        if not self._is_authorized():
+            self._send_json({"error": "Unauthorized"}, 401)
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            self._send_json({"error": "Invalid Content-Length"}, 400)
+            return
+
+        if content_length <= 0:
             self._send_json({"error": "Empty body"}, 400)
+            return
+
+        if content_length > MAX_BODY_BYTES:
+            self.close_connection = True
+            self._send_json({"error": "Request too large"}, 413)
             return
 
         try:
@@ -252,11 +266,8 @@ class WhisperHandler(BaseHTTPRequestHandler):
             return
 
         result = transcribe_audio_bytes(audio_bytes, mime, prompt)
-        log.info(
-            f'Chunk transcribed ({len(audio_bytes)//1024}KB): '
-            f'"{result["text"][:60]}{"..." if len(result["text"]) > 60 else ""}" '
-            f'[conf={result["confidence"]}]'
-        )
+        # Transcripts are student data, so only the size and confidence are logged.
+        log.info(f'Chunk transcribed ({len(audio_bytes)//1024}KB) [conf={result["confidence"]}]')
         self._send_json(result)
 
 

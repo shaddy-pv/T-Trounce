@@ -1,84 +1,47 @@
+import { createHash } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import tsconfigPaths from "vite-tsconfig-paths";
-import fs from "fs";
-import path from "path";
 
-function devAudioStreamingPlugin(): Plugin {
+/**
+ * Stamps the service worker with a hash of the build's file names. Each deployment produces a sw.js
+ * with different bytes, which is what makes browsers install the update and drop the old caches.
+ */
+function serviceWorkerBuildId(): Plugin {
   return {
-    name: "dev-audio-streaming",
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        const url = req.url || "";
-        if (url.startsWith("/api/audio/")) {
-          const audioId = url.replace("/api/audio/", "").split("?")[0].trim();
-          if (audioId) {
-            const storageDir = path.resolve(process.cwd(), ".storage", "audio");
-            const localFilePath = path.join(storageDir, `${audioId}.bin`);
+    name: "trounce-sw-build-id",
+    apply: "build",
+    async writeBundle(options, bundle) {
+      if (this.environment.name !== "client" || !options.dir) return;
 
-            if (fs.existsSync(localFilePath)) {
-              const buffer = fs.readFileSync(localFilePath);
-              const totalSize = buffer.length;
-              const range = req.headers.range;
+      const buildId = createHash("sha256")
+        .update(Object.keys(bundle).sort().join("\n"))
+        .digest("hex")
+        .slice(0, 12);
 
-              res.setHeader("Content-Type", "audio/webm");
-              res.setHeader("Accept-Ranges", "bytes");
-              res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-
-              if (range) {
-                const parts = range.replace(/bytes=/, "").split("-");
-                const start = parseInt(parts[0], 10) || 0;
-                const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
-
-                if (start >= totalSize || end >= totalSize) {
-                  res.statusCode = 416;
-                  res.setHeader("Content-Range", `bytes */${totalSize}`);
-                  res.end();
-                  return;
-                }
-
-                res.statusCode = 206;
-                res.setHeader("Content-Range", `bytes ${start}-${end}/${totalSize}`);
-                res.setHeader("Content-Length", String(end - start + 1));
-                res.end(buffer.subarray(start, end + 1));
-                return;
-              }
-
-              res.statusCode = 200;
-              res.setHeader("Content-Length", String(totalSize));
-              res.end(buffer);
-              return;
-            }
-          }
-        }
-        next();
-      });
+      const swPath = path.join(options.dir, "sw.js");
+      const source = await readFile(swPath, "utf8");
+      if (!source.includes("__BUILD_ID__")) {
+        throw new Error("public/sw.js is missing the __BUILD_ID__ placeholder");
+      }
+      await writeFile(swPath, source.replaceAll("__BUILD_ID__", buildId));
     },
   };
 }
 
 export default defineConfig({
+  resolve: { tsconfigPaths: true },
   plugins: [
-    devAudioStreamingPlugin(),
     tanstackStart({
       server: {
         entry: "server",
-        // Set NITRO_PRESET env var at build time to control deployment target:
-        // Vercel: NITRO_PRESET=vercel
-        // Render/Fly.io/Railway: NITRO_PRESET=node-server (default)
-        preset: (process.env.NITRO_PRESET as "vercel" | "node-server") || "node-server",
       },
     }),
     viteReact(),
     tailwindcss(),
-    tsconfigPaths(),
+    serviceWorkerBuildId(),
   ],
-  preview: {
-    allowedHosts: true,
-  },
-  server: {
-    allowedHosts: true,
-  },
 });

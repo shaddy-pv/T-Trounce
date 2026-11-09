@@ -1,4 +1,3 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   Link,
@@ -12,6 +11,10 @@ import { type ReactNode, useEffect } from "react";
 
 import appCss from "../styles.css?url";
 import { applyTheme, getStoredTheme } from "@/lib/theme";
+import { fetchSessionWithCache } from "@/lib/auth";
+import { PwaUpdateBanner } from "@/features/pwa/components/InstallApp";
+import { initPwa } from "@/features/pwa/pwa-store";
+import type { SessionPayload } from "@/server/services/auth.service";
 
 function NotFoundComponent() {
   return (
@@ -37,16 +40,21 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
   console.error(error);
   const router = useRouter();
+  const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-ink-950 px-4">
       <div className="max-w-md text-center">
-        <h1 className="display text-[20px] text-primary-warm">This page didn't load</h1>
+        <h1 className="display text-[20px] text-primary-warm">
+          {isOffline ? "You're offline" : "This page didn't load"}
+        </h1>
         <p className="mt-2 text-[14px] text-secondary-warm">
-          Something went wrong on our end. Try again, or head back to start.
+          {isOffline
+            ? "Check your Wi-Fi or mobile data, then try again."
+            : "Something went wrong on our end. Try again, or head back to start."}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
@@ -70,11 +78,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
-import { fetchSessionWithCache } from "@/lib/auth";
-import type { SessionPayload } from "@/server/services/auth.service";
-
 export interface RouterContext {
-  queryClient: QueryClient;
   session: SessionPayload | null;
 }
 
@@ -99,14 +103,15 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       { name: "twitter:card", content: "summary" },
       { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
-      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black" },
       { name: "apple-mobile-web-app-title", content: "Trounce" },
       { name: "application-name", content: "Trounce" },
     ],
     links: [
       { rel: "manifest", href: "/manifest.webmanifest" },
-      { rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png" },
+      { rel: "apple-touch-icon", sizes: "180x180", href: "/icons/apple-touch-icon.png" },
       { rel: "icon", type: "image/svg+xml", href: "/icons/icon.svg" },
+      { rel: "icon", type: "image/png", sizes: "32x32", href: "/icons/icon-32x32.png" },
       { rel: "icon", type: "image/png", sizes: "192x192", href: "/icons/icon-192x192.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       {
@@ -141,6 +146,12 @@ function RootShell({ children }: { children: ReactNode }) {
             __html: `(function(){try{var s=localStorage.getItem('trounce_theme');var t=s||'dark';var r=t;if(t==='system'){r=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}if(r==='light'){document.documentElement.classList.add('light');document.documentElement.classList.remove('dark');document.documentElement.setAttribute('data-theme','light');}else{document.documentElement.classList.add('dark');document.documentElement.classList.remove('light');document.documentElement.setAttribute('data-theme','dark');}}catch(e){}})();`,
           }}
         />
+        {/* The install prompt event can fire before the app hydrates, so it is captured here. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__trounceInstallPrompt=e;});`,
+          }}
+        />
         <HeadContent />
       </head>
       <body>
@@ -166,42 +177,16 @@ function NavigationProgressBar() {
 }
 
 function RootComponent() {
-  const { queryClient } = Route.useRouteContext();
-
   useEffect(() => {
     applyTheme(getStoredTheme());
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker
-          .register("/sw.js", { scope: "/" })
-          .then((registration) => {
-            void registration.update().catch(() => {});
-            registration.addEventListener("updatefound", () => {
-              const newWorker = registration.installing;
-              if (newWorker) {
-                newWorker.addEventListener("statechange", () => {
-                  if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-                    newWorker.postMessage({ type: "SKIP_WAITING" });
-                    console.info("[PWA] Trounce updated to latest service worker.");
-                  }
-                });
-              }
-            });
-          })
-          .catch((err) => {
-            console.debug("[PWA] Service worker registration error:", err);
-          });
-      });
-    }
+    initPwa();
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <>
       <NavigationProgressBar />
       <Outlet />
-    </QueryClientProvider>
+      <PwaUpdateBanner />
+    </>
   );
 }

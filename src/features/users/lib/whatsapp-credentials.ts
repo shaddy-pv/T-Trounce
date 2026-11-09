@@ -2,15 +2,8 @@
  * WhatsApp Credentials Dispatch Utilities for User & Teacher Management
  */
 
-export function cleanIndianPhoneNumber(rawPhone?: string): string {
-  if (!rawPhone) return "";
-  let digits = rawPhone.replace(/[^0-9]/g, "");
-  // If 10 digits (standard Indian mobile without country code), prepend 91
-  if (digits.length === 10) {
-    digits = "91" + digits;
-  }
-  return digits;
-}
+import { appUrl } from "@/lib/app-url";
+import { cleanIndianPhoneNumber } from "@/lib/phone";
 
 export function generateUserCredentialsWhatsAppUrl(params: {
   name: string;
@@ -46,7 +39,7 @@ export function generateUserCredentialsWhatsAppUrl(params: {
     `*Welcome to Trounce Spoken English Institute! 🎉*\n\n` +
     `Namaste *${params.name}*! 🙏\n` +
     `Aapka Trounce speech portal account create ho gaya hai:\n\n` +
-    `🌐 *Portal Login:* https://trounce.app/login\n` +
+    `🌐 *Portal Login:* ${appUrl("/login")}\n` +
     `📧 *User ID / Email:* ${params.email}\n` +
     `🔑 *Permanent Password:* ${params.passwordPlain}\n` +
     `👤 *Role:* ${roleLabel}\n` +
@@ -81,7 +74,7 @@ export function formatCredentialsPlainText(params: {
   return `Trounce Login Credentials:
 Name: ${params.name}
 Role: ${roleLabel}
-Login URL: https://trounce.app/login
+Login URL: ${appUrl("/login")}
 Email: ${params.email}
 Password: ${params.passwordPlain}
 Batch: ${sessionStr} · ${batchStr}`;

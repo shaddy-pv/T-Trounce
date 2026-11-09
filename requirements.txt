@@ -1,7 +1,8 @@
-# Tarang — FastWhisper Sidecar dependencies
+# Trounce FastWhisper Sidecar dependencies
 # Install with:  pip install -r requirements.txt
 
-# Core transcription engine (runs OpenAI Whisper models locally via CTranslate2)
-faster-whisper>=1.0.0
+# Core transcription engine (runs OpenAI Whisper models locally via CTranslate2).
+# The upper bound keeps builds reproducible; test before raising it.
+faster-whisper>=1.0.0,<2
 
-# No Flask needed — uses Python's built-in http.server (zero extra deps)
+# No Flask needed: uses Python's built-in http.server (zero extra deps)

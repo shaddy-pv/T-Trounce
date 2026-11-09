@@ -1,13 +1,23 @@
 import { createServerFn } from "@tanstack/react-start";
 import { setCookie, deleteCookie } from "@tanstack/react-start/server";
+import { z } from "zod";
+import { isFaculty } from "@/lib/roles";
+import { forbidden, notFound, AppError } from "./errors";
 import {
   authenticatedMiddleware,
   teacherOnlyMiddleware,
   adminOnlyMiddleware,
+  readSessionCookie,
   COOKIE_NAME,
   LEGACY_COOKIE_NAME,
 } from "./middleware/auth.middleware";
-import { enforceRateLimit } from "./middleware/rate-limiter";
+import { getClientIp } from "./middleware/client-ip";
+import {
+  assertLoginAllowed,
+  enforceRateLimit,
+  recordLoginFailure,
+  recordLoginSuccess,
+} from "./middleware/rate-limiter";
 import { ModuleService } from "./services/module.service";
 import { StudentService } from "./services/student.service";
 import { AttemptService } from "./services/attempt.service";
@@ -30,9 +40,11 @@ import {
   CreateAssignmentInputSchema,
   DeleteAssignmentInputSchema,
   AssignmentFilterSchema,
+  SendReminderInputSchema,
 } from "./validators/assignment.validator";
 import {
   SaveAttemptInputSchema,
+  StreamTranscribeInputSchema,
   UpdateAttemptTranscriptInputSchema,
 } from "./validators/attempt.validator";
 import {
@@ -48,7 +60,6 @@ import {
   ResolveFlagInputSchema,
   FlagFilterSchema,
 } from "./validators/flag.validator";
-import { z } from "zod";
 import type {
   Module,
   StudentRow,
@@ -58,28 +69,34 @@ import type {
   FlagItem,
 } from "@/types";
 
+const IdSchema = z.string().min(1).max(200);
+const MINUTE = 60 * 1000;
+
+type AuthedContext = { context: unknown };
+
+const sessionUser = ({ context }: AuthedContext) => (context as { user: SessionPayload }).user;
+
+/** Teachers and admins may act on any student. Students may only act on their own records. */
+function assertFacultyOrSelf(user: SessionPayload, studentId: string, message: string): void {
+  if (!isFaculty(user) && user.userId !== studentId) throw forbidden(message);
+}
+
 /**
  * Server Function: Authenticate user and issue secure HTTP-only session cookie
  */
 export const loginFn = createServerFn({ method: "POST" })
   .validator((input: unknown) => LoginInputSchema.parse(input))
   .handler(async ({ data }) => {
-    // In-memory rate limiting to prevent brute force credential attacks
-    enforceRateLimit(data.email.toLowerCase(), {
-      keyPrefix: "login",
-      maxRequests: 5,
-      windowMs: 60 * 1000,
-      errorMessage: "Too many login attempts. Please wait 1 minute before trying again.",
-    });
+    const email = data.email.trim().toLowerCase();
+    const ip = getClientIp();
+    assertLoginAllowed(email, ip);
 
-    const user = await AuthService.authenticateUserWithRole(
-      data.email,
-      data.passwordPlain,
-      data.role,
-    );
+    const user = await AuthService.authenticateUserWithRole(email, data.passwordPlain, data.role);
     if (!user) {
-      throw new Error("Invalid email or password");
+      recordLoginFailure(email, ip);
+      throw new AppError("Invalid email or password", 401);
     }
+    recordLoginSuccess(email, ip);
 
     const token = await AuthService.createSessionToken(user);
     setCookie(COOKIE_NAME, token, {
@@ -105,8 +122,8 @@ export const loginFn = createServerFn({ method: "POST" })
  * Server Function: Logout & invalidate session cookie
  */
 export const logoutFn = createServerFn({ method: "POST" }).handler(async () => {
-  deleteCookie(COOKIE_NAME);
-  deleteCookie(LEGACY_COOKIE_NAME);
+  deleteCookie(COOKIE_NAME, { path: "/" });
+  deleteCookie(LEGACY_COOKIE_NAME, { path: "/" });
   return { success: true };
 });
 
@@ -115,10 +132,7 @@ export const logoutFn = createServerFn({ method: "POST" }).handler(async () => {
  */
 export const getSessionFn = createServerFn({ method: "GET" }).handler(
   async (): Promise<SessionPayload | null> => {
-    const { getCookie } = await import("@tanstack/react-start/server");
-    const token = getCookie(COOKIE_NAME);
-    if (!token) return null;
-    return await AuthService.verifySessionToken(token);
+    return await AuthService.resolveSession(readSessionCookie());
   },
 );
 
@@ -166,7 +180,7 @@ export const fetchModulesFn = createServerFn({ method: "GET" })
  */
 export const fetchModuleByIdFn = createServerFn({ method: "GET" })
   .middleware([authenticatedMiddleware])
-  .validator((input: unknown) => z.string().min(1).parse(input))
+  .validator((input: unknown) => IdSchema.parse(input))
   .handler(async ({ data: moduleId }): Promise<Module | null> => {
     return await ModuleService.getModuleById(moduleId);
   });
@@ -205,7 +219,7 @@ export const createAssignmentFn = createServerFn({ method: "POST" })
   .middleware([teacherOnlyMiddleware])
   .validator((input: unknown) => CreateAssignmentInputSchema.parse(input))
   .handler(async ({ data, context }): Promise<AssignmentPublic> => {
-    const user = (context as { user: SessionPayload }).user;
+    const user = sessionUser({ context });
     return await AssignmentService.createAssignment({
       ...data,
       teacherId: user.userId,
@@ -218,7 +232,7 @@ export const createAssignmentFn = createServerFn({ method: "POST" })
  */
 export const fetchAssignmentByIdFn = createServerFn({ method: "GET" })
   .middleware([authenticatedMiddleware])
-  .validator((input: unknown) => z.string().min(1).parse(input))
+  .validator((input: unknown) => IdSchema.parse(input))
   .handler(async ({ data: assignmentId }): Promise<AssignmentPublic | null> => {
     return await AssignmentService.getAssignmentById(assignmentId);
   });
@@ -239,27 +253,24 @@ export const deleteAssignmentFn = createServerFn({ method: "POST" })
  */
 export const fetchAssignmentSubmissionsFn = createServerFn({ method: "GET" })
   .middleware([teacherOnlyMiddleware])
-  .validator((input: unknown) => z.object({ assignmentId: z.string().min(1) }).parse(input))
+  .validator((input: unknown) => z.object({ assignmentId: IdSchema }).parse(input))
   .handler(async ({ data }): Promise<AssignmentSubmissionsData | null> => {
     return await AssignmentService.getAssignmentSubmissions(data.assignmentId);
   });
 
 /**
- * Server Function: Send assignment reminder notification (Protected: Faculty/Admin)
+ * Server Function: Send an assignment reminder to student inboxes (Protected: Faculty/Admin)
  */
 export const sendAssignmentReminderFn = createServerFn({ method: "POST" })
   .middleware([teacherOnlyMiddleware])
-  .validator((input: unknown) =>
-    z
-      .object({
-        assignmentId: z.string().min(1),
-        studentId: z.string().optional(),
-        channel: z.enum(["whatsapp", "in-app", "both"]).optional(),
-      })
-      .parse(input),
-  )
-  .handler(async ({ data }) => {
-    return await AssignmentService.sendReminder(data);
+  .validator((input: unknown) => SendReminderInputSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const user = sessionUser({ context });
+    return await AssignmentService.sendReminder({
+      ...data,
+      teacherId: user.userId,
+      teacherName: user.name,
+    });
   });
 
 /**
@@ -267,13 +278,9 @@ export const sendAssignmentReminderFn = createServerFn({ method: "POST" })
  */
 export const fetchStudentByIdFn = createServerFn({ method: "GET" })
   .middleware([authenticatedMiddleware])
-  .validator((input: unknown) => z.string().min(1).parse(input))
+  .validator((input: unknown) => IdSchema.parse(input))
   .handler(async ({ data: id, context }): Promise<StudentRow | null> => {
-    const user = (context as { user: SessionPayload }).user;
-    const isFaculty = user.role === "teacher" || user.role === "admin" || user.isAdmin;
-    if (!isFaculty && user.userId !== id) {
-      throw new Error("Forbidden: You cannot access other students' records.");
-    }
+    assertFacultyOrSelf(sessionUser({ context }), id, "You cannot access other students' records.");
     return await StudentService.getStudentById(id);
   });
 
@@ -282,13 +289,13 @@ export const fetchStudentByIdFn = createServerFn({ method: "GET" })
  */
 export const fetchStudentProfileFn = createServerFn({ method: "GET" })
   .middleware([authenticatedMiddleware])
-  .validator((input: unknown) => z.string().min(1).parse(input))
+  .validator((input: unknown) => IdSchema.parse(input))
   .handler(async ({ data: id, context }) => {
-    const user = (context as { user: SessionPayload }).user;
-    const isFaculty = user.role === "teacher" || user.role === "admin" || user.isAdmin;
-    if (!isFaculty && user.userId !== id) {
-      throw new Error("Forbidden: You cannot access other students' profiles.");
-    }
+    assertFacultyOrSelf(
+      sessionUser({ context }),
+      id,
+      "You cannot access other students' profiles.",
+    );
     return await StudentService.getStudentProfile(id);
   });
 
@@ -297,13 +304,13 @@ export const fetchStudentProfileFn = createServerFn({ method: "GET" })
  */
 export const fetchStudentAttemptsFn = createServerFn({ method: "GET" })
   .middleware([authenticatedMiddleware])
-  .validator((input: unknown) => z.string().min(1).parse(input))
+  .validator((input: unknown) => IdSchema.parse(input))
   .handler(async ({ data: studentId, context }): Promise<AttemptResult[]> => {
-    const user = (context as { user: SessionPayload }).user;
-    const isFaculty = user.role === "teacher" || user.role === "admin" || user.isAdmin;
-    if (!isFaculty && user.userId !== studentId) {
-      throw new Error("Forbidden: You cannot view other students' practice attempts.");
-    }
+    assertFacultyOrSelf(
+      sessionUser({ context }),
+      studentId,
+      "You cannot view other students' practice attempts.",
+    );
     return await AttemptService.getStudentAttempts(studentId);
   });
 
@@ -313,54 +320,57 @@ export const fetchStudentAttemptsFn = createServerFn({ method: "GET" })
 export const saveAttemptFn = createServerFn({ method: "POST" })
   .middleware([authenticatedMiddleware])
   .validator((input: unknown) => SaveAttemptInputSchema.parse(input))
-  .handler(async ({ data, context }): Promise<{ success: boolean; id: string }> => {
-    const user = (context as { user: SessionPayload }).user;
-    // Enforce student's own ID
-    const studentId = user.role === "student" ? user.userId : data.studentId || user.userId;
+  .handler(
+    async ({ data, context }): Promise<{ success: boolean; id: string; audioUrl?: string }> => {
+      const user = sessionUser({ context });
+      // Students can only save attempts for themselves.
+      const studentId = user.role === "student" ? user.userId : data.studentId || user.userId;
 
-    // In-memory rate limiting to protect audio processing against abuse
-    enforceRateLimit(studentId, {
-      keyPrefix: "attempt",
-      maxRequests: 30,
-      windowMs: 60 * 1000,
-      errorMessage: "Submission rate limit reached. Please wait a moment before submitting again.",
-    });
+      enforceRateLimit(studentId, {
+        keyPrefix: "attempt",
+        maxRequests: 30,
+        windowMs: MINUTE,
+        errorMessage:
+          "Submission rate limit reached. Please wait a moment before submitting again.",
+      });
 
-    return await AttemptService.saveAttempt({
-      studentId,
-      moduleId: data.moduleId,
-      assignmentId: data.assignmentId,
-      result: {
-        ...data.result,
+      return await AttemptService.saveAttempt({
         studentId,
-      },
-    });
-  });
+        moduleId: data.moduleId,
+        assignmentId: data.assignmentId,
+        result: { ...data.result, studentId },
+      });
+    },
+  );
 
 /**
- * Server Function: Fetch attempt diagnostic result (Protected: Authenticated)
+ * Server Function: Fetch attempt diagnostic result (Protected: Faculty or Owner)
  */
 export const fetchAttemptByIdFn = createServerFn({ method: "GET" })
   .middleware([authenticatedMiddleware])
-  .validator((input: unknown) => z.string().min(1).parse(input))
-  .handler(async ({ data: attemptId }): Promise<AttemptResult> => {
-    return await AttemptService.getAttemptById(attemptId);
+  .validator((input: unknown) => IdSchema.parse(input))
+  .handler(async ({ data: attemptId, context }): Promise<AttemptResult> => {
+    const user = sessionUser({ context });
+    const attempt = await AttemptService.getAttemptById(attemptId);
+    const isOwner = attempt.studentId === user.userId || attempt.studentId === user.email;
+    // Same response as a missing attempt, so IDs cannot be probed.
+    if (!isFaculty(user) && !isOwner) throw notFound("This recording could not be found.");
+    return attempt;
   });
 
 /**
- * Server Function: Update student speaking attempt transcript (Protected: Authenticated Student/Faculty)
+ * Server Function: Update student speaking attempt transcript (Protected: Faculty or Owner)
  */
 export const updateAttemptTranscriptFn = createServerFn({ method: "POST" })
   .middleware([authenticatedMiddleware])
   .validator((input: unknown) => UpdateAttemptTranscriptInputSchema.parse(input))
   .handler(async ({ data, context }): Promise<AttemptResult> => {
-    const user = (context as { user: SessionPayload }).user;
-    const isFaculty = user.role === "teacher" || user.role === "admin" || user.isAdmin;
+    const user = sessionUser({ context });
     return await AttemptService.updateTranscript(
       data.attemptId,
       data.transcript,
       user.userId,
-      isFaculty,
+      isFaculty(user),
     );
   });
 
@@ -372,8 +382,8 @@ export const saveTeacherFeedbackFn = createServerFn({ method: "POST" })
   .validator((input: unknown) =>
     z
       .object({
-        attemptId: z.string().min(1),
-        feedback: z.string().min(1),
+        attemptId: IdSchema,
+        feedback: z.string().min(1).max(5000),
       })
       .parse(input),
   )
@@ -394,24 +404,39 @@ export const updateStudentStatusFn = createServerFn({ method: "POST" })
   });
 
 /**
- * Server Function: Send a direct message to a student (Protected: Authenticated)
+ * Server Function: Send a direct message (Protected: Authenticated).
+ * A student can only post to their own thread, and sender details always come from the server.
  */
 export const sendDirectMessageFn = createServerFn({ method: "POST" })
   .middleware([authenticatedMiddleware])
   .validator((input: unknown) => CreateMessageInputSchema.parse(input))
   .handler(async ({ data, context }): Promise<DirectMessagePublic> => {
-    const user = (context as { user: SessionPayload }).user;
+    const user = sessionUser({ context });
+
+    enforceRateLimit(user.userId, {
+      keyPrefix: "message",
+      maxRequests: 30,
+      windowMs: MINUTE,
+      errorMessage: "You are sending messages too quickly. Please wait a moment.",
+    });
+
+    if (user.role === "student") {
+      const teacher = data.teacherId ? await UserService.findFaculty(data.teacherId) : null;
+      return await MessageService.sendMessage({
+        studentId: user.userId,
+        teacherId: teacher?.id ?? "faculty",
+        teacherName: teacher?.name ?? "Faculty",
+        content: data.content,
+        senderRole: "student",
+      });
+    }
+
     return await MessageService.sendMessage({
-      ...data,
-      teacherId:
-        user.role === "teacher" || user.role === "admin"
-          ? user.userId
-          : data.teacherId || "teacher-1",
-      teacherName:
-        user.role === "teacher" || user.role === "admin"
-          ? user.name
-          : data.teacherName || "Faculty",
-      senderRole: user.role === "student" ? "student" : "teacher",
+      studentId: data.studentId,
+      teacherId: user.userId,
+      teacherName: user.name,
+      content: data.content,
+      senderRole: "teacher",
     });
   });
 
@@ -420,78 +445,81 @@ export const sendDirectMessageFn = createServerFn({ method: "POST" })
  */
 export const fetchStudentMessagesFn = createServerFn({ method: "GET" })
   .middleware([authenticatedMiddleware])
-  .validator((input: unknown) => z.string().min(1).parse(input))
+  .validator((input: unknown) => IdSchema.parse(input))
   .handler(async ({ data: studentId, context }): Promise<DirectMessagePublic[]> => {
-    const user = (context as { user: SessionPayload }).user;
-    const isFaculty = user.role === "teacher" || user.role === "admin" || user.isAdmin;
-    if (!isFaculty && user.userId !== studentId) {
-      throw new Error("Forbidden: You cannot access other students' messages.");
-    }
+    assertFacultyOrSelf(
+      sessionUser({ context }),
+      studentId,
+      "You cannot access other students' messages.",
+    );
     return await MessageService.getMessagesForStudent(studentId);
   });
 
 /**
- * Server Function: Mark message as read (Protected: Authenticated)
+ * Server Function: Mark message as read (Protected: Faculty or the message's student)
  */
 export const markMessageReadFn = createServerFn({ method: "POST" })
   .middleware([authenticatedMiddleware])
   .validator((input: unknown) => MarkMessageReadInputSchema.parse(input))
-  .handler(async ({ data }): Promise<{ success: boolean }> => {
-    const success = await MessageService.markMessageRead(data.messageId);
+  .handler(async ({ data, context }): Promise<{ success: boolean }> => {
+    const user = sessionUser({ context });
+    const success = await MessageService.markMessageRead(
+      data.messageId,
+      isFaculty(user) ? undefined : user.userId,
+    );
     return { success };
   });
 
 /**
- * Server Function: Stream-transcribe a real-time audio chunk from live microphone stream
+ * Server Function: Transcribe an audio clip (Protected: Authenticated, rate limited).
+ * Each call can use a paid speech API, so the limit also protects against runaway costs.
  */
 export const streamTranscribeChunkFn = createServerFn({ method: "POST" })
   .middleware([authenticatedMiddleware])
-  .validator((input: unknown) => {
-    return z
-      .object({
-        audioBase64: z.string(),
-        mimeType: z.string().default("audio/wav"),
-        promptContext: z.string().optional(),
-        sequence: z.number().default(0),
-        isFinal: z.boolean().default(false),
-      })
-      .parse(input);
-  })
-  .handler(async ({ data }): Promise<{ text: string; confidence: number; isFinal: boolean }> => {
-    const commaIdx = data.audioBase64.indexOf(",");
-    const cleanBase64 = commaIdx >= 0 ? data.audioBase64.slice(commaIdx + 1) : data.audioBase64;
-    const buffer = Buffer.from(cleanBase64, "base64");
-    return await TranscriptionService.transcribeChunk(
-      buffer,
-      data.mimeType,
-      data.promptContext,
-      data.sequence,
-      data.isFinal, // true = post-recording accuracy pass; false = live chunk (legacy)
-    );
-  });
+  .validator((input: unknown) => StreamTranscribeInputSchema.parse(input))
+  .handler(
+    async ({ data, context }): Promise<{ text: string; confidence: number; isFinal: boolean }> => {
+      enforceRateLimit(sessionUser({ context }).userId, {
+        keyPrefix: "transcribe",
+        maxRequests: 90,
+        windowMs: MINUTE,
+        errorMessage: "Too many transcription requests. Please wait a moment.",
+      });
+
+      const commaIdx = data.audioBase64.indexOf(",");
+      const cleanBase64 = commaIdx >= 0 ? data.audioBase64.slice(commaIdx + 1) : data.audioBase64;
+      return await TranscriptionService.transcribeChunk(
+        Buffer.from(cleanBase64, "base64"),
+        data.mimeType,
+        data.promptContext,
+        data.sequence,
+        data.isFinal,
+      );
+    },
+  );
 
 /**
- * Server Function: Pre-warm the FastWhisper sidecar (wakes Render free-tier container)
+ * Server Function: Wake the FastWhisper sidecar, which sleeps on free hosting tiers (Protected: Authenticated)
  */
-export const warmupWhisperFn = createServerFn({ method: "POST" }).handler(
-  async (): Promise<{ status: string }> => {
-    await TranscriptionService.pingWarmup();
+export const warmupWhisperFn = createServerFn({ method: "POST" })
+  .middleware([authenticatedMiddleware])
+  .handler(async (): Promise<{ status: string }> => {
+    TranscriptionService.pingWarmup();
     return { status: "ok" };
-  },
-);
+  });
 
 /**
  * Server Function: Fetch real weekly student report (Protected: Faculty or Self)
  */
 export const fetchStudentReportFn = createServerFn({ method: "GET" })
   .middleware([authenticatedMiddleware])
-  .validator((input: unknown) => z.string().min(1).parse(input))
+  .validator((input: unknown) => IdSchema.parse(input))
   .handler(async ({ data: studentId, context }): Promise<StudentWeeklyReport | null> => {
-    const user = (context as { user: SessionPayload }).user;
-    const isFaculty = user.role === "teacher" || user.role === "admin" || user.isAdmin;
-    if (!isFaculty && user.userId !== studentId) {
-      throw new Error("Forbidden: You cannot access other students' reports.");
-    }
+    assertFacultyOrSelf(
+      sessionUser({ context }),
+      studentId,
+      "You cannot access other students' reports.",
+    );
     return await StudentService.getStudentWeeklyReport(studentId);
   });
 
@@ -502,11 +530,21 @@ export const createFlagFn = createServerFn({ method: "POST" })
   .middleware([authenticatedMiddleware])
   .validator((input: unknown) => CreateFlagInputSchema.parse(input))
   .handler(async ({ data, context }): Promise<FlagItem> => {
-    const user = (context as { user: SessionPayload }).user;
-    const studentId = user.role === "student" ? user.userId : data.studentId || user.userId;
+    const user = sessionUser({ context });
+    const isStudent = user.role === "student";
+
+    enforceRateLimit(user.userId, {
+      keyPrefix: "flag",
+      maxRequests: 20,
+      windowMs: MINUTE,
+      errorMessage: "Please wait a moment before sending another request.",
+    });
+
     return await FlagService.createFlag({
       ...data,
-      studentId,
+      // Students can only raise help requests about their own recordings.
+      type: isStudent ? "student_request" : data.type,
+      studentId: isStudent ? user.userId : data.studentId || user.userId,
       studentName: user.name,
       studentEmail: user.email,
     });
@@ -529,7 +567,7 @@ export const resolveFlagFn = createServerFn({ method: "POST" })
   .middleware([teacherOnlyMiddleware])
   .validator((input: unknown) => ResolveFlagInputSchema.parse(input))
   .handler(async ({ data, context }): Promise<{ success: boolean }> => {
-    const user = (context as { user: SessionPayload }).user;
+    const user = sessionUser({ context });
     const success = await FlagService.resolveFlag({
       ...data,
       teacherId: user.userId,
@@ -539,26 +577,28 @@ export const resolveFlagFn = createServerFn({ method: "POST" })
   });
 
 /**
- * Server Function: Get global application settings
+ * Server Function: Get global application settings (Protected: Authenticated).
+ * Who last changed them is only shown to the master administrator.
  */
-export const getAppSettingsFn = createServerFn({ method: "GET" }).handler(
-  async (): Promise<AppSettings> => {
-    return await SettingsService.getSettings();
-  },
-);
+export const getAppSettingsFn = createServerFn({ method: "GET" })
+  .middleware([authenticatedMiddleware])
+  .handler(async ({ context }): Promise<AppSettings> => {
+    const settings = await SettingsService.getSettings();
+    if (sessionUser({ context }).isMasterAdmin) return settings;
+    const { updatedBy: _hidden, ...visible } = settings;
+    return visible;
+  });
 
 /**
- * Server Function: Update global application settings (Protected: Master Admin shadanmd566@gmail.com only)
+ * Server Function: Update global application settings (Protected: Master Administrator only)
  */
 export const updateAppSettingsFn = createServerFn({ method: "POST" })
-  .middleware([teacherOnlyMiddleware])
+  .middleware([adminOnlyMiddleware])
   .validator((input: unknown) => UpdateAppSettingsInputSchema.parse(input))
   .handler(async ({ data, context }): Promise<AppSettings> => {
-    const user = (context as { user: SessionPayload }).user;
-    if (user.email?.toLowerCase() !== "shadanmd566@gmail.com") {
-      throw new Error(
-        "Forbidden: System settings can only be modified by master administrator (shadanmd566@gmail.com).",
-      );
+    const user = sessionUser({ context });
+    if (!user.isMasterAdmin) {
+      throw forbidden("System settings can only be changed by the master administrator.");
     }
     return await SettingsService.updateSettings(data, user.userId);
   });

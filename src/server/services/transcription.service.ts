@@ -1,3 +1,6 @@
+import { env } from "@/config/env";
+import { countFillerWords } from "@/lib/scoring";
+
 export interface TranscriptionResult {
   transcript: string;
   fillerCount: number;
@@ -7,86 +10,137 @@ export interface TranscriptionResult {
   engineUsed: "local-whisper" | "gemini" | "openai-whisper" | "acoustic-analyzer";
 }
 
+const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
 /** URL of the optional FastWhisper Python sidecar */
-const productionSidecarUrl = "https://t-trounce.onrender.com";
+const DEFAULT_PRODUCTION_SIDECAR_URL = "https://t-trounce.onrender.com";
 let rawSidecarUrl = (process.env.WHISPER_SIDECAR_URL || "").trim();
 
 if (process.env.NODE_ENV === "production") {
-  // In production on Render/cloud, redirect to the real Render sidecar if unset or pointing to localhost
   if (
     !rawSidecarUrl ||
     rawSidecarUrl.includes("127.0.0.1") ||
     rawSidecarUrl.includes("localhost")
   ) {
-    rawSidecarUrl = productionSidecarUrl;
+    console.warn(
+      `[TranscriptionService] WHISPER_SIDECAR_URL is not set to a remote host; student audio will be sent to the default sidecar at ${DEFAULT_PRODUCTION_SIDECAR_URL}.`,
+    );
+    rawSidecarUrl = DEFAULT_PRODUCTION_SIDECAR_URL;
   }
-} else {
-  if (!rawSidecarUrl) {
-    rawSidecarUrl = "http://127.0.0.1:8765";
-  }
+} else if (!rawSidecarUrl) {
+  rawSidecarUrl = "http://127.0.0.1:8765";
 }
 
 const WHISPER_SIDECAR_URL = rawSidecarUrl.replace(/\/+$/, "");
-const IS_LOCAL_DEV =
+const IS_LOCAL_SIDECAR =
   WHISPER_SIDECAR_URL.includes("127.0.0.1") || WHISPER_SIDECAR_URL.includes("localhost");
 
-/**
- * Warms up the sidecar by hitting /health before sending large audio.
- * On Render free tier, the container sleeps — this gives it time to wake.
- */
-async function warmupSidecar(): Promise<void> {
-  if (IS_LOCAL_DEV) return; // local sidecar is always awake
+const WARMUP_INTERVAL_MS = 60 * 1000;
+let lastWarmupAt = 0;
+
+function sidecarHeaders(extra?: Record<string, string>): Record<string, string> {
+  return {
+    ...extra,
+    ...(env.WHISPER_SIDECAR_TOKEN ? { Authorization: `Bearer ${env.WHISPER_SIDECAR_TOKEN}` } : {}),
+  };
+}
+
+function baseMime(mimeType: string, fallback: string): string {
+  return mimeType.split(";")[0].trim() || fallback;
+}
+
+/** Calls Gemini once. The API key goes in a header, so it cannot end up in a logged URL. */
+async function transcribeWithGemini(
+  audioBuffer: Buffer,
+  mimeType: string,
+  prompt: string,
+  timeoutMs: number,
+): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return "";
+
   try {
-    await fetch(`${WHISPER_SIDECAR_URL}/health`, {
-      signal: AbortSignal.timeout(55000),
+    const response = await fetch(GEMINI_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      signal: AbortSignal.timeout(timeoutMs),
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              {
+                inline_data: {
+                  mime_type: baseMime(mimeType, "audio/webm"),
+                  data: audioBuffer.toString("base64"),
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: { temperature: 0, maxOutputTokens: 2048 },
+      }),
     });
-  } catch {
-    // ignore — warmup best-effort
+
+    if (!response.ok) {
+      console.warn("[TranscriptionService] Gemini returned HTTP", response.status);
+      return "";
+    }
+    const data = await response.json();
+    return (data.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
+  } catch (err) {
+    console.warn("[TranscriptionService] Gemini request failed:", (err as Error).name);
+    return "";
   }
 }
 
-const COMMON_FILLERS = new Set([
-  // Unambiguous vocal hesitations (English)
-  "um",
-  "umm",
-  "ummm",
-  "uh",
-  "uhh",
-  "uhm",
-  "er",
-  "err",
-  "ah",
-  "ahh",
-  "hmm",
-  "hmmm",
-  // Unambiguous Hindi / Hinglish vocal stalls (no English word collisions)
-  "matlab",
-  "matlb",
-  "yaani",
-  "yani",
-  "samjhe",
-  "samjha",
-  "haina",
-  "hain-na",
-]);
+/** Calls OpenAI Whisper once. */
+async function transcribeWithOpenAI(
+  audioBuffer: Buffer,
+  mimeType: string,
+  prompt: string | undefined,
+  timeoutMs: number,
+): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return "";
+
+  try {
+    const formData = new FormData();
+    const blob = new Blob([new Uint8Array(audioBuffer)], { type: mimeType });
+    formData.append("file", blob, mimeType.includes("wav") ? "audio.wav" : "audio.webm");
+    formData.append("model", "whisper-1");
+    formData.append("language", "en");
+    if (prompt) formData.append("prompt", prompt);
+
+    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: formData,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    if (!response.ok) {
+      console.warn("[TranscriptionService] OpenAI returned HTTP", response.status);
+      return "";
+    }
+    const data = await response.json();
+    return (data.text ?? "").trim();
+  } catch (err) {
+    console.warn("[TranscriptionService] OpenAI request failed:", (err as Error).name);
+    return "";
+  }
+}
 
 export class TranscriptionService {
   /**
-   * Determine the fastest available Whisper endpoint:
-   * 1. Local sidecar on http://127.0.0.1:8765 if running (instant sub-second response)
-   * 2. Configured WHISPER_SIDECAR_URL (production / remote Render sidecar)
+   * Returns the sidecar URL if it is reachable right now, otherwise null.
    */
   static async resolveWhisperUrl(): Promise<string | null> {
-    const isLocalhost =
-      WHISPER_SIDECAR_URL.includes("127.0.0.1") || WHISPER_SIDECAR_URL.includes("localhost");
-    // In production on Render/cloud, never try 127.0.0.1 (it will hang and trigger 502)
-    if (process.env.NODE_ENV === "production" && isLocalhost) {
-      return null;
-    }
     try {
-      const pingTimeout = isLocalhost ? 300 : 8000;
       const ping = await fetch(`${WHISPER_SIDECAR_URL}/health`, {
-        signal: AbortSignal.timeout(pingTimeout),
+        headers: sidecarHeaders(),
+        signal: AbortSignal.timeout(IS_LOCAL_SIDECAR ? 300 : 8000),
       });
       if (ping.ok) return WHISPER_SIDECAR_URL;
     } catch {
@@ -96,9 +150,7 @@ export class TranscriptionService {
   }
 
   /**
-   * Try the FastWhisper sidecar first (local if running, else remote Render).
-   * Returns null if the sidecar is not reachable.
-   * Aborts after `timeoutMs` ms so it fails fast and does not block the caller.
+   * Tries the FastWhisper sidecar. Returns null if it is unreachable, times out or hears nothing.
    */
   static async transcribeWithLocalWhisper(
     audioBuffer: Buffer,
@@ -108,330 +160,147 @@ export class TranscriptionService {
   ): Promise<{ text: string; confidence: number } | null> {
     try {
       const targetUrl = await this.resolveWhisperUrl();
-      if (!targetUrl) return null; // Instant 0ms exit when sidecar is not running
-
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      const base64Audio = audioBuffer.toString("base64");
-      const cleanMime = mimeType.split(";")[0] || "audio/wav";
+      if (!targetUrl) return null;
 
       const response = await fetch(`${targetUrl}/transcribe`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: sidecarHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
-          audio_b64: base64Audio,
-          mime: cleanMime,
+          audio_b64: audioBuffer.toString("base64"),
+          mime: baseMime(mimeType, "audio/wav"),
           prompt: promptContext,
         }),
-        signal: controller.signal,
+        signal: AbortSignal.timeout(timeoutMs),
       });
-      clearTimeout(timer);
 
       if (!response.ok) return null;
       const data = (await response.json()) as { text?: string; confidence?: number };
       const text = (data.text ?? "").trim();
-      if (!text) return null;
-      return { text, confidence: data.confidence ?? 0.95 };
+      return text ? { text, confidence: data.confidence ?? 0.95 } : null;
     } catch {
-      // Sidecar not running or timed out — silently fall through
       return null;
     }
   }
 
-  static async pingWarmup(): Promise<void> {
-    await warmupSidecar();
+  /**
+   * Wakes a sleeping remote sidecar without making the caller wait. Calls are throttled, so this
+   * endpoint cannot be used to generate a stream of outbound requests.
+   */
+  static pingWarmup(): void {
+    if (IS_LOCAL_SIDECAR || Date.now() - lastWarmupAt < WARMUP_INTERVAL_MS) return;
+    lastWarmupAt = Date.now();
+    void fetch(`${WHISPER_SIDECAR_URL}/health`, {
+      headers: sidecarHeaders(),
+      signal: AbortSignal.timeout(55000),
+    }).catch(() => {});
   }
 
   /**
-   * Transcribe an audio recording for accuracy correction.
+   * Transcribes a clip for the recording screen.
+   *   - isFinal=true: post-recording accuracy pass with a thorough verbatim prompt
+   *   - isFinal=false: fast live-caption chunk
    *
-   * Supports two modes via the `isFinal` flag:
-   *   - isFinal=true  → Post-recording full-audio pass (45s timeout).
-   *     Uses a verbatim transcription prompt tuned for Indian-accented English/Hinglish.
-   *     This is the "accuracy correction" path that replaces the Web Speech API live result.
-   *   - isFinal=false → Legacy live-chunk mode (kept for compatibility).
-   *
-   * Engine priority: FastWhisper sidecar → Gemini 2.0 Flash → OpenAI Whisper
+   * Engine priority: FastWhisper sidecar, then Gemini, then OpenAI Whisper.
    */
   static async transcribeChunk(
     audioBuffer: Buffer,
     mimeType: string = "audio/wav",
     promptContext?: string,
-    sequence: number = 0,
+    _sequence: number = 0,
     isFinal: boolean = false,
   ): Promise<{ text: string; confidence: number; isFinal: boolean }> {
-    const geminiKey = process.env.GEMINI_API_KEY;
-    const openaiKey = process.env.OPENAI_API_KEY;
-
-    // Fast timeouts for live chunks, adequate 25s window for full-audio pass on CPU
-    const whisperTimeoutMs = isFinal ? 25000 : 3500;
-
-    // 0. FastWhisper sidecar — instant on local dev, CPU inference on remote
     const local = await this.transcribeWithLocalWhisper(
       audioBuffer,
       mimeType,
-      whisperTimeoutMs,
+      isFinal ? 25000 : 3500,
       promptContext,
     );
     if (local) return { text: local.text, confidence: local.confidence, isFinal: true };
 
-    // 1. Google Gemini — primary cloud engine
-    if (geminiKey) {
-      try {
-        const base64Audio = audioBuffer.toString("base64");
-        const cleanMime = mimeType.split(";")[0] || "audio/wav";
+    const geminiPrompt = isFinal
+      ? `You are an expert verbatim speech-to-text engine for Indian-accented English and Hinglish. Transcribe ALL spoken words in this audio EXACTLY as spoken, including filler words (um, uh, er, ah, hmm, matlab, yaani, haina), repetitions, and false starts. Do NOT correct grammar or add punctuation unless spoken. Return ONLY the raw spoken words as a single paragraph. If silent or unintelligible, return empty string. Context: "${promptContext || "English speaking practice"}"`
+      : `Transcribe the spoken speech in this audio verbatim, including filler words (um, uh, matlab, hmm). Return only the recognized words as plain text. If silent, return empty.`;
 
-        // Post-recording mode: thorough verbatim prompt for maximum accuracy
-        // Live-chunk mode: simpler prompt for speed
-        const transcriptionPrompt = isFinal
-          ? `You are an expert verbatim speech-to-text engine for Indian-accented English and Hinglish. Transcribe ALL spoken words in this audio EXACTLY as spoken, including filler words (um, uh, er, ah, hmm, matlab, yaani, haina), repetitions, and false starts. Do NOT correct grammar or add punctuation unless spoken. Return ONLY the raw spoken words as a single paragraph. If silent or unintelligible, return empty string. Context: "${promptContext || "English speaking practice"}"`
-          : `Transcribe the spoken speech in this audio verbatim, including filler words (um, uh, matlab, hmm). Return only the recognized words as plain text. If silent, return empty.`;
+    const geminiText = await transcribeWithGemini(
+      audioBuffer,
+      mimeType,
+      geminiPrompt,
+      isFinal ? 12000 : 3500,
+    );
+    if (geminiText) return { text: geminiText, confidence: 0.95, isFinal: true };
 
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            signal: AbortSignal.timeout(isFinal ? 12000 : 3500),
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    { text: transcriptionPrompt },
-                    {
-                      inline_data: {
-                        mime_type: cleanMime,
-                        data: base64Audio,
-                      },
-                    },
-                  ],
-                },
-              ],
-              generationConfig: {
-                temperature: 0, // deterministic output for transcription
-                maxOutputTokens: 2048,
-              },
-            }),
-          },
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          const text = (data.candidates?.[0]?.content?.parts?.[0]?.text ?? "").trim();
-          if (text.length > 0) {
-            return { text, confidence: 0.95, isFinal: true };
-          }
-        } else {
-          const errText = await response.text().catch(() => "");
-          console.warn(
-            "[TranscriptionService.transcribeChunk] Gemini error:",
-            response.status,
-            errText,
-          );
-        }
-      } catch (err) {
-        console.warn("[TranscriptionService.transcribeChunk] Gemini note:", err);
-      }
-    }
-
-    // 2. OpenAI Whisper — secondary cloud engine fallback
-    if (openaiKey) {
-      try {
-        const formData = new FormData();
-        const blob = new Blob([new Uint8Array(audioBuffer)], { type: mimeType });
-        formData.append("file", blob, `chunk-${sequence}.wav`);
-        formData.append("model", "whisper-1");
-        formData.append("language", "en");
-        if (promptContext && isFinal) formData.append("prompt", promptContext);
-
-        const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${openaiKey}` },
-          body: formData,
-          signal: AbortSignal.timeout(isFinal ? 30000 : 12000),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const text = (data.text ?? "").trim();
-          if (text.length > 0) {
-            return { text, confidence: 0.92, isFinal: true };
-          }
-        }
-      } catch (err) {
-        console.warn("[TranscriptionService.transcribeChunk] OpenAI Whisper note:", err);
-      }
-    }
+    const openaiText = await transcribeWithOpenAI(
+      audioBuffer,
+      mimeType,
+      isFinal ? promptContext : undefined,
+      isFinal ? 30000 : 12000,
+    );
+    if (openaiText) return { text: openaiText, confidence: 0.92, isFinal: true };
 
     return { text: "", confidence: 0.8, isFinal: false };
   }
 
   /**
-   * Transcribe an audio buffer using configured AI transcription service or server acoustic analyzer.
-   * Priority:
-   *   1. FastWhisper sidecar (local or remote Render URL)
-   *   2. Google Gemini Flash (if GEMINI_API_KEY configured)
-   *   3. OpenAI Whisper (if OPENAI_API_KEY configured)
-   *   4. Server Acoustic Analyzer fallback
+   * Transcribes a full recording. Engine priority: FastWhisper sidecar, Gemini, OpenAI Whisper.
+   * If none is available the transcript is empty, and the pause estimate comes from audio length.
    */
   static async transcribeAudio(
     audioBuffer: Buffer,
     mimeType: string = "audio/webm",
     promptContext?: string,
   ): Promise<TranscriptionResult> {
-    const geminiKey = process.env.GEMINI_API_KEY;
-    const openaiKey = process.env.OPENAI_API_KEY;
+    const result = (
+      transcript: string,
+      confidence: number,
+      engineUsed: TranscriptionResult["engineUsed"],
+    ): TranscriptionResult => ({
+      transcript,
+      fillerCount: this.countFillers(transcript),
+      pauseCount: Math.max(1, transcript.split(",").length - 1),
+      confidence,
+      status: "completed",
+      engineUsed,
+    });
 
-    // 1. Try FastWhisper sidecar first (45s timeout for full audio transcription)
-    try {
-      const local = await this.transcribeWithLocalWhisper(
-        audioBuffer,
-        mimeType,
-        45000,
-        promptContext,
-      );
-      if (local && local.text.length > 0) {
-        const fillers = this.countFillers(local.text);
-        return {
-          transcript: local.text,
-          fillerCount: fillers,
-          pauseCount: Math.max(1, Math.round(local.text.split(",").length - 1)),
-          confidence: local.confidence,
-          status: "completed",
-          engineUsed: "local-whisper",
-        };
-      }
-    } catch (err) {
-      console.warn("[TranscriptionService] Whisper sidecar full-audio note:", err);
-    }
+    const local = await this.transcribeWithLocalWhisper(
+      audioBuffer,
+      mimeType,
+      45000,
+      promptContext,
+    );
+    if (local) return result(local.text, local.confidence, "local-whisper");
 
-    // 2. Google Gemini Flash (if key is set)
-    if (geminiKey) {
-      try {
-        const base64Audio = audioBuffer.toString("base64");
-        const cleanMime = mimeType.split(";")[0] || "audio/webm";
+    const geminiText = await transcribeWithGemini(
+      audioBuffer,
+      mimeType,
+      `You are an expert spoken English phonetic evaluator. Transcribe the exact words spoken in this audio recording verbatim, including any natural hesitations or filler words (such as um, uh, matlab, like, er). Do not correct grammar mistakes or add extra commentary. Return only the exact spoken transcription. Prompt context: "${promptContext || ""}"`,
+      12000,
+    );
+    if (geminiText) return result(geminiText, 0.95, "gemini");
 
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            signal: AbortSignal.timeout(12000),
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    {
-                      text: `You are an expert spoken English phonetic evaluator. Transcribe the exact words spoken in this audio recording verbatim, including any natural hesitations or filler words (such as um, uh, matlab, like, er). Do not correct grammar mistakes or add extra commentary. Return only the exact spoken transcription. Prompt context: "${promptContext || ""}"`,
-                    },
-                    {
-                      inline_data: {
-                        mime_type: cleanMime,
-                        data: base64Audio,
-                      },
-                    },
-                  ],
-                },
-              ],
-            }),
-          },
-        );
+    const openaiText = await transcribeWithOpenAI(audioBuffer, mimeType, promptContext, 30000);
+    if (openaiText) return result(openaiText, 0.92, "openai-whisper");
 
-        if (response.ok) {
-          const data = await response.json();
-          const rawTranscript = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-          if (rawTranscript.length > 0) {
-            const fillers = this.countFillers(rawTranscript);
-            return {
-              transcript: rawTranscript,
-              fillerCount: fillers,
-              pauseCount: Math.max(1, Math.round(rawTranscript.split(",").length - 1)),
-              confidence: 0.95,
-              status: "completed",
-              engineUsed: "gemini",
-            };
-          }
-        } else {
-          const errText = await response.text().catch(() => "");
-          console.warn("[TranscriptionService] Gemini API error:", response.status, errText);
-        }
-      } catch (err) {
-        console.warn("[TranscriptionService] Gemini AI API note:", err);
-      }
-    }
-
-    // 3. OpenAI Whisper (if key is set)
-    if (openaiKey) {
-      try {
-        const formData = new FormData();
-        const blob = new Blob([new Uint8Array(audioBuffer)], { type: mimeType });
-        formData.append("file", blob, "audio.webm");
-        formData.append("model", "whisper-1");
-        formData.append("language", "en");
-        if (promptContext) formData.append("prompt", promptContext);
-
-        const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${openaiKey}` },
-          body: formData,
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const rawTranscript = data.text?.trim() || "";
-          if (rawTranscript.length > 0) {
-            const fillers = this.countFillers(rawTranscript);
-            return {
-              transcript: rawTranscript,
-              fillerCount: fillers,
-              pauseCount: Math.max(1, Math.round(rawTranscript.split("...").length - 1)),
-              confidence: 0.92,
-              status: "completed",
-              engineUsed: "openai-whisper",
-            };
-          }
-        }
-      } catch (err) {
-        console.warn("[TranscriptionService] Whisper API note:", err);
-      }
-    }
-
-    // 4. Acoustic Fallback: Analyzes audio cadence and length
-    return this.generateAcousticTranscription(audioBuffer, promptContext);
+    return this.generateAcousticTranscription(audioBuffer);
   }
 
   /**
    * Count occurrences of common English/Indian-English filler hesitation words.
    */
   static countFillers(text: string): number {
-    const words = text.toLowerCase().split(/\s+/);
-    let count = 0;
-    for (const word of words) {
-      const clean = word.replace(/[^a-z]/g, "");
-      if (COMMON_FILLERS.has(clean)) count++;
-    }
-    return count;
+    return countFillerWords(text);
   }
 
   /**
-   * Server Acoustic Transcription Fallback: Analyzes audio size, duration, and prompt keywords.
+   * Used when no speech engine is available: the transcript stays empty, and the pause count is
+   * only a rough estimate from the recording's size.
    */
-  private static generateAcousticTranscription(
-    audioBuffer: Buffer,
-    promptContext?: string,
-  ): TranscriptionResult {
-    const cleanPrompt = (promptContext || "English Speaking Practice")
-      .replace(/^[“"']|[”"']$/g, "")
-      .trim();
-
-    const byteSize = audioBuffer.length;
-    const estimatedSecs = Math.max(3, Math.round(byteSize / 4000));
-    const pauses = Math.min(3, Math.max(1, Math.floor(estimatedSecs / 12)));
-
+  private static generateAcousticTranscription(audioBuffer: Buffer): TranscriptionResult {
+    const estimatedSecs = Math.max(3, Math.round(audioBuffer.length / 4000));
     return {
       transcript: "",
       fillerCount: 0,
-      pauseCount: pauses,
+      pauseCount: Math.min(3, Math.max(1, Math.floor(estimatedSecs / 12))),
       confidence: 0.85,
       status: "completed",
       engineUsed: "acoustic-analyzer",

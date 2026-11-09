@@ -1,4 +1,4 @@
-import { Link, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
+import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Menu,
@@ -16,11 +16,11 @@ import { useUser, clearUser } from "@/lib/auth";
 import { ThemeToggle } from "@/components/tarang/ThemeToggle";
 import { LanguageSelector } from "@/components/tarang/LanguageSelector";
 import { useLanguage } from "@/lib/i18n";
+import { InstallDrawerItem, InstallHeaderButton } from "@/features/pwa/components/InstallApp";
 
 /** Fully responsive, mobile-and-tablet-friendly shell wrapping teacher routes. */
 export function TeacherShell({ children }: { children: ReactNode }) {
   const user = useUser();
-  const navigate = useNavigate();
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { t } = useLanguage();
@@ -33,7 +33,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
     setMobileMenuOpen(false);
   }, [pathname]);
 
-  const isMasterAdmin = user?.email?.toLowerCase() === "shadanmd566@gmail.com";
+  const isMasterAdmin = Boolean(user?.isMasterAdmin);
 
   // Pre-warm teacher routes during browser idle time for 0ms transitions
   useEffect(() => {
@@ -62,10 +62,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
     ...(user?.isAdmin ? [{ to: "/practice", label: "Student View", icon: ExternalLink }] : []),
   ];
 
-  const handleSignOut = () => {
-    clearUser();
-    navigate({ to: "/login", replace: true });
-  };
+  const handleSignOut = () => void clearUser();
 
   return (
     <div className="min-h-screen bg-ink-950 text-primary-warm">
@@ -106,6 +103,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
 
           {/* Desktop Right Metadata */}
           <div className="hidden lg:flex items-center gap-2.5 xl:gap-3 shrink-0">
+            <InstallHeaderButton />
             <LanguageSelector variant="button" />
             <ThemeToggle showLabel={false} />
             {user?.isAdmin && (
@@ -113,9 +111,6 @@ export function TeacherShell({ children }: { children: ReactNode }) {
                 ADMIN
               </span>
             )}
-            <span className="num hidden xl:inline text-[12px] text-tertiary-warm shrink-0">
-              Batch · X-A · 2025
-            </span>
             <span className="text-[13px] text-secondary-warm truncate max-w-[120px] xl:max-w-[160px]">
               {user?.name || "Faculty"}
             </span>
@@ -154,7 +149,6 @@ export function TeacherShell({ children }: { children: ReactNode }) {
                 <p className="text-[13px] font-semibold text-primary-warm">
                   {user?.name || "Faculty"}
                 </p>
-                <p className="num text-[11px] text-tertiary-warm">Batch · X-A · 2025</p>
               </div>
               <div className="flex items-center gap-2">
                 <ThemeToggle showLabel={true} />
@@ -195,6 +189,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
                   </Link>
                 );
               })}
+              <InstallDrawerItem />
             </nav>
           </div>
         )}

@@ -1,15 +1,15 @@
-import { Link, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
+import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { Mic, TrendingUp, User as UserIcon } from "lucide-react";
 import { useUser, clearUser } from "@/lib/auth";
 import { ThemeToggle } from "@/components/tarang/ThemeToggle";
 import { LanguageSelector } from "@/components/tarang/LanguageSelector";
 import { useLanguage } from "@/lib/i18n";
+import { InstallNavTab } from "@/features/pwa/components/InstallApp";
 
 /** Mobile-first shell wrapping student routes. Calm, narrow, generous spacing. */
 export function StudentShell({ children }: { children: ReactNode }) {
   const user = useUser();
-  const navigate = useNavigate();
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { t } = useLanguage();
@@ -58,10 +58,7 @@ export function StudentShell({ children }: { children: ReactNode }) {
                 </Link>
               )}
               <button
-                onClick={() => {
-                  clearUser();
-                  navigate({ to: "/login", replace: true });
-                }}
+                onClick={() => void clearUser()}
                 className="text-[12px] text-tertiary-warm hover:text-secondary-warm px-2 py-1 rounded cursor-pointer"
               >
                 {t("sign_out")}
@@ -73,7 +70,7 @@ export function StudentShell({ children }: { children: ReactNode }) {
         <main className="flex-1">{children}</main>
 
         {!isRecording && (
-          <nav className="sticky bottom-0 grid grid-cols-3 border-t border-hairline bg-ink-950/98 light:bg-white/95 backdrop-blur-md z-30 shadow-lg">
+          <nav className="sticky bottom-0 grid grid-flow-col auto-cols-fr border-t border-hairline bg-ink-950/98 light:bg-white/95 backdrop-blur-md z-30 shadow-lg">
             {nav.map((n) => {
               const active =
                 pathname === n.to || (n.to === "/practice" && pathname.startsWith("/practice"));
@@ -89,11 +86,17 @@ export function StudentShell({ children }: { children: ReactNode }) {
                       : "text-secondary-warm hover:text-primary-warm")
                   }
                 >
-                  <Icon size={18} className={active ? "text-[#3FB8AF] light:text-teal-700" : "text-secondary-warm"} />
+                  <Icon
+                    size={18}
+                    className={
+                      active ? "text-[#3FB8AF] light:text-teal-700" : "text-secondary-warm"
+                    }
+                  />
                   <span className="text-[12px] font-medium leading-tight">{n.label}</span>
                 </Link>
               );
             })}
+            <InstallNavTab />
           </nav>
         )}
       </div>

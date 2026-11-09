@@ -1,41 +1,169 @@
-import { getDb } from "../db/client";
-import type { StudentDoc } from "../db/schemas";
-import type { StudentRow, StudentStatus } from "@/types";
-import { makeSampleWaveform } from "@/components/tarang/Waveform";
+import type { Db, Document, Filter } from "mongodb";
+import { attemptScore, weakestMetric } from "@/lib/scoring";
+import type { StudentRow, StudentStatus, StudentWeeklyReport } from "@/types";
+import { requireDb } from "../db/client";
+import type {
+  AssignmentDoc,
+  AttemptDoc,
+  BatchTime,
+  FlagDoc,
+  SessionSeason,
+  StudentDoc,
+  UserDoc,
+} from "../db/schemas";
+import { toAttemptResult } from "./attempt.mapper";
+
+const ROSTER_CACHE_TTL_MS = 15 * 1000;
+const MAX_REPORT_ATTEMPTS = 500;
+const MAX_PROFILE_ATTEMPTS = 200;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface RosterCacheEntry {
   data: StudentRow[];
   timestamp: number;
 }
 const rosterCache = new Map<string, RosterCacheEntry>();
-const ROSTER_CACHE_TTL_MS = 15 * 1000; // 15 seconds
 
 export function invalidateRosterCache(): void {
   rosterCache.clear();
 }
 
-/**
- * Validates if an existing waveform suffers from repeated plateaus (old padding bug) or is empty
- */
-function isGlitchyWaveform(wf?: import("@/types").WaveformSegment[]): boolean {
-  if (!wf || wf.length < 12) return true;
-  let maxIdentical = 1;
-  let currentIdentical = 1;
-  for (let i = 1; i < wf.length; i++) {
-    if (Math.abs(wf[i].v - wf[i - 1].v) < 0.0001 && wf[i].kind === wf[i - 1].kind) {
-      currentIdentical++;
-      if (currentIdentical > maxIdentical) maxIdentical = currentIdentical;
-    } else {
-      currentIdentical = 1;
-    }
-  }
-  // If 5 or more consecutive bars have identical non-zero values, it's the old duplication artifact
-  return maxIdentical >= 5;
+type RecentAttempt = Pick<
+  AttemptDoc,
+  | "durationSec"
+  | "targetDurationSec"
+  | "pronunciation"
+  | "vocabulary"
+  | "grammar"
+  | "waveform"
+  | "createdAt"
+>;
+
+/** Only the fields needed for summaries. Transcripts stay out of memory. */
+const RECENT_ATTEMPT_FIELDS = {
+  durationSec: "$durationSec",
+  targetDurationSec: "$targetDurationSec",
+  pronunciation: "$pronunciation",
+  vocabulary: "$vocabulary",
+  grammar: "$grammar",
+  waveform: "$waveform",
+  createdAt: "$createdAt",
+};
+
+/** Each student's two most recent attempts, computed in the database. */
+async function latestAttemptsByStudent(
+  db: Db,
+  studentIds: string[],
+): Promise<Map<string, RecentAttempt[]>> {
+  const pipeline: Document[] = [
+    { $match: { studentId: { $in: studentIds } } },
+    {
+      $group: {
+        _id: "$studentId",
+        attempts: {
+          $topN: { n: 2, sortBy: { createdAt: -1 }, output: RECENT_ATTEMPT_FIELDS },
+        },
+      },
+    },
+  ];
+
+  const rows = await db
+    .collection("attempts")
+    .aggregate<{ _id: string; attempts: RecentAttempt[] }>(pipeline)
+    .toArray();
+  return new Map(rows.map((row) => [row._id, row.attempts]));
 }
+
+/**
+ * Builds a roster row from the student's real activity. Used by both the roster and the student
+ * page, so the two always agree.
+ */
+function buildStudentRow(
+  user: Pick<UserDoc, "id" | "name" | "phone" | "sessionSeason" | "batchTime" | "batchId">,
+  studentDoc: StudentDoc | undefined,
+  attempts: RecentAttempt[],
+  pendingFlag: Pick<FlagDoc, "type" | "category"> | undefined,
+  now: Date,
+): StudentRow {
+  const sessionSeason = user.sessionSeason || studentDoc?.sessionSeason || "summer";
+  const batchTime = user.batchTime || studentDoc?.batchTime || "morning";
+  const batchId = user.batchId || studentDoc?.batchId || `${sessionSeason}-${batchTime}`;
+
+  const latest = attempts[0];
+  let scorePct = 0;
+  let trendPct = 0;
+  let focus = "General";
+  let lastActive = "Never";
+  let inactiveDays = 0;
+  let waveform = studentDoc?.waveform ?? [];
+
+  if (latest) {
+    scorePct = attemptScore(latest);
+    focus = weakestMetric(latest);
+    if (latest.waveform?.length) waveform = latest.waveform;
+    if (attempts[1]) trendPct = scorePct - attemptScore(attempts[1]);
+
+    const attemptDate = latest.createdAt ? new Date(latest.createdAt) : now;
+    inactiveDays = Math.floor((now.getTime() - attemptDate.getTime()) / DAY_MS);
+    lastActive =
+      inactiveDays === 0 ? "Today" : inactiveDays === 1 ? "Yesterday" : `${inactiveDays}d ago`;
+  }
+
+  // Priority: open flag > low score > no recordings > long inactivity > teacher-set status
+  let status: StudentStatus = studentDoc?.status ?? "on-track";
+  let flagReason = studentDoc?.flagReason ?? undefined;
+
+  if (pendingFlag) {
+    status = "flagged";
+    flagReason =
+      pendingFlag.type === "student_request"
+        ? `Help Request: ${pendingFlag.category || "Guidance"}`
+        : pendingFlag.category || "Needs Teacher Review";
+  } else if (latest && scorePct < 50) {
+    status = "flagged";
+    flagReason = `Low Fluency: ${scorePct}%`;
+  } else if (!latest) {
+    status = "nudge";
+    flagReason = "No recordings yet";
+  } else if (inactiveDays > 4) {
+    status = "flagged";
+    flagReason = `Inactive ${inactiveDays}d`;
+  } else if (inactiveDays > 2) {
+    status = "nudge";
+    flagReason = `Inactive ${inactiveDays}d`;
+  }
+
+  return {
+    id: user.id,
+    name: user.name,
+    status,
+    focus,
+    lastActive,
+    scorePct,
+    trendPct,
+    waveform,
+    inactiveDays,
+    flagReason,
+    sessionSeason,
+    batchTime,
+    batchId,
+    phone: user.phone || studentDoc?.phone,
+  };
+}
+
+const USER_SUMMARY_PROJECTION = {
+  id: 1,
+  name: 1,
+  email: 1,
+  phone: 1,
+  sessionSeason: 1,
+  batchTime: 1,
+  batchId: 1,
+} as const;
 
 export class StudentService {
   /**
-   * Fetch all batch students with optional session & batch filtering
+   * Fetch batch students with optional session & batch filtering
    */
   static async getRoster(filter?: {
     session?: string;
@@ -48,532 +176,262 @@ export class StudentService {
       return cached.data;
     }
 
-    try {
-      const db = await getDb();
-      if (db) {
-        // Fetch registered student users from MongoDB
-        const userQuery: import("mongodb").Filter<import("../db/schemas").UserDoc> = {
-          role: "student",
-        };
-        if (filter?.session && filter.session !== "all") {
-          userQuery.sessionSeason = filter.session as import("../db/schemas").SessionSeason;
-        }
-        if (filter?.batch && filter.batch !== "all") {
-          userQuery.batchTime = filter.batch as import("../db/schemas").BatchTime;
-        }
+    const db = await requireDb();
 
-        const studentUsers = await db
-          .collection<import("../db/schemas").UserDoc>("users")
-          .find(userQuery)
-          .toArray();
-
-        // Also fetch docs from students collection for any additional metadata or status updates
-        const studentDocs = await db.collection<StudentDoc>("students").find({}).toArray();
-        const studentDocsMap = new Map(studentDocs.map((s) => [s.id, s]));
-
-        // Fetch open pending flags
-        const pendingFlags = await db
-          .collection<import("../db/schemas").FlagDoc>("flags")
-          .find({ status: "pending" })
-          .toArray();
-        const pendingFlagsMap = new Map(pendingFlags.map((f) => [f.studentId, f]));
-
-        const now = new Date();
-        const results: StudentRow[] = [];
-
-        // Collect all student identifiers for a single batched indexed query
-        const studentSearchIds = new Set<string>();
-        for (const user of studentUsers) {
-          studentSearchIds.add(user.id);
-          if (user.email) studentSearchIds.add(user.email.toLowerCase());
-        }
-
-        // Single indexed batch query across all students (replaces 50+ sequential database roundtrips)
-        const allAttempts = await db
-          .collection<import("../db/schemas").AttemptDoc>("attempts")
-          .find({ studentId: { $in: Array.from(studentSearchIds) } })
-          .sort({ createdAt: -1 })
-          .toArray();
-
-        // Group attempts by student identifier in memory
-        const attemptsByStudent = new Map<string, import("../db/schemas").AttemptDoc[]>();
-        for (const att of allAttempts) {
-          const sid = att.studentId;
-          const list = attemptsByStudent.get(sid) || [];
-          if (list.length < 2) {
-            list.push(att);
-            attemptsByStudent.set(sid, list);
-          }
-        }
-
-        for (const user of studentUsers) {
-          const studentDoc = studentDocsMap.get(user.id);
-          const sessionSeason = user.sessionSeason || studentDoc?.sessionSeason || "summer";
-          const batchTime = user.batchTime || studentDoc?.batchTime || "morning";
-          const batchId = user.batchId || studentDoc?.batchId || `${sessionSeason}-${batchTime}`;
-
-          if (filter?.batchId && filter.batchId !== "all" && batchId !== filter.batchId) {
-            continue;
-          }
-
-          // Fetch the student's latest attempts from in-memory batch map
-          const attempts =
-            attemptsByStudent.get(user.id) ||
-            (user.email ? attemptsByStudent.get(user.email.toLowerCase()) : undefined) ||
-            [];
-
-          let scorePct = 0;
-          let trendPct = 0;
-          let focus = "General";
-          let waveform = studentDoc?.waveform ?? [];
-          let lastActive = "Never";
-          let inactiveDays = 0;
-          let status: StudentStatus = studentDoc?.status ?? "on-track";
-          let flagReason = studentDoc?.flagReason;
-
-          if (attempts.length > 0) {
-            const latest = attempts[0];
-            // Completion percentage = recorded seconds / target seconds
-            scorePct =
-              latest.targetDurationSec && latest.targetDurationSec > 0
-                ? Math.min(100, Math.round((latest.durationSec / latest.targetDurationSec) * 100))
-                : Math.round(
-                    ((latest.pronunciation ?? 70) +
-                      (latest.vocabulary ?? 70) +
-                      (latest.grammar ?? 70)) /
-                      3,
-                  );
-
-            // Derive weakest skill for focus
-            const minScore = Math.min(
-              latest.pronunciation ?? 70,
-              latest.vocabulary ?? 70,
-              latest.grammar ?? 70,
-            );
-            if (minScore === latest.pronunciation) focus = "Pronunciation";
-            else if (minScore === latest.vocabulary) focus = "Vocabulary";
-            else focus = "Grammar";
-
-            waveform = latest.waveform && latest.waveform.length > 0 ? latest.waveform : waveform;
-
-            // Heal glitchy waveforms so audio contours always look genuine
-            if (isGlitchyWaveform(waveform)) {
-              const seed = (user.name || "Student").split("").reduce((acc, c) => acc + c.charCodeAt(0), 17);
-              const flagDensity = status === "flagged" ? 0.35 : status === "nudge" ? 0.22 : 0.08;
-              waveform = makeSampleWaveform(seed, 56, flagDensity);
-            }
-
-            // Compute trend compared to previous attempt
-            if (attempts.length > 1) {
-              const prev = attempts[1];
-              const prevScore =
-                prev.targetDurationSec && prev.targetDurationSec > 0
-                  ? Math.min(100, Math.round((prev.durationSec / prev.targetDurationSec) * 100))
-                  : Math.round(
-                      ((prev.pronunciation ?? 70) +
-                        (prev.vocabulary ?? 70) +
-                        (prev.grammar ?? 70)) /
-                        3,
-                    );
-              trendPct = scorePct - prevScore;
-            }
-
-            // Calculate last active from attempt createdAt
-            const attemptDate = latest.createdAt ? new Date(latest.createdAt) : now;
-            const diffMs = now.getTime() - attemptDate.getTime();
-            inactiveDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-            if (inactiveDays === 0) {
-              lastActive = "Today";
-            } else if (inactiveDays === 1) {
-              lastActive = "Yesterday";
-            } else {
-              lastActive = `${inactiveDays}d ago`;
-            }
-          }
-
-          // Evaluate status priority: Student Request Flag > Low Score (<50%) > Inactivity (>4d) > Nudge
-          const pendingFlag = pendingFlagsMap.get(user.id);
-          if (pendingFlag) {
-            status = "flagged";
-            flagReason = pendingFlag.category
-              ? `Help Request: ${pendingFlag.category}`
-              : "Needs Teacher Review";
-          } else if (attempts.length > 0 && scorePct < 50) {
-            status = "flagged";
-            flagReason = `Low Fluency: ${scorePct}%`;
-          } else if (attempts.length === 0) {
-            status = "nudge";
-            flagReason = "No recordings yet";
-          } else if (inactiveDays > 4) {
-            status = "flagged";
-            flagReason = `Inactive ${inactiveDays}d`;
-          } else if (inactiveDays > 2) {
-            status = "nudge";
-            flagReason = `Inactive ${inactiveDays}d`;
-          } else if (studentDoc?.status) {
-            status = studentDoc.status;
-          }
-
-          results.push({
-            id: user.id,
-            name: user.name,
-            status,
-            focus,
-            lastActive,
-            scorePct,
-            trendPct,
-            waveform,
-            inactiveDays,
-            flagReason,
-            sessionSeason,
-            batchTime,
-            batchId,
-            phone: user.phone || studentDoc?.phone,
-          });
-        }
-
-        // Sort: Flagged first, then most recently active
-        results.sort((a, b) => {
-          if (a.status === "flagged" && b.status !== "flagged") return -1;
-          if (a.status !== "flagged" && b.status === "flagged") return 1;
-          if (a.lastActive === "Never" && b.lastActive !== "Never") return 1;
-          if (a.lastActive !== "Never" && b.lastActive === "Never") return -1;
-          return (a.inactiveDays ?? 999) - (b.inactiveDays ?? 999);
-        });
-
-        rosterCache.set(cacheKey, { data: results, timestamp: Date.now() });
-        return results;
-      }
-    } catch (err) {
-      console.error("[StudentService.getRoster Error]", err);
+    const userQuery: Filter<UserDoc> = { role: "student" };
+    if (filter?.session && filter.session !== "all") {
+      userQuery.sessionSeason = filter.session as SessionSeason;
     }
-    return [];
+    if (filter?.batch && filter.batch !== "all") {
+      userQuery.batchTime = filter.batch as BatchTime;
+    }
+
+    const studentUsers = await db
+      .collection<UserDoc>("users")
+      .find(userQuery, { projection: USER_SUMMARY_PROJECTION })
+      .toArray();
+
+    const userIds = studentUsers.map((user) => user.id);
+    const [studentDocs, pendingFlags] = await Promise.all([
+      db
+        .collection<StudentDoc>("students")
+        .find({ id: { $in: userIds } })
+        .toArray(),
+      db
+        .collection<FlagDoc>("flags")
+        .find(
+          { status: "pending", studentId: { $in: userIds } },
+          { projection: { studentId: 1, type: 1, category: 1 } },
+        )
+        .toArray(),
+    ]);
+    const studentDocsById = new Map(studentDocs.map((doc) => [doc.id, doc]));
+    const pendingFlagsById = new Map(pendingFlags.map((flag) => [flag.studentId, flag]));
+
+    // Older attempts may have been stored under the student's email instead of their ID.
+    const lookupIds = new Set<string>();
+    for (const user of studentUsers) {
+      lookupIds.add(user.id);
+      if (user.email) lookupIds.add(user.email.toLowerCase());
+    }
+    const attemptsById = await latestAttemptsByStudent(db, [...lookupIds]);
+
+    const now = new Date();
+    const results: StudentRow[] = [];
+
+    for (const user of studentUsers) {
+      const attempts =
+        attemptsById.get(user.id) ??
+        (user.email ? attemptsById.get(user.email.toLowerCase()) : undefined) ??
+        [];
+      const row = buildStudentRow(
+        user,
+        studentDocsById.get(user.id),
+        attempts,
+        pendingFlagsById.get(user.id),
+        now,
+      );
+      if (filter?.batchId && filter.batchId !== "all" && row.batchId !== filter.batchId) continue;
+      results.push(row);
+    }
+
+    // Flagged first, then most recently active
+    results.sort((a, b) => {
+      if (a.status === "flagged" && b.status !== "flagged") return -1;
+      if (a.status !== "flagged" && b.status === "flagged") return 1;
+      if (a.lastActive === "Never" && b.lastActive !== "Never") return 1;
+      if (a.lastActive !== "Never" && b.lastActive === "Never") return -1;
+      return (a.inactiveDays ?? 999) - (b.inactiveDays ?? 999);
+    });
+
+    rosterCache.set(cacheKey, { data: results, timestamp: Date.now() });
+    return results;
   }
 
   /**
-   * Fetch authentic weekly report dossier with real attempts count and scores
+   * Fetch a weekly report with real attempt counts and scores
    */
-  static async getStudentWeeklyReport(
-    studentId: string,
-  ): Promise<import("@/types").StudentWeeklyReport | null> {
-    try {
-      const db = await getDb();
-      if (!db) return null;
+  static async getStudentWeeklyReport(studentId: string): Promise<StudentWeeklyReport | null> {
+    const db = await requireDb();
 
-      const student = await this.getStudentById(studentId);
-      if (!student) return null;
+    const student = await this.getStudentById(studentId);
+    if (!student) return null;
 
-      const user = await db.collection<import("../db/schemas").UserDoc>("users").findOne({
-        $or: [{ id: studentId }, { email: studentId.toLowerCase() }],
-      });
+    const user = await db
+      .collection<UserDoc>("users")
+      .findOne(
+        { $or: [{ id: studentId }, { email: studentId.toLowerCase() }] },
+        { projection: { id: 1, email: 1 } },
+      );
+    const searchIds = [
+      ...new Set([studentId, user?.id, user?.email?.toLowerCase()].filter(Boolean) as string[]),
+    ];
 
-      const now = new Date();
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+    const allAttempts = await db
+      .collection<AttemptDoc>("attempts")
+      .find({ studentId: { $in: searchIds } }, { projection: { transcript: 0 } })
+      .sort({ createdAt: -1 })
+      .limit(MAX_REPORT_ATTEMPTS)
+      .toArray();
 
-      const searchIds = [studentId];
-      if (user?.email) searchIds.push(user.email.toLowerCase());
-      if (user?.id && !searchIds.includes(user.id)) searchIds.push(user.id);
+    const nowMs = Date.now();
+    const timeOf = (a: AttemptDoc) => (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+    const weeklyAttempts = allAttempts.filter((a) => timeOf(a) >= nowMs - 7 * DAY_MS);
+    const previousWeekAttempts = allAttempts.filter((a) => {
+      const time = timeOf(a);
+      return time >= nowMs - 14 * DAY_MS && time < nowMs - 7 * DAY_MS;
+    });
 
-      // 1. Fetch all attempts by student
-      const allAttempts = await db
-        .collection<import("../db/schemas").AttemptDoc>("attempts")
-        .find({ studentId: { $in: searchIds } })
-        .sort({ createdAt: -1 })
-        .toArray();
+    const average = (items: AttemptDoc[], pick: (a: AttemptDoc) => number) =>
+      Math.round(items.reduce((sum, a) => sum + pick(a), 0) / items.length);
 
-      const totalAttempts = allAttempts.length;
+    const attemptsThisWeek = weeklyAttempts.length;
+    let pronunciation = 0;
+    let vocabulary = 0;
+    let grammar = 0;
+    let scorePct = 0;
+    let trendPct = student.trendPct || 0;
+    let waveform = student.waveform || [];
 
-      // 2. Filter attempts recorded in last 7 days
-      const weeklyAttempts = allAttempts.filter((a) => {
-        if (!a.createdAt) return false;
-        return new Date(a.createdAt).getTime() >= sevenDaysAgo.getTime();
-      });
+    if (attemptsThisWeek > 0) {
+      pronunciation = average(weeklyAttempts, (a) => a.pronunciation ?? 70);
+      vocabulary = average(weeklyAttempts, (a) => a.vocabulary ?? 70);
+      grammar = average(weeklyAttempts, (a) => a.grammar ?? 70);
+      scorePct = average(weeklyAttempts, attemptScore);
+      if (weeklyAttempts[0].waveform?.length) waveform = weeklyAttempts[0].waveform;
 
-      // 3. Filter attempts recorded in prior 7-day window (7 to 14 days ago) for real trend
-      const prevWeeklyAttempts = allAttempts.filter((a) => {
-        if (!a.createdAt) return false;
-        const time = new Date(a.createdAt).getTime();
-        return time >= fourteenDaysAgo.getTime() && time < sevenDaysAgo.getTime();
-      });
-
-      const attemptsThisWeek = weeklyAttempts.length;
-      const hasActivity = allAttempts.length > 0;
-
-      let pronunciation = 0;
-      let vocabulary = 0;
-      let grammar = 0;
-      let scorePct = 0;
-      let trendPct = student.trendPct || 0;
-      let waveform = student.waveform || [];
-
-      if (attemptsThisWeek > 0) {
-        pronunciation = Math.round(
-          weeklyAttempts.reduce((sum, a) => sum + (a.pronunciation ?? 70), 0) / attemptsThisWeek,
-        );
-        vocabulary = Math.round(
-          weeklyAttempts.reduce((sum, a) => sum + (a.vocabulary ?? 70), 0) / attemptsThisWeek,
-        );
-        grammar = Math.round(
-          weeklyAttempts.reduce((sum, a) => sum + (a.grammar ?? 70), 0) / attemptsThisWeek,
-        );
-        scorePct = Math.round(
-          weeklyAttempts.reduce((sum, a) => {
-            const sc =
-              a.targetDurationSec && a.targetDurationSec > 0
-                ? Math.min(100, Math.round((a.durationSec / a.targetDurationSec) * 100))
-                : Math.round(
-                    ((a.pronunciation ?? 70) + (a.vocabulary ?? 70) + (a.grammar ?? 70)) / 3,
-                  );
-            return sum + sc;
-          }, 0) / attemptsThisWeek,
-        );
-
-        if (weeklyAttempts[0]?.waveform && weeklyAttempts[0].waveform.length > 0) {
-          waveform = weeklyAttempts[0].waveform;
-        }
-
-        // Real trend calculation
-        if (prevWeeklyAttempts.length > 0) {
-          const prevScore = Math.round(
-            prevWeeklyAttempts.reduce((sum, a) => {
-              const sc =
-                a.targetDurationSec && a.targetDurationSec > 0
-                  ? Math.min(100, Math.round((a.durationSec / a.targetDurationSec) * 100))
-                  : Math.round(
-                      ((a.pronunciation ?? 70) + (a.vocabulary ?? 70) + (a.grammar ?? 70)) / 3,
-                    );
-              return sum + sc;
-            }, 0) / prevWeeklyAttempts.length,
-          );
-          trendPct = scorePct - prevScore;
-        } else if (allAttempts.length > attemptsThisWeek) {
-          const prev = allAttempts[attemptsThisWeek];
-          const prevScore =
-            prev.targetDurationSec && prev.targetDurationSec > 0
-              ? Math.min(100, Math.round((prev.durationSec / prev.targetDurationSec) * 100))
-              : Math.round(
-                  ((prev.pronunciation ?? 70) + (prev.vocabulary ?? 70) + (prev.grammar ?? 70)) / 3,
-                );
-          trendPct = scorePct - prevScore;
-        }
-      } else if (totalAttempts > 0) {
-        // Fallback to recent attempts if none recorded in current 7-day window
-        const latest = allAttempts[0];
-        pronunciation = latest.pronunciation ?? 70;
-        vocabulary = latest.vocabulary ?? 70;
-        grammar = latest.grammar ?? 70;
-        scorePct =
-          latest.targetDurationSec && latest.targetDurationSec > 0
-            ? Math.min(100, Math.round((latest.durationSec / latest.targetDurationSec) * 100))
-            : Math.round((pronunciation + vocabulary + grammar) / 3);
-        if (latest.waveform && latest.waveform.length > 0) {
-          waveform = latest.waveform;
-        }
+      if (previousWeekAttempts.length > 0) {
+        trendPct = scorePct - average(previousWeekAttempts, attemptScore);
+      } else if (allAttempts.length > attemptsThisWeek) {
+        trendPct = scorePct - attemptScore(allAttempts[attemptsThisWeek]);
       }
+    } else if (allAttempts.length > 0) {
+      // No attempts in the current 7-day window, so report the most recent one.
+      const latest = allAttempts[0];
+      pronunciation = latest.pronunciation ?? 70;
+      vocabulary = latest.vocabulary ?? 70;
+      grammar = latest.grammar ?? 70;
+      scorePct = attemptScore(latest);
+      if (latest.waveform?.length) waveform = latest.waveform;
+    }
 
-      if (isGlitchyWaveform(waveform)) {
-        const seed = (student.name || "Student").split("").reduce((acc, c) => acc + c.charCodeAt(0), 17);
-        waveform = makeSampleWaveform(seed, 56, 0.12);
-      }
+    const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+    const session = student.sessionSeason || "summer";
+    const batch = student.batchTime || "morning";
 
-      // Generate dynamic batch label
-      const session = student.sessionSeason || "summer";
-      const batch = student.batchTime || "morning";
-      const sessionLabel = session.charAt(0).toUpperCase() + session.slice(1);
-      const batchLabel = batch.charAt(0).toUpperCase() + batch.slice(1);
-      const formattedBatch = `${sessionLabel} Session · ${batchLabel} Batch`;
+    const trendText =
+      attemptsThisWeek === 0
+        ? "No voice submissions recorded this week. Regular daily practice recommended."
+        : trendPct >= 0
+          ? `Score up ${trendPct}%, clear stretches are getting longer.`
+          : `Score down ${Math.abs(trendPct)}%, please encourage daily practice.`;
 
-      // Authentic trend text without em-dash
-      const trendText =
-        attemptsThisWeek === 0
-          ? "No voice submissions recorded this week. Regular daily practice recommended."
-          : trendPct >= 0
-            ? `Score up ${trendPct}%, clear stretches are getting longer.`
-            : `Score down ${Math.abs(trendPct)}%, please encourage daily practice.`;
-
-      return {
-        student: {
-          ...student,
-          scorePct: scorePct || student.scorePct,
-          trendPct,
-          waveform,
-        },
-        attemptsThisWeek,
-        totalAttempts,
-        pronunciation,
-        vocabulary,
-        grammar,
-        scorePct,
+    return {
+      student: {
+        ...student,
+        scorePct: scorePct || student.scorePct,
         trendPct,
         waveform,
-        trendText,
-        batchLabel: formattedBatch,
-        hasActivity,
-      };
-    } catch (err) {
-      console.error("[StudentService.getStudentWeeklyReport Error]", err);
-      return null;
-    }
+      },
+      attemptsThisWeek,
+      totalAttempts: allAttempts.length,
+      pronunciation,
+      vocabulary,
+      grammar,
+      scorePct,
+      trendPct,
+      waveform,
+      trendText,
+      batchLabel: `${capitalize(session)} Session · ${capitalize(batch)} Batch`,
+      hasActivity: allAttempts.length > 0,
+    };
   }
 
   /**
-   * Fetch single student dossier by ID
+   * Fetch a single student by ID, using the same logic as the roster
    */
   static async getStudentById(id: string): Promise<StudentRow | null> {
-    try {
-      const db = await getDb();
-      if (db) {
-        let student: StudentDoc | null = await db
-          .collection<StudentDoc>("students")
-          .findOne({ id });
+    const db = await requireDb();
 
-        if (!student) {
-          const user = await db.collection<import("../db/schemas").UserDoc>("users").findOne({
-            $or: [
-              { id },
-              { email: id.toLowerCase() },
-              { username: id.toLowerCase() },
-              { name: id },
-            ],
-          });
-          if (user) {
-            student = await db.collection<StudentDoc>("students").findOne({ id: user.id });
-            if (!student) {
-              const sessionSeason = user.sessionSeason || "summer";
-              const batchTime = user.batchTime || "morning";
-              student = {
-                id: user.id,
-                name: user.name,
-                phone: user.phone,
-                status: "on-track",
-                focus: "Introductory module practice",
-                lastActive: "Today",
-                scorePct: 0,
-                trendPct: 0,
-                waveform: [],
-                sessionSeason,
-                batchTime,
-                batchId: `${sessionSeason}-${batchTime}`,
-                updatedAt: new Date(),
-              };
-            }
-          }
-        }
+    const user = await db.collection<UserDoc>("users").findOne(
+      {
+        $or: [{ id }, { email: id.toLowerCase() }, { username: id.toLowerCase() }],
+      },
+      { projection: USER_SUMMARY_PROJECTION },
+    );
 
-        if (student) {
-          const now = new Date();
-          let calcInactiveDays = student.inactiveDays ?? 0;
-          let calcStatus = student.status;
-          let calcLastActive = student.lastActive;
+    const studentId = user?.id ?? id;
+    const studentDoc =
+      (await db.collection<StudentDoc>("students").findOne({ id: studentId })) ?? undefined;
+    if (!user && !studentDoc) return null;
 
-          if (student.updatedAt) {
-            const diffMs = now.getTime() - new Date(student.updatedAt).getTime();
-            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-            calcInactiveDays = diffDays;
+    const lookupIds = [
+      ...new Set([studentId, user?.email?.toLowerCase()].filter(Boolean) as string[]),
+    ];
+    const [attemptsById, pendingFlag] = await Promise.all([
+      latestAttemptsByStudent(db, lookupIds),
+      db
+        .collection<FlagDoc>("flags")
+        .findOne(
+          { studentId, status: "pending" },
+          { projection: { type: 1, category: 1 }, sort: { createdAt: -1 } },
+        ),
+    ]);
+    const attempts = lookupIds.flatMap((lookupId) => attemptsById.get(lookupId) ?? []).slice(0, 2);
 
-            if (diffDays === 0) {
-              calcLastActive = "Today";
-            } else if (diffDays === 1) {
-              calcLastActive = "Yesterday";
-            } else {
-              calcLastActive = `${diffDays}d ago`;
-            }
+    const person = user ?? {
+      id: studentId,
+      name: studentDoc?.name ?? "Student",
+      phone: studentDoc?.phone,
+      sessionSeason: studentDoc?.sessionSeason,
+      batchTime: studentDoc?.batchTime,
+      batchId: studentDoc?.batchId,
+    };
 
-            if (diffDays > 4) {
-              calcStatus = "flagged";
-            } else if (diffDays > 2) {
-              calcStatus = "nudge";
-            } else {
-              calcStatus = "on-track";
-            }
-          }
-
-          return {
-            id: student.id,
-            name: student.name,
-            status: calcStatus,
-            focus: student.focus,
-            lastActive: calcLastActive,
-            scorePct: student.scorePct,
-            trendPct: student.trendPct,
-            inactiveDays: calcInactiveDays,
-            flagReason: student.flagReason,
-            sessionSeason: student.sessionSeason,
-            batchTime: student.batchTime,
-            batchId: student.batchId,
-            phone: student.phone,
-            waveform: isGlitchyWaveform(student.waveform)
-              ? makeSampleWaveform(
-                  (student.name || "Student").split("").reduce((acc, c) => acc + c.charCodeAt(0), 17),
-                  56,
-                  calcStatus === "flagged" ? 0.35 : calcStatus === "nudge" ? 0.22 : 0.08,
-                )
-              : student.waveform,
-          };
-        }
-      }
-    } catch (err) {
-      console.error("[StudentService.getStudentById Error]", err);
-    }
-    return null;
+    return buildStudentRow(person, studentDoc, attempts, pendingFlag ?? undefined, new Date());
   }
 
   /**
-   * Fetch complete student profile with homework statistics and audio attempts
+   * Fetch a complete student profile with homework statistics and audio attempts
    */
   static async getStudentProfile(studentId: string) {
     const student = await this.getStudentById(studentId);
     if (!student) return null;
 
-    const db = await getDb();
-    let totalReceived = 0;
-    let completed = 0;
-    let attempts: import("../db/schemas").AttemptDoc[] = [];
-    let assignments: import("../db/schemas").AssignmentDoc[] = [];
+    const db = await requireDb();
+    const session = student.sessionSeason || "summer";
+    const batch = student.batchTime || "morning";
 
-    if (db) {
-      const session = student.sessionSeason || "summer";
-      const batch = student.batchTime || "morning";
-
-      // 1. Fetch assignments targeted to student's batch
-      assignments = await db
-        .collection<import("../db/schemas").AssignmentDoc>("assignments")
+    const [assignments, attempts] = await Promise.all([
+      db
+        .collection<AssignmentDoc>("assignments")
         .find({
           $or: [
             { batchId: student.batchId },
-            {
-              targetSession: session as import("../db/schemas").SessionSeason,
-              targetBatch: batch as import("../db/schemas").BatchTime,
-            },
+            { targetSession: session as SessionSeason, targetBatch: batch as BatchTime },
           ],
         })
-        .toArray();
-      totalReceived = assignments.length;
-
-      // 2. Fetch attempts recorded by this student
-      attempts = await db
-        .collection<import("../db/schemas").AttemptDoc>("attempts")
-        .find({ studentId })
+        .toArray(),
+      db
+        .collection<AttemptDoc>("attempts")
+        .find({ studentId: student.id })
         .sort({ createdAt: -1 })
-        .toArray();
+        .limit(MAX_PROFILE_ATTEMPTS)
+        .toArray(),
+    ]);
 
-      // 3. Count completed homework assignments
-      const completedAssignmentIds = new Set(
-        attempts.filter((a) => a.assignmentId).map((a) => a.assignmentId),
-      );
-      completed = completedAssignmentIds.size;
-    }
-
-    const pending = Math.max(0, totalReceived - completed);
+    const completedAssignmentIds = new Set(
+      attempts.filter((a) => a.assignmentId).map((a) => a.assignmentId),
+    );
+    const totalReceived = assignments.length;
+    const completed = assignments.filter((a) => completedAssignmentIds.has(a.id)).length;
 
     return {
       student,
       homeworkStats: {
         totalReceived,
         completed,
-        pending,
+        pending: Math.max(0, totalReceived - completed),
         assignments: assignments.map((a) => ({
           id: a.id,
           title: a.title,
@@ -582,54 +440,27 @@ export class StudentService {
           difficulty: a.difficulty,
           durationSec: a.durationSec,
           dueDate: a.dueDate,
-          completed: attempts.some((att) => att.assignmentId === a.id),
+          completed: completedAssignmentIds.has(a.id),
         })),
       },
-      attempts: attempts.map((a) => ({
-        id: a.id,
-        studentId: a.studentId,
-        moduleId: a.moduleId,
-        assignmentId: a.assignmentId,
-        assignmentTitle: a.assignmentTitle,
-        prompt: a.prompt,
-        transcript: a.transcript || "Spoken response recorded by student.",
-        audioUrl: a.audioUrl,
-        durationSec: a.durationSec,
-        targetDurationSec: a.targetDurationSec,
-        pronunciation: a.pronunciation,
-        vocabulary: a.vocabulary,
-        grammar: a.grammar,
-        fillerCount: a.fillerCount,
-        pauseCount: a.pauseCount,
-        feedback: a.feedback,
-        waveform: a.waveform,
-        createdAt: a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString(),
-      })),
+      attempts: attempts.map(toAttemptResult),
     };
   }
 
   /**
-   * Update student status (e.g. resolve flag or send nudge)
+   * Update student status (e.g. resolve a flag or send a nudge).
+   * Returns false if the student has no roster record.
    */
   static async updateStatus(studentId: string, status: StudentStatus): Promise<boolean> {
-    try {
-      const db = await getDb();
-      if (db) {
-        await db.collection<StudentDoc>("students").updateOne(
-          { id: studentId },
-          {
-            $set: {
-              status,
-              updatedAt: new Date(),
-            },
-          },
-        );
-        invalidateRosterCache();
-        return true;
-      }
-    } catch (err) {
-      console.error("[StudentService.updateStatus Error]", err);
-    }
-    return true;
+    const db = await requireDb();
+    const result = await db.collection<StudentDoc>("students").updateOne(
+      { id: studentId },
+      {
+        $set: { status, updatedAt: new Date() },
+        ...(status === "on-track" ? { $unset: { flagReason: "" } } : {}),
+      },
+    );
+    invalidateRosterCache();
+    return result.matchedCount > 0;
   }
 }

@@ -139,4 +139,4 @@ db.modules.createIndex({ id: 1 }, { unique: true });
 
 ## 4. Auto-Seeding & Resilience Strategy
 
-When `getDb()` connects for the first time, it performs a document count check on `modules` and `students`. If empty, it automatically populates the default curriculum modules and starter student roster from [src/lib/tarang-data.ts](file:///e:/Project/Working/t-trounce/signal-speak-studio-main/src/lib/tarang-data.ts), ensuring zero-configuration startup for developers.
+The first time the app connects to a database, it claims an atomic `seed-v1` marker in the `_meta` collection and runs setup once: default curriculum modules from `src/lib/tarang-data.ts`, and, on a database with no users, the admin account from `ADMIN_EMAIL` and `ADMIN_INITIAL_PASSWORD` plus sample homework. It never runs again for that database, so deleted data does not come back.

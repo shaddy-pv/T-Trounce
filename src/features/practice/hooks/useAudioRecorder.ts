@@ -1,7 +1,31 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { ACOUSTIC_THRESHOLDS } from "@/config/constants";
-import { FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
+import { ACOUSTIC_THRESHOLDS, UPLOAD_LIMITS } from "@/config/constants";
+import { countFillerWords } from "@/lib/scoring";
 import { streamTranscribeChunkFn, warmupWhisperFn } from "@/server/data";
+
+/**
+ * decodeAudioData can hang indefinitely on MediaRecorder WebM blobs in Chromium, which would leave
+ * the student stuck on the "uploading" screen. Null means use a fallback.
+ */
+async function decodeAudioWithTimeout(
+  ctx: AudioContext,
+  data: ArrayBuffer,
+  timeoutMs: number,
+): Promise<AudioBuffer | null> {
+  let timer: number | undefined;
+  try {
+    return await Promise.race([
+      ctx.decodeAudioData(data),
+      new Promise<null>((resolve) => {
+        timer = window.setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 export type RecorderPhase = "idle" | "recording" | "uploading";
 
@@ -87,21 +111,20 @@ async function blobToWavDataUrl(blob: Blob): Promise<string> {
 
     const tmpCtx = new AudioCtxClass();
     try {
-      // Chromium bug guard: decodeAudioData on MediaRecorder WebM blobs can hang indefinitely.
-      // Strict 1500ms timeout ensures it NEVER blocks the recording pipeline.
-      const decoded = await Promise.race([
-        (async () => {
-          const arrayBuffer = await blob.arrayBuffer();
-          return await tmpCtx.decodeAudioData(arrayBuffer.slice(0));
-        })(),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
-      ]);
+      const decoded = await decodeAudioWithTimeout(tmpCtx, await blob.arrayBuffer(), 1500);
 
       if (!decoded) {
         return await fallbackRead();
       }
 
       const samples = decoded.getChannelData(0); // mono for STT
+
+      // 16-bit WAV as base64 is about 2.67 bytes per sample. If that is over the upload limit, send
+      // the much smaller original instead.
+      if (samples.length * 2.67 > UPLOAD_LIMITS.maxTranscribeBase64Bytes) {
+        return await fallbackRead();
+      }
+
       return encodeWavFromFloatSamples(samples, decoded.sampleRate);
     } finally {
       tmpCtx.close().catch(() => {});
@@ -180,9 +203,30 @@ export interface UseAudioRecorderOptions {
  *   - Web Speech API is THE production standard for real-time browser captions
  *     (Zoom, Google Meet, Teams all use this exact pattern)
  */
-// Module-level network detection flag so subsequent sessions on network-blocked ISPs
-// automatically use local FastWhisper live streaming without retrying failing Google STT
-const hasGoogleSttNetworkError = false;
+/**
+ * Overlap-aware transcript merger to prevent word duplication on Web Speech restarts
+ */
+function mergeTranscriptSessions(cumulative: string, sessionFinal: string): string {
+  const cum = cumulative.trim();
+  const ses = sessionFinal.trim();
+  if (!cum) return ses;
+  if (!ses) return cum;
+
+  const cumWords = cum.split(/\s+/);
+  const sesWords = ses.split(/\s+/);
+
+  // Check overlap of up to 5 words to prevent repetition (e.g. 'park' + 'park and sat')
+  const maxOverlap = Math.min(5, cumWords.length, sesWords.length);
+  for (let len = maxOverlap; len > 0; len--) {
+    const cumTail = cumWords.slice(-len).join(" ").toLowerCase();
+    const sesHead = sesWords.slice(0, len).join(" ").toLowerCase();
+    if (cumTail === sesHead) {
+      return (cum + " " + sesWords.slice(len).join(" ")).trim();
+    }
+  }
+
+  return `${cum} ${ses}`;
+}
 
 export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   // ── State ──────────────────────────────────────────────────────────────────
@@ -198,7 +242,6 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   const [liveEngine, setLiveEngine] = useState<"web-speech" | "local-whisper">("web-speech");
 
   // STT engine status
-  const [sttAvailable, setSttAvailable] = useState<boolean | null>(null);
   const [sttUnavailable, setSttUnavailable] = useState(false); // true = network error, show message
 
   const [volumeLevel, setVolumeLevel] = useState<number>(0);
@@ -218,21 +261,20 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const samplerIntervalRef = useRef<number | null>(null);
   const volumeIntervalRef = useRef<number | null>(null);
-  const lastAudioUrlRef = useRef<string>("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string>("audio/webm");
+  // The stream from getUserMedia. Stopping this is what actually turns the microphone off.
+  const micStreamRef = useRef<MediaStream | null>(null);
 
   // ── Refs — Web Speech API ──────────────────────────────────────────────────
   // ONE recognition instance per session, restarted via its own onend closure.
   // Avoids the abort() → double-onend race that caused word loss in multi-instance patterns.
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const recognitionRunningRef = useRef<boolean>(false);
   const finalTranscriptRef = useRef<string>("");
   const interimTranscriptRef = useRef<string>("");
   const cumulativeFinalRef = useRef<string>("");
   const sttUnavailableRef = useRef<boolean>(false);
-  const sttNetworkErrorCountRef = useRef<number>(0); // consecutive network errors
   const isLiveEnabledRef = useRef<boolean>(Boolean(options?.enableLiveTranscription));
   const isStreamingLocalRef = useRef<boolean>(false);
   const localLiveTimerRef = useRef<number | null>(null);
@@ -252,16 +294,10 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   }, [finalTranscript, interimTranscript, postRecordingTranscript]);
 
   // ── Live filler counter ────────────────────────────────────────────────────
-  const liveFillerCount = useMemo(() => {
-    if (!transcript) return 0;
-    const words = transcript.toLowerCase().split(/\s+/);
-    let count = 0;
-    for (const w of words) {
-      const clean = w.replace(/[^a-z]/g, "");
-      if (FILLER_KEYWORDS.has(clean)) count++;
-    }
-    return count;
-  }, [transcript]);
+  const liveFillerCount = useMemo(
+    () => (transcript ? countFillerWords(transcript) : 0),
+    [transcript],
+  );
 
   // ── Live pause counter ─────────────────────────────────────────────────────
   const livePauseCount = useMemo(() => {
@@ -286,10 +322,6 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   // ── Effects ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    setSttAvailable(createSpeechRecognition() !== null);
-  }, []);
-
-  useEffect(() => {
     if (phase === "recording") {
       timerRef.current = window.setInterval(() => {
         setElapsed((prev) => prev + 1);
@@ -303,11 +335,20 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     };
   }, [phase]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount. Leaving the screen mid-recording must also turn the microphone off.
   useEffect(() => {
     return () => {
       isRecordingRef.current = false;
-      recognitionRunningRef.current = false;
+      micStreamRef.current?.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = null;
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== "inactive") {
+        try {
+          recorder.stop();
+        } catch {
+          /* ignore */
+        }
+      }
       if (recognitionRef.current) {
         try {
           recognitionRef.current.abort();
@@ -355,36 +396,6 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   }, [selectedDeviceId]);
 
   // ── Web Speech API engine ──────────────────────────────────────────────────
-
-  /**
-   * Starts the Web Speech API recognition engine for real-time live captions.
-   *
-   * Design principles:
-   * 1. ONE instance per session — prevents double-onend and restart loops
-/**
- * Overlap-aware transcript merger to prevent word duplication on Web Speech restarts
- */
-  function mergeTranscriptSessions(cumulative: string, sessionFinal: string): string {
-    const cum = cumulative.trim();
-    const ses = sessionFinal.trim();
-    if (!cum) return ses;
-    if (!ses) return cum;
-
-    const cumWords = cum.split(/\s+/);
-    const sesWords = ses.split(/\s+/);
-
-    // Check overlap of up to 5 words to prevent repetition (e.g. 'park' + 'park and sat')
-    const maxOverlap = Math.min(5, cumWords.length, sesWords.length);
-    for (let len = maxOverlap; len > 0; len--) {
-      const cumTail = cumWords.slice(-len).join(" ").toLowerCase();
-      const sesHead = sesWords.slice(0, len).join(" ").toLowerCase();
-      if (cumTail === sesHead) {
-        return (cum + " " + sesWords.slice(len).join(" ")).trim();
-      }
-    }
-
-    return `${cum} ${ses}`;
-  }
 
   /**
    * Local FastWhisper live streaming engine (100% offline, zero internet dependency).
@@ -484,14 +495,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     // en-US model provides instantaneous 0ms word streaming and highest Google STT accuracy
     recognition.lang = "en-US";
 
-    recognition.onstart = () => {
-      recognitionRunningRef.current = true;
-    };
-
     recognition.onresult = (event) => {
-      // Working connection — reset network failure count
-      sttNetworkErrorCountRef.current = 0;
-
       let sessionFinal = "";
       let sessionInterim = "";
 
@@ -527,7 +531,6 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
         );
         sttUnavailableRef.current = true;
         setSttUnavailable(true);
-        recognitionRunningRef.current = false;
         if (recognitionRef.current) {
           try {
             recognitionRef.current.abort();
@@ -545,7 +548,6 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
         );
         sttUnavailableRef.current = true;
         setSttUnavailable(true);
-        recognitionRunningRef.current = false;
         if (recognitionRef.current) {
           try {
             recognitionRef.current.abort();
@@ -559,7 +561,6 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     };
 
     recognition.onend = () => {
-      recognitionRunningRef.current = false;
       recognitionRef.current = null;
 
       // Exit immediately if recording was stopped
@@ -633,7 +634,8 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       try {
         const transcribePromise = (async () => {
           const dataUrl = await blobToWavDataUrl(audioBlob);
-          if (!dataUrl) return "";
+          // Too large to send here. The server transcribes the saved recording instead.
+          if (!dataUrl || dataUrl.length > UPLOAD_LIMITS.maxTranscribeBase64Bytes) return "";
 
           const isWav = dataUrl.startsWith("data:audio/wav");
           const mime = isWav ? "audio/wav" : audioBlob.type || "audio/webm";
@@ -680,6 +682,9 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   // ── startRecording ─────────────────────────────────────────────────────────
 
   const startRecording = useCallback(async () => {
+    // A double tap must not open the microphone twice.
+    if (isRecordingRef.current) return;
+
     // ── Full state reset ─────────────────────────────────────────────────────
     isRecordingRef.current = true;
     sttUnavailableRef.current = false;
@@ -694,8 +699,8 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     finalTranscriptRef.current = "";
     interimTranscriptRef.current = "";
     cumulativeFinalRef.current = "";
-    sttNetworkErrorCountRef.current = 0;
     recordedChunksRef.current = [];
+    mediaRecorderRef.current = null;
 
     // Clear dangling timers from any previous session
     if (samplerIntervalRef.current) {
@@ -720,6 +725,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       if (selectedDeviceId) audioConstraints.deviceId = { exact: selectedDeviceId };
 
       const rawStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      micStreamRef.current = rawStream;
       refreshAudioDevices();
 
       // Start live transcription: prefer client Web Speech API (0 server requests, instant response)
@@ -738,6 +744,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const ctx = new AudioCtx();
+      audioContextRef.current = ctx;
       if (ctx.state === "suspended") await ctx.resume();
 
       const src = ctx.createMediaStreamSource(rawStream);
@@ -824,7 +831,6 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
         }
       }
 
-      audioContextRef.current = ctx;
       analyserRef.current = analyser;
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
@@ -846,12 +852,29 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
 
       setPhase("recording");
     } catch (err) {
+      // Without a microphone there is nothing to record, so stay on the start screen and show the
+      // reason. Nothing is saved, because a score needs a real recording behind it.
       console.warn("Microphone access unavailable or denied:", err);
-      setMicError("Microphone access denied: please check browser microphone permissions.");
-      samplerIntervalRef.current = window.setInterval(() => {
-        setSamples((prev) => [...prev, 0.2 + Math.random() * 0.5]);
-      }, ACOUSTIC_THRESHOLDS.sampleIntervalMs);
-      setPhase("recording");
+      isRecordingRef.current = false;
+      micStreamRef.current?.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = null;
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          /* ignore */
+        }
+        recognitionRef.current = null;
+      }
+      if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+        audioContextRef.current.close().catch(() => {});
+      }
+      setMicError(
+        (err as Error)?.name === "NotFoundError"
+          ? "No microphone was found on this device."
+          : "Microphone access denied: please check browser microphone permissions.",
+      );
+      setPhase("idle");
     }
   }, [selectedDeviceId, refreshAudioDevices, startSpeechRecognition, startLocalLiveStreaming]);
 
@@ -876,7 +899,6 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     }
 
     // Stop Web Speech API
-    recognitionRunningRef.current = false;
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -937,6 +959,10 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     });
 
     const blob = await audioBlobPromise;
+
+    // Turn the microphone off. The stream in state is the processed copy; the raw one holds the mic.
+    micStreamRef.current?.getTracks().forEach((t) => t.stop());
+    micStreamRef.current = null;
     stream?.getTracks().forEach((t) => t.stop());
     setStream(null);
 
@@ -950,7 +976,6 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
           reader.onerror = reject;
           reader.readAsDataURL(blob);
         });
-        lastAudioUrlRef.current = audioUrl;
       } catch (e) {
         console.warn("Failed to convert Blob to data URL:", e);
       }
@@ -983,7 +1008,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     }
 
     // Extract genuine acoustic PCM samples directly from the recorded audio Blob
-    let genuineSamples: number[] = [];
+    const genuineSamples: number[] = [];
     if (blob && blob.size > 1000) {
       try {
         const arrayBuf = await blob.arrayBuffer();
@@ -992,22 +1017,26 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
           (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         if (AudioCtx) {
           const decodeCtx = new AudioCtx();
-          const decodedBuffer = await decodeCtx.decodeAudioData(arrayBuf);
-          const channel = decodedBuffer.getChannelData(0);
-
-          const TARGET_SAMPLES = 84;
-          const sliceLength = Math.max(1, Math.floor(channel.length / TARGET_SAMPLES));
-          for (let i = 0; i < TARGET_SAMPLES; i++) {
-            const start = i * sliceLength;
-            const end = Math.min(channel.length, start + sliceLength);
-            let sumSquares = 0;
-            for (let j = start; j < end; j++) {
-              sumSquares += channel[j] * channel[j];
+          try {
+            // If decoding is slow or hangs, the samples captured live are used instead.
+            const decodedBuffer = await decodeAudioWithTimeout(decodeCtx, arrayBuf, 5000);
+            if (decodedBuffer) {
+              const channel = decodedBuffer.getChannelData(0);
+              const TARGET_SAMPLES = 84;
+              const sliceLength = Math.max(1, Math.floor(channel.length / TARGET_SAMPLES));
+              for (let i = 0; i < TARGET_SAMPLES; i++) {
+                const start = i * sliceLength;
+                const end = Math.min(channel.length, start + sliceLength);
+                let sumSquares = 0;
+                for (let j = start; j < end; j++) {
+                  sumSquares += channel[j] * channel[j];
+                }
+                genuineSamples.push(Math.sqrt(sumSquares / Math.max(1, end - start)));
+              }
             }
-            const rms = Math.sqrt(sumSquares / Math.max(1, end - start));
-            genuineSamples.push(rms);
+          } finally {
+            await decodeCtx.close().catch(() => {});
           }
-          await decodeCtx.close().catch(() => {});
         }
       } catch (pcmErr) {
         console.warn("[useAudioRecorder] Audio PCM extraction note:", pcmErr);
@@ -1029,7 +1058,6 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     formattedTime,
     stream,
     micError,
-    sttAvailable,
     sttUnavailable,
     samples,
     finalTranscript,
@@ -1046,7 +1074,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     startRecording,
     stopRecording,
     setPhase,
-    audioUrl: lastAudioUrlRef.current,
+    maxDurationReached: phase === "recording" && elapsed >= ACOUSTIC_THRESHOLDS.maxDurationSec,
     isLiveTranscriptionEnabled: Boolean(options?.enableLiveTranscription),
     liveEngine,
   };

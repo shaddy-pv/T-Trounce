@@ -185,16 +185,21 @@ console.log("Generating PWA icons...");
 fs.writeFileSync(path.join(iconsDir, "icon.svg"), generateSvg(), "utf8");
 console.log("✓ Created public/icons/icon.svg");
 
-fs.writeFileSync(path.join(iconsDir, "icon-192x192.png"), renderTrounceIcon(192, false));
-console.log("✓ Created public/icons/icon-192x192.png");
+for (const size of [32, 72, 96, 128, 144, 152, 192, 256, 384, 512]) {
+  fs.writeFileSync(path.join(iconsDir, `icon-${size}x${size}.png`), renderTrounceIcon(size, false));
+  console.log(`✓ Created public/icons/icon-${size}x${size}.png`);
+}
 
-fs.writeFileSync(path.join(iconsDir, "icon-512x512.png"), renderTrounceIcon(512, false));
-console.log("✓ Created public/icons/icon-512x512.png");
+for (const size of [192, 512]) {
+  fs.writeFileSync(
+    path.join(iconsDir, `maskable-icon-${size}x${size}.png`),
+    renderTrounceIcon(size, true),
+  );
+  console.log(`✓ Created public/icons/maskable-icon-${size}x${size}.png`);
+}
 
-fs.writeFileSync(path.join(iconsDir, "maskable-icon-512x512.png"), renderTrounceIcon(512, true));
-console.log("✓ Created public/icons/maskable-icon-512x512.png");
-
-fs.writeFileSync(path.join(iconsDir, "apple-touch-icon.png"), renderTrounceIcon(180, false));
+// iOS draws its own rounded corners and shows transparency as black, so this icon must be opaque.
+fs.writeFileSync(path.join(iconsDir, "apple-touch-icon.png"), renderTrounceIcon(180, true));
 console.log("✓ Created public/icons/apple-touch-icon.png");
 
 console.log("All PWA icons generated successfully!");

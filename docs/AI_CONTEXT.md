@@ -41,8 +41,8 @@
 
 ## 3. Technology Stack & Backend Constraints
 
-- **Framework**: TanStack Start (`@tanstack/react-start` + `@tanstack/react-router` + `@tanstack/react-query`).
-- **Database**: Local MongoDB (`mongodb://localhost:27017/tarang`) using native `mongodb` package with `getDb()` connection pooling in `src/lib/db.ts`.
+- **Framework**: TanStack Start (`@tanstack/react-start` + `@tanstack/react-router`).
+- **Database**: Local MongoDB (`mongodb://localhost:27017/trounce`) using native `mongodb` package with `getDb()` connection pooling in `src/server/db/client.ts`.
 - **Zero Cloud Proprietary Lock-in**: Do NOT introduce Supabase, Firebase, or cloud-only authentication SDKs.
 - **Routing**: File-based routes in `src/routes/` with `routeTree.gen.ts`. Never create Next.js `pages/` or `app/` folders.
 

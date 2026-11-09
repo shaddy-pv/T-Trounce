@@ -16,9 +16,11 @@ import {
   Loader2,
 } from "lucide-react";
 import { Waveform } from "@/components/tarang/Waveform";
-import { fetchModuleByIdFn, fetchStudentAttemptsFn, saveAttemptFn } from "@/server/data";
+import { fetchModuleByIdFn, fetchStudentAttemptsFn } from "@/server/data";
+import { SaveFailedPanel } from "@/features/practice/components/SaveFailedPanel";
+import { useAttemptSubmission } from "@/features/practice/hooks/useAttemptSubmission";
 import { useAudioRecorder } from "@/features/practice/hooks/useAudioRecorder";
-import { analyzeAudioSignal, FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
+import { FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
 import { useUser } from "@/lib/auth";
 import { useLiveTranscriptionSetting, usePostTranscriptionSetting } from "@/lib/app-settings";
 import { ThemeToggle } from "@/components/tarang/ThemeToggle";
@@ -113,13 +115,16 @@ function PracticeModuleSession() {
   const { enabled: liveTranscriptionEnabled } = useLiveTranscriptionSetting();
   const { enabled: postTranscriptionEnabled } = usePostTranscriptionSetting();
 
+  const recorder = useAudioRecorder({
+    promptContext: mod.prompt || mod.title,
+    enableLiveTranscription: liveTranscriptionEnabled,
+    enablePostTranscription: postTranscriptionEnabled,
+  });
   const {
     phase,
-    elapsed,
     formattedTime,
     stream,
     micError,
-    samples,
     sttUnavailable,
     finalTranscript,
     interimTranscript,
@@ -132,14 +137,19 @@ function PracticeModuleSession() {
     selectedDeviceId,
     setSelectedDeviceId,
     startRecording,
-    stopRecording,
     setPhase,
     isLiveTranscriptionEnabled,
     liveEngine,
-  } = useAudioRecorder({
-    promptContext: mod.prompt || mod.title,
-    enableLiveTranscription: liveTranscriptionEnabled,
-    enablePostTranscription: postTranscriptionEnabled,
+  } = recorder;
+
+  const submission = useAttemptSubmission({
+    recorder,
+    studentId: user?.userId,
+    moduleId,
+    prompt: mod.prompt,
+    difficulty: mod.difficulty,
+    targetDurationSec: mod.durationSec,
+    idPrefix: moduleId,
   });
 
   // Auth guard
@@ -148,82 +158,6 @@ function PracticeModuleSession() {
     else if (user && user.role !== "student" && !user.isAdmin && user.role !== "admin")
       navigate({ to: "/dashboard", replace: true });
   }, [user, navigate]);
-
-  const handleStop = async () => {
-    if (phase === "uploading") return;
-
-    const studentId = user?.userId;
-    if (!studentId) {
-      navigate({ to: "/login", replace: true });
-      return;
-    }
-    const attemptId = `${moduleId}-${Date.now()}`;
-
-    try {
-      const {
-        samples: recordedSamples,
-        elapsed: recordedElapsed,
-        audioUrl,
-        transcript: recordedTranscript,
-      } = await stopRecording();
-
-      // Perform real acoustic signal analysis
-      const analysis = analyzeAudioSignal(
-        recordedSamples.length > 0 ? recordedSamples : samples,
-        recordedElapsed > 0 ? recordedElapsed : elapsed,
-        mod.difficulty,
-        recordedTranscript,
-      );
-
-      const fullResult = {
-        id: attemptId,
-        studentId,
-        moduleId,
-        prompt: mod.prompt,
-        transcript: recordedTranscript ? recordedTranscript.trim() : "",
-        audioUrl: audioUrl || undefined,
-        durationSec: analysis.durationSec,
-        targetDurationSec: mod.durationSec,
-        pronunciation: analysis.pronunciation,
-        vocabulary: analysis.vocabulary,
-        grammar: analysis.grammar,
-        fillerCount: analysis.fillerCount,
-        pauseCount: analysis.pauseCount,
-        feedback: analysis.feedback,
-        waveform: analysis.waveform,
-        createdAt: new Date().toISOString(),
-      };
-
-      // 2. Persist attempt to MongoDB with a 5s race timeout
-      try {
-        const savePromise = saveAttemptFn({
-          data: {
-            studentId,
-            moduleId,
-            result: fullResult,
-          },
-        });
-        const saveTimeout = new Promise((resolve) => setTimeout(resolve, 5000));
-        await Promise.race([savePromise, saveTimeout]);
-      } catch (err) {
-        console.warn("Attempt save fallback:", err);
-      }
-
-      // 3. Immediately navigate to result screen
-      navigate({
-        to: "/result/$attemptId",
-        params: { attemptId },
-        replace: true,
-      });
-    } catch (err) {
-      console.error("[handleStop] Forced navigation on unexpected error:", err);
-      navigate({
-        to: "/result/$attemptId",
-        params: { attemptId },
-        replace: true,
-      });
-    }
-  };
 
   const togglePlayback = () => {
     if (!audioPlayerRef.current) return;
@@ -318,23 +252,31 @@ function PracticeModuleSession() {
           {/* Performance Quick Stats */}
           <div className="mt-5 grid grid-cols-3 gap-2.5 text-center">
             <div className="rounded-[10px] border border-hairline bg-ink-900 p-2.5">
-              <span className="text-[10px] uppercase tracking-wider text-tertiary-warm block">Spoken Time</span>
+              <span className="text-[10px] uppercase tracking-wider text-tertiary-warm block">
+                Spoken Time
+              </span>
               <p className="mt-1 num text-[14px] font-semibold text-primary-warm">
                 {formatSecs(existingAttempt.durationSec || 0, 0)}
               </p>
             </div>
             <div className="rounded-[10px] border border-hairline bg-ink-900 p-2.5">
-              <span className="text-[10px] uppercase tracking-wider text-tertiary-warm block">Filler Sounds</span>
+              <span className="text-[10px] uppercase tracking-wider text-tertiary-warm block">
+                Filler Sounds
+              </span>
               <p
                 className={`mt-1 num text-[14px] font-semibold ${
-                  (existingAttempt.fillerCount ?? 0) > 0 ? "text-[#E2A33C] light:text-amber-800" : "text-[#3FB8AF] light:text-teal-800"
+                  (existingAttempt.fillerCount ?? 0) > 0
+                    ? "text-[#E2A33C] light:text-amber-800"
+                    : "text-[#3FB8AF] light:text-teal-800"
                 }`}
               >
                 {existingAttempt.fillerCount ?? 0}
               </p>
             </div>
             <div className="rounded-[10px] border border-hairline bg-ink-900 p-2.5">
-              <span className="text-[10px] uppercase tracking-wider text-tertiary-warm block">Pauses</span>
+              <span className="text-[10px] uppercase tracking-wider text-tertiary-warm block">
+                Pauses
+              </span>
               <p className="mt-1 num text-[14px] font-semibold text-secondary-warm">
                 {existingAttempt.pauseCount ?? 0}
               </p>
@@ -380,14 +322,14 @@ function PracticeModuleSession() {
                     ? audioDuration
                     : existingAttempt.durationSec || 30;
                 const progressFraction =
-                  effectiveDur > 0
-                    ? Math.min(1, Math.max(0, audioCurrentTime / effectiveDur))
-                    : 0;
+                  effectiveDur > 0 ? Math.min(1, Math.max(0, audioCurrentTime / effectiveDur)) : 0;
 
                 return (
                   <div className="flex-1 space-y-1.5">
                     <div className="flex items-center justify-between font-mono text-[11px] text-tertiary-warm">
-                      <span className="font-medium text-secondary-warm">{isPlayingAudio ? "Playing..." : "Audio Ready"}</span>
+                      <span className="font-medium text-secondary-warm">
+                        {isPlayingAudio ? "Playing..." : "Audio Ready"}
+                      </span>
                       <span>
                         {formatSecs(audioCurrentTime, 0)} /{" "}
                         {formatSecs(audioDuration, existingAttempt.durationSec || 30)}
@@ -470,7 +412,9 @@ function PracticeModuleSession() {
           {/* Teacher Feedback Card (only shown if teacher has actually provided feedback) */}
           {existingAttempt.teacherFeedback && (
             <div className="mt-4 rounded-[10px] border border-[#3FB8AF]/30 bg-[#3FB8AF]/10 light:border-teal-300 light:bg-teal-50 p-3.5 text-[12px] text-secondary-warm">
-              <span className="font-semibold text-[#3FB8AF] light:text-teal-800 block mb-1">Teacher Feedback:</span>
+              <span className="font-semibold text-[#3FB8AF] light:text-teal-800 block mb-1">
+                Teacher Feedback:
+              </span>
               <p className="text-primary-warm">{existingAttempt.teacherFeedback}</p>
             </div>
           )}
@@ -540,7 +484,7 @@ function PracticeModuleSession() {
             </span>
             {isRetaking && (
               <span className="num text-[11px] rounded bg-[#E2A33C]/20 px-2.5 py-0.5 font-medium text-[#E2A33C]">
-                🔄 {t("retaking_indicator")}
+                {t("retaking_indicator")}
               </span>
             )}
           </div>
@@ -559,7 +503,11 @@ function PracticeModuleSession() {
               }`}
               title="Listen to prompt"
             >
-              {isSpeakingPrompt ? <VolumeX size={14} /> : <Volume2 size={14} className="text-[#3FB8AF]" />}
+              {isSpeakingPrompt ? (
+                <VolumeX size={14} />
+              ) : (
+                <Volume2 size={14} className="text-[#3FB8AF]" />
+              )}
               <span>{isSpeakingPrompt ? t("stop_listen_btn") : t("listen_prompt_btn")}</span>
             </button>
           </div>
@@ -584,8 +532,14 @@ function PracticeModuleSession() {
                 {t("tips_starter_label")}
               </p>
               <ul className="mt-1.5 space-y-1 list-disc list-inside text-secondary-warm">
-                <li><span className="text-primary-warm">"Hello, today I want to share my thoughts on this..."</span></li>
-                <li><span className="text-primary-warm">"In my daily life, I find that..."</span></li>
+                <li>
+                  <span className="text-primary-warm">
+                    "Hello, today I want to share my thoughts on this..."
+                  </span>
+                </li>
+                <li>
+                  <span className="text-primary-warm">"In my daily life, I find that..."</span>
+                </li>
                 <li>{t("tips_point_1")}</li>
               </ul>
             </div>
@@ -674,7 +628,9 @@ function PracticeModuleSession() {
             ) : (
               <div className="flex h-[140px] flex-col items-center justify-center text-center">
                 <p className="text-[13px] text-tertiary-warm">
-                  {micError ?? "Tap record below when you are ready to speak"}
+                  {submission.saveFailed
+                    ? t("save_failed_title")
+                    : (micError ?? "Tap record below when you are ready to speak")}
                 </p>
                 {micError && (
                   <p className="mt-2 text-[11px] text-[#E2A33C]">
@@ -814,13 +770,20 @@ function PracticeModuleSession() {
                 <span className="size-2 rounded-full bg-[#3FB8AF] animate-ping" />
                 {t("recording_live_banner")}
               </span>
-              <span className="num font-semibold text-primary-warm">
-                {formattedTime}
-              </span>
+              <span className="num font-semibold text-primary-warm">{formattedTime}</span>
             </div>
           )}
 
-          {phase === "idle" && (
+          {submission.saveFailed && (
+            <SaveFailedPanel
+              message={submission.saveErrorDetail}
+              isSaving={submission.isSaving}
+              onRetry={submission.retrySave}
+              onDiscard={submission.discardRecording}
+            />
+          )}
+
+          {phase === "idle" && !submission.saveFailed && !submission.isSaving && (
             <div className="space-y-2">
               <button
                 type="button"
@@ -838,7 +801,7 @@ function PracticeModuleSession() {
           {phase === "recording" && (
             <button
               type="button"
-              onClick={handleStop}
+              onClick={submission.finishRecording}
               className="flex w-full items-center justify-center gap-3 rounded-[16px] bg-[#C1503B] py-4 text-[16px] font-bold text-primary-warm transition hover:brightness-110 shadow-xl shadow-[#C1503B]/25 cursor-pointer active:scale-[0.98]"
             >
               <div className="flex size-7 items-center justify-center rounded-full bg-black/20">

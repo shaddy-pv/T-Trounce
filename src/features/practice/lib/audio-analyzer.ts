@@ -1,30 +1,8 @@
 import type { WaveformSegment, AcousticAnalysisResult } from "@/types";
 import { ACOUSTIC_THRESHOLDS } from "@/config/constants";
+import { FILLER_KEYWORDS, countFillerWords } from "@/lib/scoring";
 
-export const FILLER_KEYWORDS = new Set([
-  // Unambiguous vocal hesitations (English)
-  "um",
-  "umm",
-  "ummm",
-  "uh",
-  "uhh",
-  "uhm",
-  "er",
-  "err",
-  "ah",
-  "ahh",
-  "hmm",
-  "hmmm",
-  // Unambiguous Hindi / Hinglish vocal stalls (no English word collisions)
-  "matlab",
-  "matlb",
-  "yaani",
-  "yani",
-  "samjhe",
-  "samjha",
-  "haina",
-  "hain-na",
-]);
+export { FILLER_KEYWORDS };
 
 /**
  * Analyzes audio amplitude time-series and spoken transcript
@@ -40,16 +18,7 @@ export function analyzeAudioSignal(
   const sampleCount = samples.length;
 
   // 1. Analyze verbatim transcript for real spoken filler words
-  let fillerCount = 0;
-  if (transcriptText) {
-    const words = transcriptText.toLowerCase().split(/\s+/);
-    for (const w of words) {
-      const clean = w.replace(/[^a-z]/g, "");
-      if (FILLER_KEYWORDS.has(clean)) {
-        fillerCount++;
-      }
-    }
-  }
+  const fillerCount = transcriptText ? countFillerWords(transcriptText) : 0;
 
   if (sampleCount === 0) {
     const fallbackSegments: WaveformSegment[] = Array.from({ length: 56 }, (_, i) => ({
@@ -98,7 +67,10 @@ export function analyzeAudioSignal(
   for (let barIdx = 0; barIdx < targetBarCount; barIdx++) {
     // Window of samples corresponding to this bar along the audio timeline
     const startIdx = Math.floor(barIdx * windowRatio);
-    const endIdx = Math.max(startIdx + 1, Math.min(sampleCount, Math.ceil((barIdx + 1) * windowRatio)));
+    const endIdx = Math.max(
+      startIdx + 1,
+      Math.min(sampleCount, Math.ceil((barIdx + 1) * windowRatio)),
+    );
 
     let sumSquares = 0;
     let localPeak = 0;
@@ -117,10 +89,7 @@ export function analyzeAudioSignal(
 
     // Relative volume normalized from 0.08 to 1.0 against noise floor and peak amplitude
     const dynamicRange = Math.max(0.06, peakAmp - noiseFloor * 0.5);
-    const normalizedVal = Math.min(
-      1.0,
-      Math.max(0.08, (rawVal - noiseFloor * 0.5) / dynamicRange),
-    );
+    const normalizedVal = Math.min(1.0, Math.max(0.08, (rawVal - noiseFloor * 0.5) / dynamicRange));
 
     let kind: "clear" | "pause" | "filler" = "clear";
 

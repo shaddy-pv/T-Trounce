@@ -1,10 +1,28 @@
-// Trounce Teacher Console — Progressive Web App Service Worker
-const CACHE_NAME = "trounce-pwa-v3";
-const OFFLINE_URL = "/offline.html";
+// Trounce service worker.
+//
+// What is cached, and why it is safe:
+//   - Hashed build files in /assets. Their names change whenever their content changes, so they can
+//     never be stale. Each deployment gets its own cache and old ones are deleted on activation.
+//   - The offline page, manifest and icons. Public and contain no user data.
+//   - Google Fonts files. Public and immutable.
+//
+// What is never cached:
+//   - Pages. Navigations always go to the network, so users get current code after a deployment and
+//     no page containing private data is ever stored. The offline page is only a fallback.
+//   - API calls, server functions and audio. These contain private student data.
+//
+// __BUILD_ID__ is replaced at build time (see vite.config.ts). This changes the file's bytes on every
+// deployment, which is what makes browsers install the new version.
+const BUILD_ID = "__BUILD_ID__";
 
-const PRECACHE_ASSETS = [
-  "/",
-  OFFLINE_URL,
+const STATIC_CACHE = `trounce-static-${BUILD_ID}`;
+const ASSET_CACHE = `trounce-assets-${BUILD_ID}`;
+const FONT_CACHE = "trounce-fonts-v1";
+const MAX_FONT_ENTRIES = 30;
+
+const OFFLINE_URL = "/offline.html";
+const PRECACHE_REQUIRED = [OFFLINE_URL];
+const PRECACHE_OPTIONAL = [
   "/manifest.webmanifest",
   "/icons/icon-192x192.png",
   "/icons/icon-512x512.png",
@@ -13,137 +31,141 @@ const PRECACHE_ASSETS = [
   "/icons/icon.svg",
 ];
 
-// Install: Cache essential assets & offline shell
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) =>
-        cache.addAll(PRECACHE_ASSETS.map((url) => new Request(url, { cache: "reload" }))),
-      )
-      .then(() => self.skipWaiting())
-      .catch((err) => {
-        console.warn("[SW] Precache note:", err);
-      }),
+    (async () => {
+      const cache = await caches.open(STATIC_CACHE);
+      // The offline page is essential: if it fails, the install fails and is retried later.
+      await cache.addAll(PRECACHE_REQUIRED.map((url) => new Request(url, { cache: "reload" })));
+      // A missing icon should not stop the whole install.
+      await Promise.allSettled(
+        PRECACHE_OPTIONAL.map((url) => cache.add(new Request(url, { cache: "reload" }))),
+      );
+    })(),
   );
+  // No skipWaiting here. An update is applied when the user accepts it or all tabs close, so a
+  // student's in-progress recording is never interrupted.
 });
 
-// Activate: Clean up old cache versions & claim clients
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((cacheNames) =>
-        Promise.all(
-          cacheNames.map((name) => {
-            if (name !== CACHE_NAME) {
-              return caches.delete(name);
-            }
-          }),
-        ),
-      )
-      .then(() => self.clients.claim()),
+    (async () => {
+      const current = new Set([STATIC_CACHE, ASSET_CACHE, FONT_CACHE]);
+      const names = await caches.keys();
+      await Promise.all(names.filter((name) => !current.has(name)).map((n) => caches.delete(n)));
+      if (self.registration.navigationPreload) {
+        await self.registration.navigationPreload.enable();
+      }
+      await self.clients.claim();
+    })(),
   );
 });
 
-// Fetch: Smart caching strategy
-self.addEventListener("fetch", (event) => {
-  const { request } = event;
-
-  // 1. Only handle GET requests
-  if (request.method !== "GET") {
-    return;
-  }
-
-  // 2. Ignore non-http/https (e.g. chrome-extension:)
-  if (!request.url.startsWith("http://") && !request.url.startsWith("https://")) {
-    return;
-  }
-
-  const url = new URL(request.url);
-
-  // 3. DO NOT intercept API calls, server functions, audio streams, or websockets
-  if (
-    url.pathname.startsWith("/api/") ||
-    url.pathname.includes("_server") ||
-    url.searchParams.has("_serverFnId") ||
-    url.searchParams.has("_server")
-  ) {
-    return; // Let browser network handle naturally without SW
-  }
-
-  // 4. Navigation requests: Network-first with offline.html fallback
-  if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request).catch(async () => {
-        try {
-          const cache = await caches.open(CACHE_NAME);
-          const cachedOffline = await cache.match(OFFLINE_URL);
-          if (cachedOffline) return cachedOffline;
-        } catch {
-          // fallback below
-        }
-        return new Response(
-          "<!DOCTYPE html><html><head><title>Offline</title></head><body style='font-family:sans-serif;padding:2rem;text-align:center;'><h2>You are offline</h2><p>Please check your internet connection.</p></body></html>",
-          {
-            status: 503,
-            headers: { "Content-Type": "text/html; charset=utf-8" },
-          },
-        );
-      }),
-    );
-    return;
-  }
-
-  // 5. Static assets (JS chunks, CSS, Icons, Fonts): Stale-While-Revalidate with guaranteed Response
-  const isStaticAsset =
-    url.pathname.startsWith("/assets/") ||
-    url.pathname.startsWith("/icons/") ||
-    url.hostname.includes("fonts.googleapis.com") ||
-    url.hostname.includes("fonts.gstatic.com") ||
-    /\.(js|css|woff2|woff|ttf|png|svg|ico|webmanifest)$/i.test(url.pathname);
-
-  if (isStaticAsset) {
-    event.respondWith(
-      (async () => {
-        const cache = await caches.open(CACHE_NAME);
-        const cachedResponse = await cache.match(request);
-
-        // Fetch in background to update cache
-        const fetchPromise = fetch(request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              cache.put(request, networkResponse.clone()).catch(() => {});
-            }
-            return networkResponse;
-          })
-          .catch(() => null);
-
-        // If we have a cached response, return it immediately
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-
-        // Otherwise wait for network response
-        const networkResponse = await fetchPromise;
-        if (networkResponse) {
-          return networkResponse;
-        }
-
-        // If network failed and nothing in cache, return a valid fallback Response object (never undefined)
-        return new Response("", { status: 408, statusText: "Request Timed Out" });
-      })(),
-    );
-    return;
-  }
-
-  // 6. For all other requests, DO NOT call event.respondWith!
-  // Allowing other requests to pass through untouched prevents "Failed to convert value to 'Response'" errors.
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
-// Message listener to trigger instant update
-self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "SKIP_WAITING") {
-    self.skipWaiting();
+function isPrivateOrDynamic(url, request) {
+  return (
+    url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/_serverFn") ||
+    request.headers.has("x-tsr-serverFn") ||
+    request.headers.has("range") ||
+    request.destination === "audio" ||
+    request.destination === "video"
+  );
+}
+
+async function networkWithOfflineFallback(event) {
+  try {
+    const preloaded = await event.preloadResponse;
+    if (preloaded) return preloaded;
+    return await fetch(event.request);
+  } catch {
+    const cache = await caches.open(STATIC_CACHE);
+    const offline = await cache.match(OFFLINE_URL);
+    if (offline) return offline;
+    return new Response("You are offline.", {
+      status: 503,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+}
+
+/** Serves from cache if present, otherwise fetches and stores a successful response. */
+async function cacheFirst(request, cacheName, canStore) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+
+  const response = await fetch(request);
+  if (canStore(response)) {
+    await cache.put(request, response.clone()).catch(() => {});
+  }
+  return response;
+}
+
+/** Network first, so changes are seen promptly, with the cached copy for when offline. */
+async function networkFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  try {
+    const response = await fetch(request);
+    if (response.ok && response.type === "basic") {
+      await cache.put(request, response.clone()).catch(() => {});
+    }
+    return response;
+  } catch (error) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    throw error;
+  }
+}
+
+async function trimCache(cacheName, maxEntries) {
+  const cache = await caches.open(cacheName);
+  const keys = await cache.keys();
+  await Promise.all(
+    keys.slice(0, Math.max(0, keys.length - maxEntries)).map((k) => cache.delete(k)),
+  );
+}
+
+const isSameOriginSuccess = (response) => response.ok && response.type === "basic";
+const isFontSuccess = (response) => response.ok && response.type === "cors";
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+  if (url.protocol !== "http:" && url.protocol !== "https:") return;
+
+  if (url.origin === self.location.origin) {
+    if (isPrivateOrDynamic(url, request)) return;
+
+    if (request.mode === "navigate") {
+      event.respondWith(networkWithOfflineFallback(event));
+      return;
+    }
+    if (url.pathname.startsWith("/assets/")) {
+      event.respondWith(cacheFirst(request, ASSET_CACHE, isSameOriginSuccess));
+      return;
+    }
+    if (
+      url.pathname.startsWith("/icons/") ||
+      url.pathname === "/manifest.webmanifest" ||
+      url.pathname === OFFLINE_URL
+    ) {
+      event.respondWith(networkFirst(request, STATIC_CACHE));
+    }
+    return;
+  }
+
+  if (url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com") {
+    event.respondWith(
+      cacheFirst(request, FONT_CACHE, isFontSuccess).then((response) => {
+        event.waitUntil(trimCache(FONT_CACHE, MAX_FONT_ENTRIES));
+        return response;
+      }),
+    );
   }
 });
