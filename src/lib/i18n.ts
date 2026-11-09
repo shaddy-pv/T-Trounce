@@ -19,6 +19,186 @@ export const LANGUAGES: LanguageOption[] = [
 ];
 
 export const translations = {
+  // App installation
+  install_app: {
+    en: "Install App",
+    hinglish: "App Install Karein",
+    hi: "ऐप इंस्टॉल करें",
+  },
+  install_tab: {
+    en: "Install",
+    hinglish: "Install",
+    hi: "इंस्टॉल",
+  },
+  install_card_title: {
+    en: "Get the Trounce app",
+    hinglish: "Trounce app paayein",
+    hi: "Trounce ऐप पाएं",
+  },
+  install_card_desc: {
+    en: "Open it from your home screen, full screen, like any other app. No app store needed.",
+    hinglish:
+      "Ise home screen se full screen mein kholein, kisi bhi app ki tarah. App store ki zaroorat nahi.",
+    hi: "इसे होम स्क्रीन से पूरी स्क्रीन पर खोलें, किसी भी ऐप की तरह। ऐप स्टोर की ज़रूरत नहीं।",
+  },
+  install_not_now: {
+    en: "Not now",
+    hinglish: "Abhi nahi",
+    hi: "अभी नहीं",
+  },
+  install_close: {
+    en: "Close",
+    hinglish: "Band karein",
+    hi: "बंद करें",
+  },
+  install_installed_title: {
+    en: "The app is installed on this device",
+    hinglish: "App is device par install hai",
+    hi: "ऐप इस डिवाइस पर इंस्टॉल है",
+  },
+  install_dismissed_note: {
+    en: "No problem. You can install it any time from here.",
+    hinglish: "Koi baat nahi. Aap ise kabhi bhi yahan se install kar sakte hain.",
+    hi: "कोई बात नहीं। आप इसे कभी भी यहां से इंस्टॉल कर सकते हैं।",
+  },
+  install_ios_title: {
+    en: "Add Trounce to your Home Screen",
+    hinglish: "Trounce ko Home Screen par jodein",
+    hi: "Trounce को होम स्क्रीन पर जोड़ें",
+  },
+  install_ios_step1: {
+    en: "Tap the Share button in your browser (the square with an arrow pointing up).",
+    hinglish: "Browser mein Share button dabayein (upar teer wala square).",
+    hi: "ब्राउज़र में शेयर बटन दबाएं (ऊपर तीर वाला चौकोर)।",
+  },
+  install_ios_step2: {
+    en: 'Scroll down and tap "Add to Home Screen".',
+    hinglish: 'Neeche scroll karke "Add to Home Screen" dabayein.',
+    hi: 'नीचे स्क्रॉल करके "Add to Home Screen" दबाएं।',
+  },
+  install_ios_step3: {
+    en: 'Tap "Add". Trounce will appear on your Home Screen.',
+    hinglish: '"Add" dabayein. Trounce aapki Home Screen par aa jayega.',
+    hi: '"Add" दबाएं। Trounce आपकी होम स्क्रीन पर आ जाएगा।',
+  },
+  install_android_title: {
+    en: "Install Trounce on your phone",
+    hinglish: "Trounce ko apne phone par install karein",
+    hi: "Trounce को अपने फ़ोन पर इंस्टॉल करें",
+  },
+  install_android_step1: {
+    en: "Open your browser's menu (usually three dots in a corner).",
+    hinglish: "Browser ka menu kholein (aksar kone mein teen dots).",
+    hi: "ब्राउज़र का मेनू खोलें (अक्सर कोने में तीन बिंदु)।",
+  },
+  install_android_step2: {
+    en: 'Tap "Install app" or "Add to Home screen".',
+    hinglish: '"Install app" ya "Add to Home screen" dabayein.',
+    hi: '"Install app" या "Add to Home screen" दबाएं।',
+  },
+  install_android_step3: {
+    en: "Confirm. Trounce will appear with your other apps.",
+    hinglish: "Confirm karein. Trounce aapke baaki apps ke saath dikhega.",
+    hi: "पुष्टि करें। Trounce आपके बाकी ऐप्स के साथ दिखेगा।",
+  },
+  install_macsafari_title: {
+    en: "Add Trounce to your Dock",
+    hinglish: "Trounce ko Dock mein jodein",
+    hi: "Trounce को Dock में जोड़ें",
+  },
+  install_macsafari_step1: {
+    en: 'In Safari\'s menu bar, choose File, then "Add to Dock".',
+    hinglish: 'Safari ke menu bar mein File chunein, phir "Add to Dock".',
+    hi: 'Safari के मेनू बार में File चुनें, फिर "Add to Dock"।',
+  },
+  install_macsafari_step2: {
+    en: 'Click "Add". Trounce will open as its own app.',
+    hinglish: '"Add" dabayein. Trounce apne alag app ki tarah khulega.',
+    hi: '"Add" दबाएं। Trounce अपने अलग ऐप की तरह खुलेगा।',
+  },
+  install_desktop_title: {
+    en: "Install Trounce on this computer",
+    hinglish: "Trounce ko is computer par install karein",
+    hi: "Trounce को इस कंप्यूटर पर इंस्टॉल करें",
+  },
+  install_desktop_step1: {
+    en: 'Look for the install icon at the right of the address bar, or open the browser menu and choose "Install Trounce".',
+    hinglish:
+      'Address bar ke daayein install icon dekhein, ya browser menu kholkar "Install Trounce" chunein.',
+    hi: 'एड्रेस बार के दाईं ओर इंस्टॉल आइकन देखें, या ब्राउज़र मेनू खोलकर "Install Trounce" चुनें।',
+  },
+  install_desktop_step2: {
+    en: "If that option isn't there, the app may already be installed. Check your apps list.",
+    hinglish:
+      "Agar yeh option nahi hai, to app shayad pehle se install hai. Apni apps list dekhein.",
+    hi: "अगर यह विकल्प नहीं है, तो ऐप शायद पहले से इंस्टॉल है। अपनी ऐप्स सूची देखें।",
+  },
+  install_unsupported_title: {
+    en: "This browser can't install apps",
+    hinglish: "Yeh browser apps install nahi kar sakta",
+    hi: "यह ब्राउज़र ऐप्स इंस्टॉल नहीं कर सकता",
+  },
+  install_unsupported_desc: {
+    en: "You can keep using Trounce here. To install it, open this page in Chrome or Edge.",
+    hinglish:
+      "Aap Trounce yahan use karte reh sakte hain. Install karne ke liye is page ko Chrome ya Edge mein kholein.",
+    hi: "आप Trounce यहां इस्तेमाल करते रह सकते हैं। इंस्टॉल करने के लिए इस पेज को Chrome या Edge में खोलें।",
+  },
+  update_ready: {
+    en: "A new version of Trounce is ready.",
+    hinglish: "Trounce ka naya version taiyaar hai.",
+    hi: "Trounce का नया संस्करण तैयार है।",
+  },
+  update_refresh: {
+    en: "Refresh",
+    hinglish: "Refresh karein",
+    hi: "रीफ़्रेश करें",
+  },
+
+  // Saving recordings
+  save_failed_title: {
+    en: "Your recording hasn't been saved yet",
+    hinglish: "Aapki recording abhi save nahi hui",
+    hi: "आपकी रिकॉर्डिंग अभी सेव नहीं हुई",
+  },
+  save_failed_desc: {
+    en: "It is still on this device. Check your connection and try again. Keep this page open until it saves.",
+    hinglish:
+      "Yeh abhi is device par hai. Connection check karke dobara try karein. Save hone tak yeh page khula rakhein.",
+    hi: "यह अभी इस डिवाइस पर है। कनेक्शन जांचकर फिर से कोशिश करें। सेव होने तक यह पेज खुला रखें।",
+  },
+  save_retry_btn: {
+    en: "Try saving again",
+    hinglish: "Dobara save karein",
+    hi: "फिर से सेव करें",
+  },
+  save_saving_btn: {
+    en: "Saving...",
+    hinglish: "Save ho raha hai...",
+    hi: "सेव हो रहा है...",
+  },
+  save_discard_btn: {
+    en: "Discard this recording",
+    hinglish: "Yeh recording hata dein",
+    hi: "यह रिकॉर्डिंग हटा दें",
+  },
+  save_discard_confirm: {
+    en: "Discard this recording? It can't be recovered.",
+    hinglish: "Yeh recording hata dein? Ise wapas nahi laaya ja sakta.",
+    hi: "यह रिकॉर्डिंग हटा दें? इसे वापस नहीं लाया जा सकता।",
+  },
+  transcript_failed_banner: {
+    en: "We couldn't create a transcript for this recording. Your audio is saved, and you can tap Edit to type it in.",
+    hinglish:
+      "Is recording ka transcript nahi ban paya. Aapka audio save hai, aur aap Edit dabakar likh sakte hain.",
+    hi: "इस रिकॉर्डिंग का ट्रांसक्रिप्ट नहीं बन पाया। आपका ऑडियो सेव है, और आप Edit दबाकर लिख सकते हैं।",
+  },
+  action_failed_retry: {
+    en: "That didn't work. Please check your connection and try again.",
+    hinglish: "Yeh nahi ho paya. Connection check karke dobara try karein.",
+    hi: "यह नहीं हो पाया। कनेक्शन जांचकर फिर से कोशिश करें।",
+  },
+
   // Navigation
   nav_practice: {
     en: "Practice",
@@ -88,9 +268,9 @@ export const translations = {
     hi: "नमस्ते {name}! आपका अभ्यास स्ट्रीक",
   },
   days_count: {
-    en: "Days 🔥",
-    hinglish: "Days 🔥",
-    hi: "दिन 🔥",
+    en: "Days",
+    hinglish: "Days",
+    hi: "दिन",
   },
   this_week: {
     en: "This Week",
@@ -265,9 +445,9 @@ export const translations = {
     hi: "लक्ष्य: कम से कम ~{sec} सेकंड बोलें",
   },
   speaking_tips_btn: {
-    en: "💡 Speaking Tips",
-    hinglish: "💡 Bolne ke Tips",
-    hi: "💡 बोलने के टिप्स",
+    en: "Speaking Tips",
+    hinglish: "Bolne ke Tips",
+    hi: "बोलने के टिप्स",
   },
   hide_tips_btn: {
     en: "Hide Tips",
@@ -387,9 +567,9 @@ export const translations = {
     hi: "बोली गई बातों का ट्रांसक्रिप्ट",
   },
   tap_word_to_listen: {
-    en: "💡 Tap any word to hear standard pronunciation",
-    hinglish: "💡 Standard pronunciation sunne ke liye kisi bhi word par tap karein",
-    hi: "💡 सही उच्चारण सुनने के लिए किसी भी शब्द पर टैप करें",
+    en: "Tap any word to hear standard pronunciation",
+    hinglish: "Standard pronunciation sunne ke liye kisi bhi word par tap karein",
+    hi: "सही उच्चारण सुनने के लिए किसी भी शब्द पर टैप करें",
   },
   listen_full_transcript: {
     en: "Listen to Full Transcript",
@@ -583,7 +763,8 @@ export const translations = {
   },
   tip_filler: {
     en: "You used 'umm/aah' {count} time(s). Next time, take a 1-second silent pause before speaking.",
-    hinglish: "Aapne {count} baar 'umm/aah' bola. Next time bolne se pehle 1 second ka silent pause lein.",
+    hinglish:
+      "Aapne {count} baar 'umm/aah' bola. Next time bolne se pehle 1 second ka silent pause lein.",
     hi: "आपने {count} बार 'umm/aah' बोला। अगली बार बोलने से पहले 1 सेकंड का ठहराव लें।",
   },
   tip_flow: {
@@ -597,9 +778,9 @@ export const translations = {
     hi: "जांच हो रही है...",
   },
   tap_word_tip: {
-    en: "💡 Tap any word to hear standard pronunciation:",
-    hinglish: "💡 Kisi bhi word par tap karke standard pronunciation sunen:",
-    hi: "💡 किसी भी शब्द पर क्लिक करके उसका सही उच्चारण सुनें:",
+    en: "Tap any word to hear standard pronunciation:",
+    hinglish: "Kisi bhi word par tap karke standard pronunciation sunen:",
+    hi: "किसी भी शब्द पर क्लिक करके उसका सही उच्चारण सुनें:",
   },
   edit_transcript_placeholder: {
     en: "Edit your spoken words here...",
@@ -647,9 +828,9 @@ export const translations = {
     hi: "शिक्षक से सवाल पूछें",
   },
   listen_result_btn: {
-    en: "🎧 Listen & View Result ➜",
-    hinglish: "🎧 Sunen & Result Dekhein ➜",
-    hi: "🎧 रिज़ल्ट और आवाज़ सुनें ➜",
+    en: "Listen & View Result ➜",
+    hinglish: "Sunen & Result Dekhein ➜",
+    hi: "रिज़ल्ट और आवाज़ सुनें ➜",
   },
 
   // Dashboard Channel Strip & Meters
@@ -721,9 +902,9 @@ export const translations = {
     hi: "यहाँ टिप्पणी लिखें या ऊपर के बटनों पर क्लिक करें...",
   },
   evaluator_preset_1_label: {
-    en: "👍 Well spoken!",
-    hinglish: "👍 Bahut badhiya bola",
-    hi: "👍 बहुत बढ़िया बोला",
+    en: "Well spoken!",
+    hinglish: "Bahut badhiya bola",
+    hi: "बहुत बढ़िया बोला",
   },
   evaluator_preset_1_text: {
     en: "Well spoken! Great confidence, clarity, and pacing.",
@@ -731,9 +912,9 @@ export const translations = {
     hi: "बहुत बढ़िया बोला! आत्मविश्वास और आवाज़ की स्पष्टता बहुत अच्छी रही।",
   },
   evaluator_preset_2_label: {
-    en: "🔊 Speak louder",
-    hinglish: "🔊 Aawaz thodi tez karein",
-    hi: "🔊 आवाज़ थोड़ी तेज़ करें",
+    en: "Speak louder",
+    hinglish: "Aawaz thodi tez karein",
+    hi: "आवाज़ थोड़ी तेज़ करें",
   },
   evaluator_preset_2_text: {
     en: "Your voice was slightly soft. Speak a bit louder and clearer next time.",
@@ -741,9 +922,9 @@ export const translations = {
     hi: "आपकी आवाज़ थोड़ी धीमी थी, अगली बार थोड़ा तेज़ और स्पष्ट बोलें।",
   },
   evaluator_preset_3_label: {
-    en: "⏱️ Pace yourself",
-    hinglish: "⏱️ Dheere bolein",
-    hi: "⏱️ धीरे बोलें",
+    en: "Pace yourself",
+    hinglish: "Dheere bolein",
+    hi: "धीरे बोलें",
   },
   evaluator_preset_3_text: {
     en: "Take your time. Pause naturally between thoughts instead of rushing.",
@@ -751,9 +932,9 @@ export const translations = {
     hi: "जल्दबाज़ी न करें, विचारों के बीच थोड़ा रुककर आराम से बोलें।",
   },
   evaluator_preset_4_label: {
-    en: "🗣️ Reduce fillers",
-    hinglish: "🗣️ 'Umm' kam bolein",
-    hi: "🗣️ 'Umm' कम बोलें",
+    en: "Reduce fillers",
+    hinglish: "'Umm' kam bolein",
+    hi: "'Umm' कम बोलें",
   },
   evaluator_preset_4_text: {
     en: "Try to avoid filler words like 'umm' and 'aah'. Take a silent breath instead.",
@@ -761,9 +942,9 @@ export const translations = {
     hi: "बोलते समय 'umm' या 'aah' कम बोलें, सोचने के लिए शांत विराम लें।",
   },
   evaluator_preset_5_label: {
-    en: "⭐ Daily practice",
-    hinglish: "⭐ Roz practice karein",
-    hi: "⭐ रोज़ाना अभ्यास करें",
+    en: "Daily practice",
+    hinglish: "Roz practice karein",
+    hi: "रोज़ाना अभ्यास करें",
   },
   evaluator_preset_5_text: {
     en: "Good start! Recording 1 drill every day will quickly build your spoken fluency.",
@@ -824,7 +1005,8 @@ export const translations = {
   },
   report_summary_zero: {
     en: "{name} has not practiced this week yet. Please encourage daily practice.",
-    hinglish: "{name} ne is hafte abhi tak practice nahi kiya. Kripya daily practice ke liye kahein.",
+    hinglish:
+      "{name} ne is hafte abhi tak practice nahi kiya. Kripya daily practice ke liye kahein.",
     hi: "{name} ने इस हफ्ते अभ्यास नहीं किया है। कृपया नियमित अभ्यास के लिए प्रेरित करें।",
   },
 
@@ -867,7 +1049,9 @@ export function setStoredLanguage(lang: Language) {
   try {
     localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
     window.dispatchEvent(new CustomEvent(LANGUAGE_EVENT, { detail: { lang } }));
-  } catch {}
+  } catch {
+    // Storage can be blocked, e.g. in private browsing. The language still changes for this page.
+  }
 }
 
 /**

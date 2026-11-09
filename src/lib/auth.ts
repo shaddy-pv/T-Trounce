@@ -11,13 +11,12 @@ export interface TrounceUser {
   name: string;
   role: Role;
   isAdmin?: boolean;
+  isMasterAdmin?: boolean;
   phone?: string;
   batchId?: string;
   sessionSeason?: string;
   batchTime?: string;
 }
-
-export type TarangUser = TrounceUser;
 
 let clientSessionCache: SessionPayload | null | undefined = undefined;
 let clientSessionTimestamp = 0;
@@ -66,10 +65,19 @@ export function useUser() {
   return session as TrounceUser | null;
 }
 
-export function clearUser() {
-  // Clear the in-memory session cache immediately
+/**
+ * Signs out, then reloads the login page. The full page load also clears all data held in memory.
+ * The page only moves on once the cookie is gone, because navigating sooner could read the old
+ * session and bounce straight back in.
+ */
+export async function clearUser(): Promise<void> {
+  try {
+    await logoutFn();
+  } catch (err) {
+    console.warn("Sign out failed:", err);
+    window.alert("Could not sign out. Please check your connection and try again.");
+    return;
+  }
   invalidateSessionCache();
-  logoutFn().then(() => {
-    window.location.href = "/login";
-  });
+  window.location.href = "/login";
 }

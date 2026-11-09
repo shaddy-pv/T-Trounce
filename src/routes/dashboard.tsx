@@ -8,6 +8,7 @@ import { FlaggedAlertPanel } from "@/features/dashboard/components/FlaggedAlertP
 import { ChannelStripTable } from "@/features/dashboard/components/ChannelStripTable";
 import { Send, BookOpen, Search, X, RotateCcw } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
+import { InstallHomeCard } from "@/features/pwa/components/InstallApp";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -34,7 +35,7 @@ export const Route = createFileRoute("/dashboard")({
   },
   pendingComponent: DashboardSkeleton,
   component: Dashboard,
-  });
+});
 
 function DashboardSkeleton() {
   return (
@@ -133,7 +134,10 @@ function Dashboard() {
             {t("students_count", { count: cohortStudents.length })}
           </h1>
           <p className="num mt-1 text-[13px] text-secondary-warm">
-            {t("dashboard_summary_status", { flagged: cohortFlagged.length, active: cohortActiveToday })}
+            {t("dashboard_summary_status", {
+              flagged: cohortFlagged.length,
+              active: cohortActiveToday,
+            })}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
@@ -154,11 +158,16 @@ function Dashboard() {
         </div>
       </div>
 
+      <InstallHomeCard surface="console" className="mt-6" />
+
       {/* Search & Filter Toolbar */}
       <div className="mt-6 flex flex-col md:flex-row md:items-center justify-between gap-3 rounded-[8px] border border-hairline bg-ink-900 p-3 sm:px-4 shadow-sm">
         {/* Left: Quick Search Bar */}
         <div className="relative flex-1 max-w-md">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-tertiary-warm pointer-events-none" />
+          <Search
+            size={15}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-tertiary-warm pointer-events-none"
+          />
           <input
             type="text"
             value={searchQuery}
@@ -237,7 +246,12 @@ function Dashboard() {
             <span className="text-secondary-warm font-medium">Active filters:</span>
             {statusFilter !== "all" && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-ink-950 light:bg-white text-primary-warm border border-hairline font-semibold">
-                Status: {statusFilter === "on-track" ? "On Track" : statusFilter === "nudge" ? "Needs Nudge" : "Needs Help"}
+                Status:{" "}
+                {statusFilter === "on-track"
+                  ? "On Track"
+                  : statusFilter === "nudge"
+                    ? "Needs Nudge"
+                    : "Needs Help"}
                 <button
                   onClick={() => setStatusFilter("all")}
                   className="hover:text-[#C1503B] light:hover:text-red-700 ml-1 cursor-pointer"
@@ -302,10 +316,7 @@ function Dashboard() {
         </>
       ) : (
         /* Filtered or Searched Roster */
-        <ChannelStripTable
-          students={displayedStudents}
-          onResetFilters={handleResetFilters}
-        />
+        <ChannelStripTable students={displayedStudents} onResetFilters={handleResetFilters} />
       )}
     </TeacherShell>
   );

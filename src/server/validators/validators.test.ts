@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { LoginInputSchema } from "./auth.validator";
-import { CreateUserInputSchema, DeleteUserInputSchema } from "./user.validator";
+import { CreateUserInputSchema } from "./user.validator";
 import { CreateAssignmentInputSchema } from "./assignment.validator";
 import { UpdateStudentStatusInputSchema } from "./student.validator";
 import { CreateMessageInputSchema } from "./message.validator";

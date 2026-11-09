@@ -1,7 +1,10 @@
 import bcrypt from "bcryptjs";
-import { getDb } from "../db/client";
+import { randomUUID } from "crypto";
+import { requireDb } from "../db/client";
 import type { UserDoc, StudentDoc, SessionSeason, BatchTime } from "../db/schemas";
-import { makeSampleWaveform } from "@/components/tarang/Waveform";
+import { AppError } from "../errors";
+import { AuthService } from "./auth.service";
+import { invalidateRosterCache } from "./student.service";
 
 export interface UserPublic {
   id: string;
@@ -28,12 +31,15 @@ export interface CreateUserInput {
 
 export class UserService {
   /**
-   * Fetch all users from the database.
+   * Fetch all users. Password hashes are never loaded.
    */
   static async listUsers(): Promise<UserPublic[]> {
-    const db = await getDb();
-    if (!db) return [];
-    const users = await db.collection<UserDoc>("users").find({}).sort({ createdAt: -1 }).toArray();
+    const db = await requireDb();
+    const users = await db
+      .collection<UserDoc>("users")
+      .find({}, { projection: { passwordHash: 0 } })
+      .sort({ createdAt: -1 })
+      .toArray();
 
     return users.map((u) => ({
       id: u.id,
@@ -52,58 +58,69 @@ export class UserService {
    * Directly creates a new user (Teacher or Student) with a permanent password.
    */
   static async createUser(input: CreateUserInput): Promise<UserPublic> {
-    const db = await getDb();
-    if (!db) {
-      throw new Error("Database not connected");
-    }
+    const db = await requireDb();
+    const usersCol = db.collection<UserDoc>("users");
 
     const cleanEmail = input.email.trim().toLowerCase();
-    const existing = await db.collection<UserDoc>("users").findOne({ email: cleanEmail });
-    if (existing) {
-      throw new Error(`A user with email ${cleanEmail} already exists`);
+    const duplicateError = () =>
+      new AppError(`A user with email ${cleanEmail} already exists.`, 409);
+
+    if (await usersCol.findOne({ email: cleanEmail }, { projection: { _id: 1 } })) {
+      throw duplicateError();
     }
 
     const cleanPhone = input.phone?.trim() || undefined;
-    const passwordHash = await bcrypt.hash(input.passwordPlain, 10);
-    const userId = `${input.role}-${Date.now()}`;
     const sessionSeason = input.sessionSeason || "summer";
     const batchTime = input.batchTime || "morning";
     const batchId = input.batchId || `${sessionSeason}-${batchTime}`;
 
     const newUserDoc: UserDoc = {
-      id: userId,
+      id: `${input.role}-${Date.now()}-${randomUUID().slice(0, 8)}`,
       email: cleanEmail,
       phone: cleanPhone,
       name: input.name.trim(),
       role: input.role,
-      passwordHash,
+      passwordHash: await bcrypt.hash(input.passwordPlain, 10),
       sessionSeason,
       batchTime,
       batchId,
       createdAt: new Date(),
     };
 
-    await db.collection<UserDoc>("users").insertOne(newUserDoc);
+    try {
+      await usersCol.insertOne(newUserDoc);
+    } catch (err) {
+      // The unique index is the real guarantee when two requests race past the check above.
+      if ((err as { code?: number }).code === 11000) throw duplicateError();
+      throw err;
+    }
 
-    // If the new user is a student, also create an entry in the students roster collection
     if (input.role === "student") {
       const newStudentDoc: StudentDoc = {
-        id: userId,
-        name: input.name.trim(),
+        id: newUserDoc.id,
+        name: newUserDoc.name,
         phone: cleanPhone,
         status: "on-track",
         focus: "Introductory module practice",
-        lastActive: "Today",
-        scorePct: 85,
+        lastActive: "Never",
+        scorePct: 0,
         trendPct: 0,
-        waveform: makeSampleWaveform(10, 40, 0.2),
+        waveform: [],
         sessionSeason,
         batchTime,
         batchId,
         updatedAt: new Date(),
       };
-      await db.collection<StudentDoc>("students").insertOne(newStudentDoc);
+      try {
+        await db.collection<StudentDoc>("students").insertOne(newStudentDoc);
+      } catch (err) {
+        // Don't leave a half-created account behind.
+        await usersCol.deleteOne({ id: newUserDoc.id }).catch(() => {});
+        throw err;
+      }
     }
+
+    invalidateRosterCache();
 
     return {
       id: newUserDoc.id,
@@ -119,23 +136,36 @@ export class UserService {
   }
 
   /**
-   * Delete a user by ID from both users and students collections.
+   * Delete a user by ID from both users and students collections, ending their access immediately.
    */
   static async deleteUser(userId: string): Promise<boolean> {
-    const db = await getDb();
-    if (!db) {
-      throw new Error("Database not connected");
-    }
+    const db = await requireDb();
 
-    // Safety check: protect administrator accounts from self-deletion
-    const user = await db.collection<UserDoc>("users").findOne({ id: userId });
+    // Safety check: protect administrator accounts from deletion
+    const user = await db
+      .collection<UserDoc>("users")
+      .findOne({ id: userId }, { projection: { role: 1 } });
     if (user?.role === "admin") {
-      throw new Error("Administrator accounts cannot be deleted directly.");
+      throw new AppError("Administrator accounts cannot be deleted directly.", 403);
     }
 
     await db.collection<UserDoc>("users").deleteOne({ id: userId });
     await db.collection<StudentDoc>("students").deleteOne({ id: userId });
 
+    AuthService.forgetUser(userId);
+    invalidateRosterCache();
     return true;
+  }
+
+  /** Finds a teacher or admin by ID, used to attach a real name to a student's reply. */
+  static async findFaculty(userId: string): Promise<{ id: string; name: string } | null> {
+    const db = await requireDb();
+    const user = await db
+      .collection<UserDoc>("users")
+      .findOne(
+        { id: userId, role: { $in: ["teacher", "admin"] } },
+        { projection: { id: 1, name: 1 } },
+      );
+    return user ? { id: user.id, name: user.name } : null;
   }
 }

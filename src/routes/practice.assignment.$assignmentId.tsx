@@ -11,16 +11,17 @@ import {
   VolumeX,
   FileText,
   CheckCircle2,
-  Award,
   BookOpen,
   Sparkles,
   Settings2,
   Loader2,
 } from "lucide-react";
 import { Waveform } from "@/components/tarang/Waveform";
-import { fetchAssignmentByIdFn, fetchStudentAttemptsFn, saveAttemptFn } from "@/server/data";
+import { fetchAssignmentByIdFn, fetchStudentAttemptsFn } from "@/server/data";
+import { SaveFailedPanel } from "@/features/practice/components/SaveFailedPanel";
+import { useAttemptSubmission } from "@/features/practice/hooks/useAttemptSubmission";
 import { useAudioRecorder } from "@/features/practice/hooks/useAudioRecorder";
-import { analyzeAudioSignal, FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
+import { FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
 import { useUser } from "@/lib/auth";
 import { useLiveTranscriptionSetting, usePostTranscriptionSetting } from "@/lib/app-settings";
 import { ThemeToggle } from "@/components/tarang/ThemeToggle";
@@ -124,13 +125,16 @@ function AssignmentRecordingSession() {
   const { enabled: liveTranscriptionEnabled } = useLiveTranscriptionSetting();
   const { enabled: postTranscriptionEnabled } = usePostTranscriptionSetting();
 
+  const recorder = useAudioRecorder({
+    promptContext: a.prompt || a.title,
+    enableLiveTranscription: liveTranscriptionEnabled,
+    enablePostTranscription: postTranscriptionEnabled,
+  });
   const {
     phase,
-    elapsed,
     formattedTime,
     stream,
     micError,
-    samples,
     finalTranscript,
     interimTranscript,
     transcript,
@@ -143,14 +147,21 @@ function AssignmentRecordingSession() {
     selectedDeviceId,
     setSelectedDeviceId,
     startRecording,
-    stopRecording,
     setPhase,
     isLiveTranscriptionEnabled,
     liveEngine,
-  } = useAudioRecorder({
-    promptContext: a.prompt || a.title,
-    enableLiveTranscription: liveTranscriptionEnabled,
-    enablePostTranscription: postTranscriptionEnabled,
+  } = recorder;
+
+  const submission = useAttemptSubmission({
+    recorder,
+    studentId: user?.userId,
+    moduleId: "assignment-module",
+    assignmentId,
+    assignmentTitle: a.title,
+    prompt: a.prompt,
+    difficulty: a.difficulty,
+    targetDurationSec: a.durationSec,
+    idPrefix: assignmentId,
   });
 
   // Auth guard
@@ -159,84 +170,6 @@ function AssignmentRecordingSession() {
     else if (user && user.role !== "student" && !user.isAdmin && user.role !== "admin")
       navigate({ to: "/dashboard", replace: true });
   }, [user, navigate]);
-
-  const handleStop = async () => {
-    if (phase === "uploading") return;
-
-    const studentId = user?.userId;
-    if (!studentId) {
-      navigate({ to: "/login", replace: true });
-      return;
-    }
-    const attemptId = `${assignmentId}-${Date.now()}`;
-
-    try {
-      const {
-        samples: recordedSamples,
-        elapsed: recordedElapsed,
-        audioUrl,
-        transcript: recordedTranscript,
-      } = await stopRecording();
-
-      // Perform real acoustic signal analysis
-      const analysis = analyzeAudioSignal(
-        recordedSamples.length > 0 ? recordedSamples : samples,
-        recordedElapsed > 0 ? recordedElapsed : elapsed,
-        a.difficulty,
-        recordedTranscript,
-      );
-
-      const fullResult = {
-        id: attemptId,
-        studentId,
-        moduleId: "assignment-module",
-        assignmentId,
-        assignmentTitle: a.title,
-        prompt: a.prompt,
-        transcript: recordedTranscript ? recordedTranscript.trim() : "",
-        audioUrl: audioUrl || undefined,
-        durationSec: analysis.durationSec,
-        targetDurationSec: a.durationSec,
-        pronunciation: analysis.pronunciation,
-        vocabulary: analysis.vocabulary,
-        grammar: analysis.grammar,
-        fillerCount: analysis.fillerCount,
-        pauseCount: analysis.pauseCount,
-        feedback: analysis.feedback,
-        waveform: analysis.waveform,
-      };
-
-      // 2. Save to database with a 5s race timeout so slow networks never block the student
-      try {
-        const savePromise = saveAttemptFn({
-          data: {
-            studentId,
-            moduleId: "assignment-module",
-            assignmentId,
-            result: fullResult,
-          },
-        });
-        const saveTimeout = new Promise((resolve) => setTimeout(resolve, 5000));
-        await Promise.race([savePromise, saveTimeout]);
-      } catch (err) {
-        console.warn("Assignment attempt save fallback:", err);
-      }
-
-      // 3. Immediately transition to diagnostic result
-      navigate({
-        to: "/result/$attemptId",
-        params: { attemptId },
-        replace: true,
-      });
-    } catch (err) {
-      console.error("[handleStop] Forced navigation on unexpected error:", err);
-      navigate({
-        to: "/result/$attemptId",
-        params: { attemptId },
-        replace: true,
-      });
-    }
-  };
 
   const formatSecs = (secs: number, fallback: number = 30) => {
     let target = secs;
@@ -366,14 +299,14 @@ function AssignmentRecordingSession() {
                     ? audioDuration
                     : existingAttempt.durationSec || 30;
                 const progressFraction =
-                  effectiveDur > 0
-                    ? Math.min(1, Math.max(0, audioCurrentTime / effectiveDur))
-                    : 0;
+                  effectiveDur > 0 ? Math.min(1, Math.max(0, audioCurrentTime / effectiveDur)) : 0;
 
                 return (
                   <div className="flex-1 space-y-1.5">
                     <div className="flex justify-between text-[11px] num text-tertiary-warm">
-                      <span className="font-medium text-secondary-warm">{isPlayingAudio ? "Playing Student Recording..." : "Audio Ready"}</span>
+                      <span className="font-medium text-secondary-warm">
+                        {isPlayingAudio ? "Playing Student Recording..." : "Audio Ready"}
+                      </span>
                       <span className="font-mono">
                         {formatSecs(audioCurrentTime, 0)} /{" "}
                         {formatSecs(audioDuration, existingAttempt.durationSec || 30)}
@@ -541,7 +474,7 @@ function AssignmentRecordingSession() {
             </span>
             {isRetaking && (
               <span className="num text-[11px] rounded bg-[#E2A33C]/20 px-2.5 py-0.5 font-medium text-[#E2A33C]">
-                🔄 {t("retaking_indicator")}
+                {t("retaking_indicator")}
               </span>
             )}
           </div>
@@ -565,7 +498,11 @@ function AssignmentRecordingSession() {
               }`}
               title="Listen to prompt"
             >
-              {isSpeakingPrompt ? <VolumeX size={14} /> : <Volume2 size={14} className="text-[#3FB8AF]" />}
+              {isSpeakingPrompt ? (
+                <VolumeX size={14} />
+              ) : (
+                <Volume2 size={14} className="text-[#3FB8AF]" />
+              )}
               <span>{isSpeakingPrompt ? t("stop_listen_btn") : t("listen_prompt_btn")}</span>
             </button>
           </div>
@@ -590,8 +527,14 @@ function AssignmentRecordingSession() {
                 {t("tips_starter_label")}
               </p>
               <ul className="mt-1.5 space-y-1 list-disc list-inside text-secondary-warm">
-                <li><span className="text-primary-warm">"Regarding this topic, my opinion is..."</span></li>
-                <li><span className="text-primary-warm">"I would like to explain that..."</span></li>
+                <li>
+                  <span className="text-primary-warm">
+                    "Regarding this topic, my opinion is..."
+                  </span>
+                </li>
+                <li>
+                  <span className="text-primary-warm">"I would like to explain that..."</span>
+                </li>
                 <li>{t("tips_point_1")}</li>
               </ul>
             </div>
@@ -676,7 +619,9 @@ function AssignmentRecordingSession() {
             ) : (
               <div className="flex h-[140px] flex-col items-center justify-center text-center">
                 <p className="text-[13px] text-tertiary-warm">
-                  {micError ?? "Tap record below when you are ready to speak"}
+                  {submission.saveFailed
+                    ? t("save_failed_title")
+                    : (micError ?? "Tap record below when you are ready to speak")}
                 </p>
                 {micError && (
                   <p className="mt-2 text-[11px] text-[#E2A33C]">
@@ -813,13 +758,20 @@ function AssignmentRecordingSession() {
                 <span className="size-2 rounded-full bg-[#3FB8AF] animate-ping" />
                 {t("recording_live_banner")}
               </span>
-              <span className="num font-semibold text-primary-warm">
-                {formattedTime}
-              </span>
+              <span className="num font-semibold text-primary-warm">{formattedTime}</span>
             </div>
           )}
 
-          {phase === "idle" && (
+          {submission.saveFailed && (
+            <SaveFailedPanel
+              message={submission.saveErrorDetail}
+              isSaving={submission.isSaving}
+              onRetry={submission.retrySave}
+              onDiscard={submission.discardRecording}
+            />
+          )}
+
+          {phase === "idle" && !submission.saveFailed && !submission.isSaving && (
             <div className="space-y-2">
               <button
                 type="button"
@@ -837,7 +789,7 @@ function AssignmentRecordingSession() {
           {phase === "recording" && (
             <button
               type="button"
-              onClick={handleStop}
+              onClick={submission.finishRecording}
               className="flex w-full items-center justify-center gap-3 rounded-[16px] bg-[#C1503B] py-4 text-[16px] font-bold text-primary-warm transition hover:brightness-110 shadow-xl shadow-[#C1503B]/25 cursor-pointer active:scale-[0.98]"
             >
               <div className="flex size-7 items-center justify-center rounded-full bg-black/20">

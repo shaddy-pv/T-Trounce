@@ -1,11 +1,22 @@
+import { modules as memoryModules } from "@/lib/tarang-data";
+import type { Module } from "@/types";
 import { getDb } from "../db/client";
 import type { ModuleDoc } from "../db/schemas";
-import type { Module } from "@/types";
-import { modules as memoryModules } from "@/lib/tarang-data";
+
+function toModule(doc: ModuleDoc): Module {
+  return {
+    id: doc.id,
+    title: doc.title,
+    prompt: doc.prompt,
+    difficulty: doc.difficulty,
+    durationSec: doc.durationSec,
+  };
+}
 
 export class ModuleService {
   /**
-   * Fetch all practice curriculum modules
+   * Fetch all practice curriculum modules. The curriculum is static content, so the built-in copy
+   * is a safe fallback if the database cannot be reached.
    */
   static async getAllModules(): Promise<Module[]> {
     try {
@@ -16,19 +27,10 @@ export class ModuleService {
           .find({})
           .sort({ order: 1 })
           .toArray();
-        if (docs.length > 0) {
-          return docs.map(({ id, title, prompt, difficulty, durationSec, completed }) => ({
-            id,
-            title,
-            prompt,
-            difficulty,
-            durationSec,
-            completed,
-          }));
-        }
+        if (docs.length > 0) return docs.map(toModule);
       }
     } catch (err) {
-      console.error("[ModuleService.getAllModules Error]", err);
+      console.error("[ModuleService.getAllModules Error]", (err as Error).message);
     }
     return memoryModules;
   }
@@ -41,38 +43,11 @@ export class ModuleService {
       const db = await getDb();
       if (db) {
         const doc = await db.collection<ModuleDoc>("modules").findOne({ id: moduleId });
-        if (doc) {
-          return {
-            id: doc.id,
-            title: doc.title,
-            prompt: doc.prompt,
-            difficulty: doc.difficulty,
-            durationSec: doc.durationSec,
-            completed: doc.completed,
-          };
-        }
+        if (doc) return toModule(doc);
       }
     } catch (err) {
-      console.error("[ModuleService.getModuleById Error]", err);
+      console.error("[ModuleService.getModuleById Error]", (err as Error).message);
     }
     return memoryModules.find((m) => m.id === moduleId) ?? null;
-  }
-
-  /**
-   * Mark module as completed
-   */
-  static async markCompleted(moduleId: string): Promise<boolean> {
-    try {
-      const db = await getDb();
-      if (db) {
-        await db
-          .collection<ModuleDoc>("modules")
-          .updateOne({ id: moduleId }, { $set: { completed: true } });
-        return true;
-      }
-    } catch (err) {
-      console.error("[ModuleService.markCompleted Error]", err);
-    }
-    return true;
   }
 }

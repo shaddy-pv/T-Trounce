@@ -8,14 +8,8 @@ on:
 
 jobs:
   validate:
-    name: Typecheck, Lint & Build
+    name: Typecheck, Lint, Test, Audit & Build
     runs-on: ubuntu-latest
-
-    services:
-      mongodb:
-        image: mongo:6.0
-        ports:
-          - 27017:27017
 
     steps:
       - name: Checkout Code
@@ -24,20 +18,31 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: Install Dependencies
         run: npm ci
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Lint
         run: npm run lint
 
-      - name: Automated Tests
+      # Integration tests start their own in-memory MongoDB.
+      - name: Unit & Integration Tests
         run: npm test
+
+      - name: Dependency Audit
+        run: npm audit --audit-level=high
 
       - name: Production Build
         run: npm run build
+
+      # Exercises the built server over HTTP and the PWA in the runner's Chrome.
+      - name: End-to-End Tests
+        run: npm run test:e2e
+
+      - name: Sidecar Syntax Check
+        run: python -m py_compile whisper_sidecar.py

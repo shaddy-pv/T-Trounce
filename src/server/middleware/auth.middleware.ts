@@ -1,66 +1,52 @@
-import { createMiddleware } from "@tanstack/react-start";
+import { createMiddleware, createServerOnlyFn } from "@tanstack/react-start";
 import { getCookie } from "@tanstack/react-start/server";
+import { isAdmin, isFaculty } from "@/lib/roles";
+import { forbidden, unauthorized } from "../errors";
 import { AuthService, type SessionPayload } from "../services/auth.service";
 
 export const COOKIE_NAME = "trounce_session";
 export const LEGACY_COOKIE_NAME = "tarang_session";
 
+/** Reads the session token from the request cookies. */
+export const readSessionCookie = createServerOnlyFn(
+  (): string | undefined => getCookie(COOKIE_NAME) || getCookie(LEGACY_COOKIE_NAME),
+);
+
 /**
- * Middleware: Verifies session cookie and injects authenticated user into context.
- * Throws 401 if unauthenticated.
+ * Verifies the session cookie, confirms the account still exists, and adds the user to context.
  */
 export const authenticatedMiddleware = createMiddleware().server(async ({ next }) => {
-  const token = getCookie(COOKIE_NAME) || getCookie(LEGACY_COOKIE_NAME);
-  if (!token) {
-    throw new Error("Unauthorized: Please sign in to perform this action.");
-  }
+  const token = readSessionCookie();
+  if (!token) throw unauthorized("Please sign in to perform this action.");
 
-  const user = await AuthService.verifySessionToken(token);
-  if (!user) {
-    throw new Error("Unauthorized: Invalid or expired session.");
-  }
+  const user = await AuthService.resolveSession(token);
+  if (!user) throw unauthorized("Your session has expired. Please sign in again.");
 
-  return await next({
-    context: {
-      user,
-    },
-  });
+  return await next({ context: { user } });
 });
 
 /**
- * Middleware: Requires the user to be a Teacher or Admin.
- * Throws 403 if user is a Student.
+ * Requires the user to be a teacher or administrator.
  */
 export const teacherOnlyMiddleware = createMiddleware()
   .middleware([authenticatedMiddleware])
   .server(async ({ next, context }) => {
     const user = (context as { user: SessionPayload }).user;
-    if (user.role !== "teacher" && user.role !== "admin" && !user.isAdmin) {
-      throw new Error("Forbidden: This action requires faculty or administrator permissions.");
+    if (!isFaculty(user)) {
+      throw forbidden("This action requires faculty or administrator permissions.");
     }
-
-    return await next({
-      context: {
-        user,
-      },
-    });
+    return await next({ context: { user } });
   });
 
 /**
- * Middleware: Requires the user to be an Administrator.
- * Throws 403 if user is not an Admin.
+ * Requires the user to be an administrator.
  */
 export const adminOnlyMiddleware = createMiddleware()
   .middleware([authenticatedMiddleware])
   .server(async ({ next, context }) => {
     const user = (context as { user: SessionPayload }).user;
-    if (user.role !== "admin" && !user.isAdmin) {
-      throw new Error("Forbidden: This action requires administrator permissions.");
+    if (!isAdmin(user)) {
+      throw forbidden("This action requires administrator permissions.");
     }
-
-    return await next({
-      context: {
-        user,
-      },
-    });
+    return await next({ context: { user } });
   });

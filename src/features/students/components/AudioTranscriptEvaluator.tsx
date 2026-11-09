@@ -15,6 +15,7 @@ import { Waveform } from "@/components/tarang/Waveform";
 import { saveTeacherFeedbackFn } from "@/server/data";
 import type { AttemptResult } from "@/types";
 import { useLanguage } from "@/lib/i18n";
+import { attemptScore, FILLER_KEYWORDS } from "@/lib/scoring";
 
 export function AudioTranscriptEvaluator({
   attempt,
@@ -41,6 +42,7 @@ export function AudioTranscriptEvaluator({
   const [feedbackText, setFeedbackText] = useState(attempt.teacherFeedback || "");
   const [isSavingFeedback, setIsSavingFeedback] = useState(false);
   const [feedbackSavedToast, setFeedbackSavedToast] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
   // Sync state if attempt changes
   useEffect(() => {
@@ -50,6 +52,7 @@ export function AudioTranscriptEvaluator({
   const handleSaveFeedback = async () => {
     if (!feedbackText.trim() || !attempt.id) return;
     setIsSavingFeedback(true);
+    setFeedbackError(null);
     try {
       await saveTeacherFeedbackFn({
         data: {
@@ -61,6 +64,7 @@ export function AudioTranscriptEvaluator({
       setTimeout(() => setFeedbackSavedToast(false), 3000);
     } catch (err) {
       console.error("Failed to save teacher feedback:", err);
+      setFeedbackError(t("action_failed_retry"));
     } finally {
       setIsSavingFeedback(false);
     }
@@ -125,31 +129,21 @@ export function AudioTranscriptEvaluator({
 
   const handleCopyTranscript = () => {
     if (attempt.transcript) {
-      navigator.clipboard.writeText(attempt.transcript);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      navigator.clipboard
+        .writeText(attempt.transcript)
+        .then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        })
+        .catch(() => {});
     }
   };
 
-  // Split transcript to highlight detected fillers
+  // Split transcript to highlight detected fillers. This is the same list used to count them.
   const transcriptWords = (attempt.transcript || "").split(/(\s+)/);
-  const fillerKeywords = new Set([
-    "um",
-    "uh",
-    "matlab",
-    "like",
-    "actually",
-    "er",
-    "ah",
-    "hmm",
-    "basically",
-    "literally",
-  ]);
+  const fillerKeywords = FILLER_KEYWORDS;
 
-  const overallScore =
-    attempt.targetDurationSec && attempt.targetDurationSec > 0
-      ? Math.min(100, Math.round((attempt.durationSec / attempt.targetDurationSec) * 100))
-      : Math.round((attempt.pronunciation + attempt.vocabulary + attempt.grammar) / 3);
+  const overallScore = attemptScore(attempt);
 
   return (
     <div
@@ -273,8 +267,12 @@ export function AudioTranscriptEvaluator({
 
             {/* Waveform timeline as the sole seekable audio visualizer */}
             {(() => {
-              const effectiveDur = duration && isFinite(duration) && duration > 0 ? duration : attempt.durationSec || 30;
-              const progressFraction = effectiveDur > 0 ? Math.min(1, Math.max(0, currentTime / effectiveDur)) : 0;
+              const effectiveDur =
+                duration && isFinite(duration) && duration > 0
+                  ? duration
+                  : attempt.durationSec || 30;
+              const progressFraction =
+                effectiveDur > 0 ? Math.min(1, Math.max(0, currentTime / effectiveDur)) : 0;
 
               return (
                 <div className="w-full rounded-md p-1.5 bg-ink-900/70 light:bg-slate-100 border border-hairline/60">
@@ -385,6 +383,11 @@ export function AudioTranscriptEvaluator({
               Teacher Feedback
             </span>
           </div>
+          {feedbackError && (
+            <span role="alert" className="text-[11px] font-medium text-[#C1503B]">
+              {feedbackError}
+            </span>
+          )}
           {feedbackSavedToast && (
             <span className="num inline-flex items-center gap-1 text-[11px] font-medium text-[#3FB8AF]">
               <Check size={12} /> Feedback saved to student dashboard
@@ -392,9 +395,7 @@ export function AudioTranscriptEvaluator({
           )}
         </div>
 
-        <p className="mt-1 text-[12px] text-secondary-warm">
-          {t("evaluator_note_prompt")}
-        </p>
+        <p className="mt-1 text-[12px] text-secondary-warm">{t("evaluator_note_prompt")}</p>
 
         {/* Quick Feedback Preset Pills */}
         <div className="mt-2.5 flex flex-wrap gap-1.5">

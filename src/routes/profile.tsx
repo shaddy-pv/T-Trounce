@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, redirect, Link } from "@tanstack/react-router";
+import { createFileRoute, redirect, Link } from "@tanstack/react-router";
 import { StudentShell } from "@/components/tarang/StudentShell";
 import { useUser, clearUser } from "@/lib/auth";
 import { TButton } from "@/components/tarang/Button";
@@ -7,6 +7,7 @@ import { Mic, Settings, FileText, Sun, Globe } from "lucide-react";
 import { ThemeToggle } from "@/components/tarang/ThemeToggle";
 import { LanguageSelector } from "@/components/tarang/LanguageSelector";
 import { useLanguage } from "@/lib/i18n";
+import { InstallProfileCard } from "@/features/pwa/components/InstallApp";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -114,7 +115,6 @@ function AdminFeatureSettingsCard() {
 
 function ProfilePage() {
   const user = useUser();
-  const navigate = useNavigate();
   const { t } = useLanguage();
 
   return (
@@ -143,6 +143,8 @@ function ProfilePage() {
           <p className="num mt-1 text-[12px] text-tertiary-warm">Account Data Synchronized</p>
         </div>
 
+        <InstallProfileCard />
+
         {/* Language Preference Card */}
         <div className="mt-4 rounded-[12px] border border-hairline bg-ink-900 p-5 space-y-3">
           <div>
@@ -150,9 +152,7 @@ function ProfilePage() {
               <Globe size={15} className="text-[#3FB8AF]" />
               {t("lang_pref_title")}
             </p>
-            <p className="text-[12px] text-tertiary-warm mt-0.5">
-              {t("lang_pref_desc")}
-            </p>
+            <p className="text-[12px] text-tertiary-warm mt-0.5">{t("lang_pref_desc")}</p>
           </div>
           <LanguageSelector variant="segmented" className="w-full justify-between" />
         </div>
@@ -164,24 +164,19 @@ function ProfilePage() {
               <Sun size={15} className="text-[#E2A33C]" />
               {t("theme_pref_title")}
             </p>
-            <p className="text-[12px] text-tertiary-warm mt-0.5">
-              {t("theme_pref_desc")}
-            </p>
+            <p className="text-[12px] text-tertiary-warm mt-0.5">{t("theme_pref_desc")}</p>
           </div>
           <ThemeToggle variant="segmented" className="w-full justify-between" />
         </div>
 
-        {/* Master Admin Feature Settings Card (strictly restricted to shadanmd566@gmail.com) */}
-        {user?.email?.toLowerCase() === "shadanmd566@gmail.com" && <AdminFeatureSettingsCard />}
+        {/* System settings are restricted to the master administrator */}
+        {user?.isMasterAdmin && <AdminFeatureSettingsCard />}
 
         <TButton
           variant="secondary"
           size="lg"
           className="mt-8 w-full cursor-pointer"
-          onClick={() => {
-            clearUser();
-            navigate({ to: "/login", replace: true });
-          }}
+          onClick={() => void clearUser()}
         >
           Sign out
         </TButton>

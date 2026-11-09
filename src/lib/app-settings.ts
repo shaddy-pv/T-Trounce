@@ -1,204 +1,128 @@
 import { useState, useEffect, useCallback } from "react";
 import { getAppSettingsFn, updateAppSettingsFn } from "@/server/data";
 
-const STORAGE_KEY = "trounce_live_transcription_enabled";
-const POST_STORAGE_KEY = "trounce_post_transcription_enabled";
 const SETTINGS_EVENT = "trounce_settings_change";
 
-/**
- * Synchronous client reader for instant zero-latency checks (Live STT)
- */
-export function getStoredLiveTranscriptionSetting(): boolean {
-  if (typeof window === "undefined") return false;
+type SettingKey = "liveTranscriptionEnabled" | "postTranscriptionEnabled";
+
+const SETTINGS: Record<SettingKey, { storageKey: string; defaultValue: boolean }> = {
+  liveTranscriptionEnabled: {
+    storageKey: "trounce_live_transcription_enabled",
+    defaultValue: false,
+  },
+  postTranscriptionEnabled: {
+    storageKey: "trounce_post_transcription_enabled",
+    defaultValue: true,
+  },
+};
+
+function readStored(key: SettingKey): boolean {
+  const { storageKey, defaultValue } = SETTINGS[key];
+  if (typeof window === "undefined") return defaultValue;
   try {
-    const item = localStorage.getItem(STORAGE_KEY);
-    // Default is explicitly false (disabled)
-    return item === "true";
+    const item = localStorage.getItem(storageKey);
+    return item === null ? defaultValue : item === "true";
   } catch {
-    return false;
+    return defaultValue;
   }
 }
 
-/**
- * Synchronous client reader for instant zero-latency checks (Post STT)
- */
-export function getStoredPostTranscriptionSetting(): boolean {
-  if (typeof window === "undefined") return true;
-  try {
-    const item = localStorage.getItem(POST_STORAGE_KEY);
-    // Default is true (enabled)
-    return item === null ? true : item === "true";
-  } catch {
-    return true;
-  }
-}
-
-/**
- * Saves setting locally and broadcasts change to all open views
- */
-export function setStoredLiveTranscriptionSetting(enabled: boolean) {
+/** Saves locally and tells every open view about the change. */
+function writeStored(key: SettingKey, enabled: boolean) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY, enabled ? "true" : "false");
-    window.dispatchEvent(
-      new CustomEvent(SETTINGS_EVENT, { detail: { liveTranscriptionEnabled: enabled } }),
-    );
+    localStorage.setItem(SETTINGS[key].storageKey, enabled ? "true" : "false");
+    window.dispatchEvent(new CustomEvent(SETTINGS_EVENT, { detail: { [key]: enabled } }));
   } catch {
-    // ignore storage access errors
+    // Ignore storage access errors
   }
 }
 
-/**
- * Saves post-transcription setting locally and broadcasts change
- */
-export function setStoredPostTranscriptionSetting(enabled: boolean) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(POST_STORAGE_KEY, enabled ? "true" : "false");
-    window.dispatchEvent(
-      new CustomEvent(SETTINGS_EVENT, { detail: { postTranscriptionEnabled: enabled } }),
-    );
-  } catch {
-    // ignore storage access errors
+// Screens often use several of these hooks at once, so they all share one request.
+const REQUEST_REUSE_MS = 30 * 1000;
+let sharedRequest: ReturnType<typeof getAppSettingsFn> | null = null;
+
+function fetchSettingsShared() {
+  if (!sharedRequest) {
+    sharedRequest = getAppSettingsFn();
+    const clear = () => {
+      setTimeout(() => {
+        sharedRequest = null;
+      }, REQUEST_REUSE_MS);
+    };
+    sharedRequest.then(clear, () => {
+      sharedRequest = null;
+    });
   }
+  return sharedRequest;
 }
 
-/**
- * React hook to read and observe live transcription setting
- */
+function useTranscriptionSetting(key: SettingKey) {
+  const [enabled, setEnabled] = useState<boolean>(() => readStored(key));
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchSettingsShared()
+      .then((settings) => {
+        if (!isMounted) return;
+        const value = settings[key] ?? SETTINGS[key].defaultValue;
+        setEnabled(value);
+        writeStored(key, value);
+      })
+      .catch((err) => {
+        console.debug("[useTranscriptionSetting] Initial fetch failed:", err);
+      });
+
+    const handleChange = (e: Event) => {
+      const changed = e instanceof CustomEvent ? e.detail?.[key] : undefined;
+      setEnabled(changed !== undefined ? Boolean(changed) : readStored(key));
+    };
+
+    window.addEventListener(SETTINGS_EVENT, handleChange);
+    window.addEventListener("storage", handleChange);
+    return () => {
+      isMounted = false;
+      window.removeEventListener(SETTINGS_EVENT, handleChange);
+      window.removeEventListener("storage", handleChange);
+    };
+  }, [key]);
+
+  const toggleSetting = useCallback(
+    async (newVal: boolean) => {
+      // Optimistic UI update, reverted if the server rejects it
+      setEnabled(newVal);
+      writeStored(key, newVal);
+      setIsLoading(true);
+
+      try {
+        const res = await updateAppSettingsFn({ data: { [key]: newVal } });
+        sharedRequest = null;
+        const value = res[key] ?? SETTINGS[key].defaultValue;
+        setEnabled(value);
+        writeStored(key, value);
+        return value;
+      } catch (err) {
+        console.warn("[toggleSetting] Server update failed, reverting:", err);
+        setEnabled(!newVal);
+        writeStored(key, !newVal);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [key],
+  );
+
+  return { enabled, isLoading, toggleSetting };
+}
+
+/** Whether interim captions are shown while recording. */
 export function useLiveTranscriptionSetting() {
-  const [enabled, setEnabled] = useState<boolean>(() => getStoredLiveTranscriptionSetting());
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-
-  // Sync from server on mount
-  useEffect(() => {
-    let isMounted = true;
-    getAppSettingsFn()
-      .then((settings) => {
-        if (isMounted) {
-          const val = Boolean(settings.liveTranscriptionEnabled);
-          setEnabled(val);
-          setStoredLiveTranscriptionSetting(val);
-        }
-      })
-      .catch((err) => {
-        console.debug("[useLiveTranscriptionSetting] Initial fetch note:", err);
-      });
-
-    const handleStorageOrCustom = (e: Event) => {
-      if (e instanceof CustomEvent && e.detail && e.detail.liveTranscriptionEnabled !== undefined) {
-        setEnabled(Boolean(e.detail.liveTranscriptionEnabled));
-      } else {
-        setEnabled(getStoredLiveTranscriptionSetting());
-      }
-    };
-
-    window.addEventListener(SETTINGS_EVENT, handleStorageOrCustom);
-    window.addEventListener("storage", handleStorageOrCustom);
-    return () => {
-      isMounted = false;
-      window.removeEventListener(SETTINGS_EVENT, handleStorageOrCustom);
-      window.removeEventListener("storage", handleStorageOrCustom);
-    };
-  }, []);
-
-  const toggleSetting = useCallback(async (newVal: boolean) => {
-    // Optimistic UI update
-    setEnabled(newVal);
-    setStoredLiveTranscriptionSetting(newVal);
-    setIsLoading(true);
-
-    try {
-      const res = await updateAppSettingsFn({
-        data: { liveTranscriptionEnabled: newVal },
-      });
-      setEnabled(Boolean(res.liveTranscriptionEnabled));
-      setStoredLiveTranscriptionSetting(Boolean(res.liveTranscriptionEnabled));
-      return Boolean(res.liveTranscriptionEnabled);
-    } catch (err) {
-      console.warn("[toggleSetting] Server update failed, reverting:", err);
-      // Revert if failed
-      setEnabled(!newVal);
-      setStoredLiveTranscriptionSetting(!newVal);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  return {
-    enabled,
-    isLoading,
-    toggleSetting,
-  };
+  return useTranscriptionSetting("liveTranscriptionEnabled");
 }
 
-/**
- * React hook to read and observe post-recording transcription setting
- */
+/** Whether the full-audio transcription pass runs after recording. */
 export function usePostTranscriptionSetting() {
-  const [enabled, setEnabled] = useState<boolean>(() => getStoredPostTranscriptionSetting());
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-
-  // Sync from server on mount
-  useEffect(() => {
-    let isMounted = true;
-    getAppSettingsFn()
-      .then((settings) => {
-        if (isMounted) {
-          const val = settings.postTranscriptionEnabled ?? true;
-          setEnabled(val);
-          setStoredPostTranscriptionSetting(val);
-        }
-      })
-      .catch((err) => {
-        console.debug("[usePostTranscriptionSetting] Initial fetch note:", err);
-      });
-
-    const handleStorageOrCustom = (e: Event) => {
-      if (e instanceof CustomEvent && e.detail && e.detail.postTranscriptionEnabled !== undefined) {
-        setEnabled(Boolean(e.detail.postTranscriptionEnabled));
-      } else {
-        setEnabled(getStoredPostTranscriptionSetting());
-      }
-    };
-
-    window.addEventListener(SETTINGS_EVENT, handleStorageOrCustom);
-    window.addEventListener("storage", handleStorageOrCustom);
-    return () => {
-      isMounted = false;
-      window.removeEventListener(SETTINGS_EVENT, handleStorageOrCustom);
-      window.removeEventListener("storage", handleStorageOrCustom);
-    };
-  }, []);
-
-  const toggleSetting = useCallback(async (newVal: boolean) => {
-    // Optimistic UI update
-    setEnabled(newVal);
-    setStoredPostTranscriptionSetting(newVal);
-    setIsLoading(true);
-
-    try {
-      const res = await updateAppSettingsFn({
-        data: { postTranscriptionEnabled: newVal },
-      });
-      const val = res.postTranscriptionEnabled ?? true;
-      setEnabled(val);
-      setStoredPostTranscriptionSetting(val);
-      return val;
-    } catch (err) {
-      console.warn("[togglePostSetting] Server update failed, reverting:", err);
-      setEnabled(!newVal);
-      setStoredPostTranscriptionSetting(!newVal);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  return {
-    enabled,
-    isLoading,
-    toggleSetting,
-  };
+  return useTranscriptionSetting("postTranscriptionEnabled");
 }

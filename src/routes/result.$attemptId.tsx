@@ -12,7 +12,6 @@ import {
   Flag,
   X,
   Send,
-  HelpCircle,
   Loader2,
   Pencil,
   Check,
@@ -27,6 +26,8 @@ import { ThemeToggle } from "@/components/tarang/ThemeToggle";
 import { LanguageSelector } from "@/components/tarang/LanguageSelector";
 import { useLanguage } from "@/lib/i18n";
 import { FILLER_KEYWORDS } from "@/features/practice/lib/audio-analyzer";
+import { invalidateClientDataCache } from "@/lib/client-cache";
+import { averageMetrics } from "@/lib/scoring";
 import type { AttemptResult } from "@/types";
 
 export const Route = createFileRoute("/result/$attemptId")({
@@ -50,45 +51,27 @@ export const Route = createFileRoute("/result/$attemptId")({
 });
 
 function ResultPage() {
-  const loaderData = Route.useLoaderData() as { result?: AttemptResult } | undefined;
+  const { result: loadedResult } = Route.useLoaderData();
   const user = useUser();
   const navigate = useNavigate();
   const { t } = useLanguage();
 
-  const initialResult: AttemptResult =
-    loaderData?.result ??
-    ({
-      id: "attempt",
-      prompt: "Speech Practice",
-      durationSec: 45,
-      pronunciation: 75,
-      vocabulary: 70,
-      grammar: 80,
-      fillerCount: 1,
-      pauseCount: 1,
-      feedback: "Good speech articulation.",
-      waveform: [],
-    } as AttemptResult);
-
-  const [result, setResult] = useState<AttemptResult>(initialResult);
+  const [result, setResult] = useState<AttemptResult>(loadedResult);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Sync state if loaderData updates
   useEffect(() => {
-    if (loaderData?.result) {
-      setResult(loaderData.result);
-      if (loaderData.result.durationSec) {
-        setAudioDuration(loaderData.result.durationSec);
-      }
+    setResult(loadedResult);
+    if (loadedResult.durationSec) {
+      setAudioDuration(loadedResult.durationSec);
     }
-  }, [loaderData?.result]);
+  }, [loadedResult]);
 
-  // Real-time poller: if background transcription is still generating transcript, poll until completed
+  // While the background transcription is running, poll until it finishes one way or the other
   useEffect(() => {
-    if (
-      result.transcriptionStatus === "completed" ||
-      (result.transcript && result.transcript.trim().length > 0)
-    )
-      return;
+    const stillWorking =
+      result.transcriptionStatus === "processing" || result.transcriptionStatus === "pending";
+    if (!stillWorking || (result.transcript && result.transcript.trim().length > 0)) return;
 
     let cancelled = false;
     let pollCount = 0;
@@ -101,10 +84,9 @@ function ResultPage() {
       try {
         const fresh = await fetchAttemptByIdFn({ data: result.id });
         if (fresh && !cancelled) {
-          if (
-            fresh.transcriptionStatus === "completed" ||
-            (fresh.transcript && fresh.transcript.trim().length > 0)
-          ) {
+          const finished =
+            fresh.transcriptionStatus === "completed" || fresh.transcriptionStatus === "failed";
+          if (finished || (fresh.transcript && fresh.transcript.trim().length > 0)) {
             setResult(fresh);
             clearInterval(interval);
           }
@@ -187,6 +169,7 @@ function ResultPage() {
     const trimmed = editedTranscript.trim();
     if (!trimmed || isSavingTranscript) return;
     setIsSavingTranscript(true);
+    setActionError(null);
     try {
       const updated = await updateAttemptTranscriptFn({
         data: {
@@ -197,9 +180,11 @@ function ResultPage() {
       setResult(updated);
       setIsEditingTranscript(false);
       setTranscriptSavedNotice(true);
+      invalidateClientDataCache("student-attempts-");
       setTimeout(() => setTranscriptSavedNotice(false), 4000);
     } catch (err) {
       console.error("Failed to update transcript:", err);
+      setActionError(t("action_failed_retry"));
     } finally {
       setIsSavingTranscript(false);
     }
@@ -209,6 +194,7 @@ function ResultPage() {
     e.preventDefault();
     if (flagSubmitting) return;
     setFlagSubmitting(true);
+    setActionError(null);
     try {
       await createFlagFn({
         data: {
@@ -222,6 +208,7 @@ function ResultPage() {
       setFlagModalOpen(false);
     } catch (err) {
       console.error("Failed to flag attempt for teacher review:", err);
+      setActionError(t("action_failed_retry"));
     } finally {
       setFlagSubmitting(false);
     }
@@ -329,9 +316,7 @@ function ResultPage() {
           </div>
           <div className="mt-2 rounded-[10px] bg-[#3FB8AF]/10 border border-[#3FB8AF]/30 p-2.5 flex items-center gap-2">
             <Sparkles size={16} className="text-[#3FB8AF] shrink-0" />
-            <p className="text-[12px] font-medium text-primary-warm">
-              {t("congrats_saved")}
-            </p>
+            <p className="text-[12px] font-medium text-primary-warm">{t("congrats_saved")}</p>
           </div>
           <p className="mt-3 text-[16px] font-medium text-primary-warm leading-snug">
             “{result.prompt}”
@@ -348,14 +333,12 @@ function ResultPage() {
                   <h2 className="display text-[15px] font-semibold text-primary-warm">
                     {t("speaking_score_title")}
                   </h2>
-                  <p className="text-[11px] text-secondary-warm">
-                    {t("speaking_score_sub")}
-                  </p>
+                  <p className="text-[11px] text-secondary-warm">{t("speaking_score_sub")}</p>
                 </div>
               </div>
               <div className="text-right">
                 <span className="display num text-[26px] font-bold text-[#3FB8AF]">
-                  {Math.round(((result.pronunciation || 75) + (result.vocabulary || 70) + (result.grammar || 75)) / 3)}%
+                  {averageMetrics(result)}%
                 </span>
               </div>
             </div>
@@ -364,21 +347,21 @@ function ResultPage() {
               <div className="rounded-[10px] bg-ink-950 p-2.5 border border-hairline">
                 <p className="text-[11px] text-tertiary-warm">{t("score_pronunciation")}</p>
                 <p className="display num text-[19px] font-bold text-primary-warm mt-1">
-                  {result.pronunciation || 75}%
+                  {result.pronunciation ?? 0}%
                 </p>
               </div>
 
               <div className="rounded-[10px] bg-ink-950 p-2.5 border border-hairline">
                 <p className="text-[11px] text-tertiary-warm">{t("score_vocabulary")}</p>
                 <p className="display num text-[19px] font-bold text-primary-warm mt-1">
-                  {result.vocabulary || 70}%
+                  {result.vocabulary ?? 0}%
                 </p>
               </div>
 
               <div className="rounded-[10px] bg-ink-950 p-2.5 border border-hairline">
                 <p className="text-[11px] text-tertiary-warm">{t("score_grammar")}</p>
                 <p className="display num text-[19px] font-bold text-primary-warm mt-1">
-                  {result.grammar || 75}%
+                  {result.grammar ?? 0}%
                 </p>
               </div>
             </div>
@@ -389,13 +372,9 @@ function ResultPage() {
               <div>
                 <span className="font-semibold text-primary-warm">{t("tip_label")} </span>
                 {result.fillerCount > 0 ? (
-                  <span>
-                    {t("tip_filler", { count: result.fillerCount })}
-                  </span>
+                  <span>{t("tip_filler", { count: result.fillerCount })}</span>
                 ) : (
-                  <span>
-                    {t("tip_flow")}
-                  </span>
+                  <span>{t("tip_flow")}</span>
                 )}
               </div>
             </div>
@@ -422,9 +401,7 @@ function ResultPage() {
                   ? audioDuration
                   : result.durationSec || 30;
               const progressFraction =
-                effectiveDur > 0
-                  ? Math.min(1, Math.max(0, audioCurrentTime / effectiveDur))
-                  : 0;
+                effectiveDur > 0 ? Math.min(1, Math.max(0, audioCurrentTime / effectiveDur)) : 0;
 
               return (
                 <div className="mt-3 flex items-center gap-3">
@@ -478,13 +455,21 @@ function ResultPage() {
           </div>
         </section>
 
+        {actionError && (
+          <p role="alert" className="mx-5 mt-4 text-[12px] text-[#C1503B]">
+            {actionError}
+          </p>
+        )}
+
         {/* Spoken Transcript Box */}
         <section className="mt-4 px-5">
           <div className="rounded-[12px] border border-hairline bg-ink-900 p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-secondary-warm">
                 <FileText size={14} className="text-[#3FB8AF]" />
-                <p className="num text-[11px] uppercase tracking-[0.14em]">{t("verbatim_transcript")}</p>
+                <p className="num text-[11px] uppercase tracking-[0.14em]">
+                  {t("verbatim_transcript")}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 {result.transcript && (
@@ -498,8 +483,14 @@ function ResultPage() {
                     }`}
                     title="Listen to full transcript"
                   >
-                    {isSpeakingFull ? <VolumeX size={11} /> : <Volume2 size={11} className="text-[#3FB8AF]" />}
-                    <span>{isSpeakingFull ? t("stop_listen_btn") : t("listen_full_transcript")}</span>
+                    {isSpeakingFull ? (
+                      <VolumeX size={11} />
+                    ) : (
+                      <Volume2 size={11} className="text-[#3FB8AF]" />
+                    )}
+                    <span>
+                      {isSpeakingFull ? t("stop_listen_btn") : t("listen_full_transcript")}
+                    </span>
                   </button>
                 )}
 
@@ -534,9 +525,7 @@ function ResultPage() {
               </div>
             </div>
 
-            <p className="mt-1 text-[11px] text-tertiary-warm">
-              {t("tap_word_tip")}
-            </p>
+            <p className="mt-1 text-[11px] text-tertiary-warm">{t("tap_word_tip")}</p>
 
             {isEditingTranscript ? (
               <div className="mt-2.5 space-y-2.5">
@@ -595,7 +584,9 @@ function ResultPage() {
                           type="button"
                           onClick={() => speakWord(word)}
                           className={`rounded px-1.5 py-0.5 font-semibold text-[#E2A33C] transition cursor-pointer ${
-                            isBeingSpoken ? "bg-[#E2A33C] text-ink-950 ring-2 ring-[#E2A33C]" : "bg-[#E2A33C]/25 hover:bg-[#E2A33C]/40"
+                            isBeingSpoken
+                              ? "bg-[#E2A33C] text-ink-950 ring-2 ring-[#E2A33C]"
+                              : "bg-[#E2A33C]/25 hover:bg-[#E2A33C]/40"
                           }`}
                           title="Click to hear pronunciation"
                         >
@@ -610,7 +601,9 @@ function ResultPage() {
                           type="button"
                           onClick={() => speakWord(word)}
                           className={`transition px-0.5 rounded cursor-pointer ${
-                            isBeingSpoken ? "bg-[#3FB8AF] text-ink-950 font-bold" : "hover:text-[#3FB8AF] hover:underline"
+                            isBeingSpoken
+                              ? "bg-[#3FB8AF] text-ink-950 font-bold"
+                              : "hover:text-[#3FB8AF] hover:underline"
                           }`}
                           title="Click to hear pronunciation"
                         >
@@ -625,14 +618,12 @@ function ResultPage() {
                     {result.transcriptionStatus === "processing" ? (
                       <>
                         <Loader2 size={13} className="animate-spin text-[#3FB8AF]" />
-                        <span className="italic">
-                          {t("generating_transcript_banner")}
-                        </span>
+                        <span className="italic">{t("generating_transcript_banner")}</span>
                       </>
+                    ) : result.transcriptionStatus === "failed" ? (
+                      <span className="text-tertiary-warm">{t("transcript_failed_banner")}</span>
                     ) : (
-                      <span className="text-tertiary-warm">
-                        {t("no_audio_detected_banner")}
-                      </span>
+                      <span className="text-tertiary-warm">{t("no_audio_detected_banner")}</span>
                     )}
                   </div>
                 )}

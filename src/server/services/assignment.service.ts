@@ -1,5 +1,10 @@
-import { getDb } from "../db/client";
-import type { AssignmentDoc, SessionSeason, BatchTime } from "../db/schemas";
+import { randomUUID } from "crypto";
+import type { Filter } from "mongodb";
+import { attemptScore } from "@/lib/scoring";
+import { getDb, requireDb } from "../db/client";
+import type { AssignmentDoc, AttemptDoc, SessionSeason, BatchTime, UserDoc } from "../db/schemas";
+import { MessageService } from "./message.service";
+import { StorageService } from "./storage.service";
 import { StudentService } from "./student.service";
 
 export interface AssignmentPublic {
@@ -31,6 +36,41 @@ export interface CreateAssignmentInput {
   dueDate?: string;
 }
 
+function toPublic(doc: AssignmentDoc): AssignmentPublic {
+  return {
+    id: doc.id,
+    title: doc.title,
+    instructions: doc.instructions,
+    prompt: doc.prompt,
+    difficulty: doc.difficulty,
+    durationSec: doc.durationSec,
+    targetSession: doc.targetSession,
+    targetBatch: doc.targetBatch,
+    batchId: doc.batchId,
+    teacherId: doc.teacherId,
+    teacherName: doc.teacherName,
+    dueDate: doc.dueDate,
+    createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
+  };
+}
+
+function toSubmission(
+  att: AttemptDoc,
+  student: { id: string; name: string; phone?: string },
+): AssignmentSubmissionItem {
+  return {
+    studentId: student.id,
+    studentName: student.name,
+    phone: student.phone,
+    scorePct: attemptScore(att),
+    submittedAt: att.createdAt ? new Date(att.createdAt).toISOString() : new Date().toISOString(),
+    audioUrl: att.audioUrl,
+    transcript: att.transcript,
+    attemptId: att.id,
+    durationSec: att.durationSec,
+  };
+}
+
 export class AssignmentService {
   /**
    * List assignments filtered by batch or session/batch
@@ -40,10 +80,9 @@ export class AssignmentService {
     session?: SessionSeason;
     batch?: BatchTime;
   }): Promise<AssignmentPublic[]> {
-    const db = await getDb();
-    if (!db) return [];
+    const db = await requireDb();
 
-    const query: import("mongodb").Filter<AssignmentDoc> = {};
+    const query: Filter<AssignmentDoc> = {};
     if (filter?.batchId) {
       query.batchId = filter.batchId;
     } else {
@@ -57,35 +96,17 @@ export class AssignmentService {
       .sort({ createdAt: -1 })
       .toArray();
 
-    return docs.map((d) => ({
-      id: d.id,
-      title: d.title,
-      instructions: d.instructions,
-      prompt: d.prompt,
-      difficulty: d.difficulty,
-      durationSec: d.durationSec,
-      targetSession: d.targetSession,
-      targetBatch: d.targetBatch,
-      batchId: d.batchId,
-      teacherId: d.teacherId,
-      teacherName: d.teacherName,
-      dueDate: d.dueDate,
-      createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
-    }));
+    return docs.map(toPublic);
   }
 
   /**
    * Create a new homework assignment targeted to a specific session and batch
    */
   static async createAssignment(input: CreateAssignmentInput): Promise<AssignmentPublic> {
-    const db = await getDb();
-    if (!db) throw new Error("Database not connected");
-
-    const batchId = `${input.targetSession}-${input.targetBatch}`;
-    const id = `hw-${Date.now()}`;
+    const db = await requireDb();
 
     const newDoc: AssignmentDoc = {
-      id,
+      id: `hw-${Date.now()}-${randomUUID().slice(0, 6)}`,
       title: input.title.trim(),
       instructions: input.instructions.trim(),
       prompt: input.prompt.trim(),
@@ -93,7 +114,7 @@ export class AssignmentService {
       durationSec: input.durationSec,
       targetSession: input.targetSession,
       targetBatch: input.targetBatch,
-      batchId,
+      batchId: `${input.targetSession}-${input.targetBatch}`,
       teacherId: input.teacherId,
       teacherName: input.teacherName,
       dueDate: input.dueDate,
@@ -101,22 +122,7 @@ export class AssignmentService {
     };
 
     await db.collection<AssignmentDoc>("assignments").insertOne(newDoc);
-
-    return {
-      id: newDoc.id,
-      title: newDoc.title,
-      instructions: newDoc.instructions,
-      prompt: newDoc.prompt,
-      difficulty: newDoc.difficulty,
-      durationSec: newDoc.durationSec,
-      targetSession: newDoc.targetSession,
-      targetBatch: newDoc.targetBatch,
-      batchId: newDoc.batchId,
-      teacherId: newDoc.teacherId,
-      teacherName: newDoc.teacherName,
-      dueDate: newDoc.dueDate,
-      createdAt: newDoc.createdAt.toISOString(),
-    };
+    return toPublic(newDoc);
   }
 
   /**
@@ -127,34 +133,28 @@ export class AssignmentService {
     if (!db) return null;
 
     const doc = await db.collection<AssignmentDoc>("assignments").findOne({ id });
-    if (!doc) return null;
-
-    return {
-      id: doc.id,
-      title: doc.title,
-      instructions: doc.instructions,
-      prompt: doc.prompt,
-      difficulty: doc.difficulty,
-      durationSec: doc.durationSec,
-      targetSession: doc.targetSession,
-      targetBatch: doc.targetBatch,
-      batchId: doc.batchId,
-      teacherId: doc.teacherId,
-      teacherName: doc.teacherName,
-      dueDate: doc.dueDate,
-      createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
-    };
+    return doc ? toPublic(doc) : null;
   }
 
   /**
-   * Delete an assignment by ID and cascade delete attempts
+   * Delete an assignment along with the attempts submitted for it and their audio recordings
    */
   static async deleteAssignment(id: string): Promise<boolean> {
-    const db = await getDb();
-    if (!db) throw new Error("Database not connected");
+    const db = await requireDb();
+    const attempts = db.collection<AttemptDoc>("attempts");
+
+    const withAudio = await attempts
+      .find({ assignmentId: id, audioId: { $exists: true } }, { projection: { audioId: 1 } })
+      .toArray();
 
     await db.collection<AssignmentDoc>("assignments").deleteOne({ id });
-    await db.collection("attempts").deleteMany({ assignmentId: id });
+    await attempts.deleteMany({ assignmentId: id });
+
+    await Promise.all(
+      withAudio.map((attempt) =>
+        attempt.audioId ? StorageService.deleteAudio(attempt.audioId) : undefined,
+      ),
+    );
     return true;
   }
 
@@ -165,60 +165,36 @@ export class AssignmentService {
     const assignment = await this.getAssignmentById(id);
     if (!assignment) return null;
 
-    const db = await getDb();
-    if (!db) return null;
+    const db = await requireDb();
 
-    // 1. Fetch cohort students
-    let cohortStudents = await StudentService.getRoster({
+    const cohortStudents = await StudentService.getRoster({
       session: assignment.targetSession,
       batch: assignment.targetBatch,
     });
 
-    // If cohort has no students, fallback to full roster so demo/dev data is always available
-    if (cohortStudents.length === 0) {
-      cohortStudents = await StudentService.getRoster();
-    }
-
-    // 2. Fetch attempts for this assignment
     const attempts = await db
-      .collection<import("../db/schemas").AttemptDoc>("attempts")
+      .collection<AttemptDoc>("attempts")
       .find({ assignmentId: id })
+      .project<AttemptDoc>({ waveform: 0 })
       .sort({ createdAt: -1 })
       .toArray();
 
-    // Map attempts by studentId
-    const attemptByStudent = new Map<string, import("../db/schemas").AttemptDoc>();
+    // Attempts are sorted newest first, so the first one seen for a student is their latest.
+    const latestByStudent = new Map<string, AttemptDoc>();
     for (const att of attempts) {
-      const sid = att.studentId;
-      if (sid && !attemptByStudent.has(sid)) {
-        attemptByStudent.set(sid, att);
+      if (att.studentId && !latestByStudent.has(att.studentId)) {
+        latestByStudent.set(att.studentId, att);
       }
     }
 
     const completed: AssignmentSubmissionItem[] = [];
     const pending: AssignmentPendingItem[] = [];
-    const seenStudentIds = new Set<string>();
 
     for (const student of cohortStudents) {
-      seenStudentIds.add(student.id);
-      const att = attemptByStudent.get(student.id);
+      const att = latestByStudent.get(student.id);
       if (att) {
-        completed.push({
-          studentId: student.id,
-          studentName: student.name,
-          phone: student.phone,
-          scorePct:
-            att.targetDurationSec && att.targetDurationSec > 0
-              ? Math.min(100, Math.round((att.durationSec / att.targetDurationSec) * 100))
-              : Math.round(
-                  ((att.pronunciation ?? 75) + (att.vocabulary ?? 75) + (att.grammar ?? 75)) / 3,
-                ),
-          submittedAt: att.createdAt ? new Date(att.createdAt).toISOString() : new Date().toISOString(),
-          audioUrl: att.audioUrl,
-          transcript: att.transcript,
-          attemptId: att.id,
-          durationSec: att.durationSec,
-        });
+        completed.push(toSubmission(att, student));
+        latestByStudent.delete(student.id);
       } else {
         pending.push({
           studentId: student.id,
@@ -230,72 +206,66 @@ export class AssignmentService {
       }
     }
 
-    // Include any attempts by students not in current filtered cohort list
-    for (const att of attempts) {
-      if (!seenStudentIds.has(att.studentId)) {
-        seenStudentIds.add(att.studentId);
-        completed.push({
-          studentId: att.studentId,
-          studentName: att.studentName || "Student",
-          scorePct:
-            att.targetDurationSec && att.targetDurationSec > 0
-              ? Math.min(100, Math.round((att.durationSec / att.targetDurationSec) * 100))
-              : Math.round(
-                  ((att.pronunciation ?? 75) + (att.vocabulary ?? 75) + (att.grammar ?? 75)) / 3,
-                ),
-          submittedAt: att.createdAt ? new Date(att.createdAt).toISOString() : new Date().toISOString(),
-          audioUrl: att.audioUrl,
-          transcript: att.transcript,
-          attemptId: att.id,
-          durationSec: att.durationSec,
-        });
+    // Submissions from students outside the target batch, such as those who changed batch.
+    if (latestByStudent.size > 0) {
+      const otherIds = [...latestByStudent.keys()];
+      const users = await db
+        .collection<UserDoc>("users")
+        .find({ id: { $in: otherIds } }, { projection: { id: 1, name: 1, phone: 1 } })
+        .toArray();
+      const usersById = new Map(users.map((u) => [u.id, u]));
+
+      for (const [studentId, att] of latestByStudent) {
+        const user = usersById.get(studentId);
+        completed.push(
+          toSubmission(att, { id: studentId, name: user?.name ?? "Student", phone: user?.phone }),
+        );
       }
     }
 
     const totalStudents = completed.length + pending.length;
-    const completedCount = completed.length;
-    const pendingCount = pending.length;
-    const submissionRate =
-      totalStudents > 0 ? Math.round((completedCount / totalStudents) * 100) : 0;
-
     return {
       assignment,
       completed,
       pending,
       totalStudents,
-      completedCount,
-      pendingCount,
-      submissionRate,
+      completedCount: completed.length,
+      pendingCount: pending.length,
+      submissionRate: totalStudents > 0 ? Math.round((completed.length / totalStudents) * 100) : 0,
     };
   }
 
   /**
-   * Record and broadcast reminder for an assignment
+   * Delivers a homework reminder to a student's in-app inbox, or to every student who has not yet
+   * submitted. Students see these on their practice screen.
    */
   static async sendReminder(input: {
     assignmentId: string;
     studentId?: string;
     channel?: "whatsapp" | "in-app" | "both";
-  }): Promise<{ success: boolean; message: string; timestamp: string }> {
-    const db = await getDb();
-    if (db) {
-      const assignment = await this.getAssignmentById(input.assignmentId);
-      const title = assignment ? assignment.title : "Speaking Homework";
-      await db.collection("notifications").insertOne({
-        id: `notif-${Date.now()}`,
-        assignmentId: input.assignmentId,
-        studentId: input.studentId || "all-pending",
-        message: `Reminder: Please submit speech homework "${title}"`,
-        channel: input.channel || "both",
-        createdAt: new Date(),
-        status: "delivered",
-      });
-    }
+    teacherId: string;
+    teacherName: string;
+  }): Promise<{ success: boolean; message: string; delivered: number; timestamp: string }> {
+    const submissions = await this.getAssignmentSubmissions(input.assignmentId);
+    const title = submissions?.assignment.title ?? "Speaking Homework";
+
+    const recipients = input.studentId
+      ? [input.studentId]
+      : (submissions?.pending ?? []).map((student) => student.studentId);
+
+    const delivered = await MessageService.sendToMany(recipients, {
+      teacherId: input.teacherId,
+      teacherName: input.teacherName,
+      content: `Reminder: Please submit your speaking homework "${title}".`,
+      senderRole: "teacher",
+    });
+
     return {
       success: true,
+      delivered,
       message: input.studentId
-        ? "Reminder sent to student successfully."
-        : "Broadcast reminder sent to all pending students.",
+        ? "Reminder sent to the student's inbox."
+        : `Reminder sent to ${delivered} pending student${delivered === 1 ? "" : "s"}.`,
       timestamp: new Date().toISOString(),
     };
   }

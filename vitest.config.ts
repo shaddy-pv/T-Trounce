@@ -1,12 +1,16 @@
 import { defineConfig } from "vitest/config";
-import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
-  plugins: [tsconfigPaths()],
+  resolve: { tsconfigPaths: true },
   test: {
     environment: "node",
     globals: true,
-    testTimeout: 15000,
-    hookTimeout: 15000,
+    include: ["src/**/*.test.{ts,tsx}"],
+    testTimeout: 30000,
+    hookTimeout: 60000,
+    // Starts a real, in-memory MongoDB. Tests can never touch a database from .env.
+    globalSetup: ["./tests/vitest-global-setup.ts"],
+    // Test files share that database, so they run one at a time.
+    fileParallelism: false,
   },
 });

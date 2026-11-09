@@ -1,439 +1,364 @@
-import { getDb } from "../db/client";
-import type { AttemptDoc, StudentDoc, ModuleDoc, UserDoc } from "../db/schemas";
+import { randomUUID } from "crypto";
+import type { Db } from "mongodb";
+import { attemptScore, countFillerWords, weakestMetric } from "@/lib/scoring";
 import type { AttemptResult, SaveAttemptPayload } from "@/types";
-import { makeSampleWaveform } from "@/components/tarang/Waveform";
-import { StorageService } from "./storage.service";
-import { TranscriptionService } from "./transcription.service";
+import { requireDb } from "../db/client";
+import type { AssignmentDoc, AttemptDoc, ModuleDoc, StudentDoc, UserDoc } from "../db/schemas";
+import { AppError, forbidden, notFound } from "../errors";
+import { toAttemptResult } from "./attempt.mapper";
 import { SettingsService } from "./settings.service";
+import { StorageService } from "./storage.service";
 import { invalidateRosterCache } from "./student.service";
+import { TranscriptionService } from "./transcription.service";
+
+const LOW_SCORE_THRESHOLD = 50;
+const SEVERE_DROP_THRESHOLD = -10;
+const MAX_ATTEMPTS_RETURNED = 500;
+
+/**
+ * The target length comes from the module or assignment on the server. Trusting the client would
+ * let anyone claim a 100% completion score by sending a tiny target.
+ */
+async function resolveTargetDuration(
+  db: Db,
+  payload: SaveAttemptPayload,
+  assignmentId: string | undefined,
+): Promise<number | undefined> {
+  if (assignmentId) {
+    const assignment = await db
+      .collection<AssignmentDoc>("assignments")
+      .findOne({ id: assignmentId }, { projection: { durationSec: 1 } });
+    if (assignment?.durationSec) return assignment.durationSec;
+  } else if (payload.moduleId) {
+    const module = await db
+      .collection<ModuleDoc>("modules")
+      .findOne({ id: payload.moduleId }, { projection: { durationSec: 1 } });
+    if (module?.durationSec) return module.durationSec;
+  }
+  return payload.result.targetDurationSec;
+}
+
+/**
+ * Updates the roster summary and creates a low-score flag. Failures are logged and do not fail the
+ * save, because by this point the student's recording is already safely stored.
+ */
+async function updateStudentSummary(db: Db, attempt: AttemptDoc): Promise<void> {
+  const score = attemptScore(attempt);
+  const focus = weakestMetric(attempt);
+
+  const previous = await db.collection<AttemptDoc>("attempts").findOne(
+    { studentId: attempt.studentId, id: { $ne: attempt.id } },
+    {
+      sort: { createdAt: -1 },
+      projection: {
+        durationSec: 1,
+        targetDurationSec: 1,
+        pronunciation: 1,
+        vocabulary: 1,
+        grammar: 1,
+      },
+    },
+  );
+  const trendPct = previous ? score - attemptScore(previous) : 0;
+
+  const user = await db
+    .collection<UserDoc>("users")
+    .findOne(
+      { $or: [{ id: attempt.studentId }, { email: attempt.studentId.toLowerCase() }] },
+      { projection: { name: 1, email: 1, sessionSeason: 1, batchTime: 1 } },
+    );
+
+  const isLowScore = score < LOW_SCORE_THRESHOLD;
+
+  if (isLowScore) {
+    const openFlag = await db
+      .collection("flags")
+      .findOne(
+        { studentId: attempt.studentId, type: "low_score", status: "pending" },
+        { projection: { _id: 1 } },
+      );
+    if (!openFlag) {
+      await db.collection("flags").insertOne({
+        id: `flag-${Date.now()}-${randomUUID().slice(0, 6)}`,
+        studentId: attempt.studentId,
+        studentName: user?.name ?? attempt.studentId,
+        studentEmail: user?.email,
+        attemptId: attempt.id,
+        attemptPrompt: attempt.prompt,
+        attemptDurationSec: attempt.durationSec,
+        audioUrl: attempt.audioUrl,
+        type: "low_score",
+        category: "Low Fluency Score",
+        studentNote: `Automated alert: Scored ${score}% on "${attempt.prompt?.substring(0, 40)}"`,
+        status: "pending",
+        scorePct: score,
+        createdAt: new Date(),
+      });
+    }
+  }
+
+  const flagReason = isLowScore
+    ? `${focus} ${score}% · Low Score`
+    : trendPct <= SEVERE_DROP_THRESHOLD
+      ? `Score down ${Math.abs(trendPct)}%`
+      : undefined;
+
+  const sessionSeason = user?.sessionSeason || "summer";
+  const batchTime = user?.batchTime || "morning";
+
+  // A single upsert avoids a race between checking for the document and inserting it.
+  await db.collection<StudentDoc>("students").updateOne(
+    { id: attempt.studentId },
+    {
+      $set: {
+        name: user?.name ?? attempt.studentId,
+        lastActive: "Today",
+        scorePct: score,
+        trendPct,
+        focus,
+        waveform: attempt.waveform,
+        updatedAt: new Date(),
+        ...(isLowScore ? { status: "flagged" as const } : {}),
+        ...(flagReason ? { flagReason } : {}),
+      },
+      ...(flagReason ? {} : { $unset: { flagReason: "" } }),
+      $setOnInsert: {
+        sessionSeason,
+        batchTime,
+        batchId: `${sessionSeason}-${batchTime}`,
+        ...(isLowScore ? {} : { status: "on-track" as const }),
+      },
+    },
+    { upsert: true },
+  );
+
+  invalidateRosterCache();
+}
+
+/**
+ * Runs the full-audio transcription pass. A student's own correction is never overwritten, and a
+ * pass that produces nothing is recorded as failed instead of being reported as complete.
+ */
+async function runBackgroundTranscription(
+  db: Db,
+  attemptId: string,
+  audioId: string,
+  mimeType: string,
+  prompt: string,
+  isOnlyTranscript: boolean,
+): Promise<void> {
+  const attempts = db.collection<AttemptDoc>("attempts");
+  let transcribed = false;
+
+  try {
+    const audio = await StorageService.getAudioBuffer(audioId);
+    if (audio && audio.buffer.length > 2000) {
+      const result = await TranscriptionService.transcribeAudio(
+        audio.buffer,
+        mimeType || audio.mimeType,
+        prompt,
+      );
+      const text = result.transcript?.trim();
+      if (text) {
+        await attempts.updateOne(
+          { id: attemptId, manuallyEdited: { $ne: true } },
+          {
+            $set: {
+              transcript: text,
+              fillerCount: result.fillerCount,
+              pauseCount: result.pauseCount,
+              transcriptionStatus: "completed",
+            },
+          },
+        );
+        transcribed = true;
+      }
+    }
+  } catch (err) {
+    console.warn("[AttemptService] Background transcription failed:", (err as Error).message);
+  } finally {
+    if (!transcribed && isOnlyTranscript) {
+      await attempts
+        .updateOne(
+          { id: attemptId, transcriptionStatus: "processing" },
+          { $set: { transcriptionStatus: "failed" } },
+        )
+        .catch(() => {});
+    }
+  }
+}
 
 export class AttemptService {
   /**
    * Fetch attempts for a given student with audio playback and transcripts
    */
   static async getStudentAttempts(studentId: string): Promise<AttemptResult[]> {
-    try {
-      const db = await getDb();
-      if (db) {
-        // Also support finding attempts if studentId was passed as email or username
-        let searchId = studentId;
-        const user = await db.collection<UserDoc>("users").findOne({
-          $or: [
-            { id: studentId },
-            { email: studentId.toLowerCase() },
-            { username: studentId.toLowerCase() },
-          ],
-        });
-        if (user) {
-          searchId = user.id;
-        }
+    const db = await requireDb();
 
-        const docs = await db
-          .collection<AttemptDoc>("attempts")
-          .find({ $or: [{ studentId }, { studentId: searchId }] })
-          .sort({ createdAt: -1 })
-          .toArray();
+    // Older records may have stored the student's email in place of their ID.
+    const user = await db.collection<UserDoc>("users").findOne(
+      {
+        $or: [
+          { id: studentId },
+          { email: studentId.toLowerCase() },
+          { username: studentId.toLowerCase() },
+        ],
+      },
+      { projection: { id: 1, email: 1 } },
+    );
+    const ids = [...new Set([studentId, user?.id, user?.email].filter(Boolean) as string[])];
 
-        return docs.map((doc) => ({
-          id: doc.id,
-          studentId: doc.studentId,
-          moduleId: doc.moduleId,
-          assignmentId: doc.assignmentId,
-          assignmentTitle: doc.assignmentTitle,
-          prompt: doc.prompt,
-          transcript: doc.transcript || "",
-          audioId: doc.audioId,
-          audioUrl: doc.audioUrl,
-          audioMimeType: doc.audioMimeType,
-          audioSize: doc.audioSize,
-          transcriptionStatus: doc.transcriptionStatus || "completed",
-          durationSec: doc.durationSec,
-          targetDurationSec: doc.targetDurationSec,
-          pronunciation: doc.pronunciation,
-          vocabulary: doc.vocabulary,
-          grammar: doc.grammar,
-          fillerCount: doc.fillerCount,
-          pauseCount: doc.pauseCount,
-          feedback: doc.feedback,
-          teacherFeedback: doc.teacherFeedback,
-          isFlagged: doc.isFlagged,
-          flagReason: doc.flagReason,
-          flagStatus: doc.flagStatus,
-          waveform: doc.waveform,
-          createdAt: doc.createdAt
-            ? new Date(doc.createdAt).toISOString()
-            : new Date().toISOString(),
-        }));
-      }
-    } catch (err) {
-      console.error("[AttemptService.getStudentAttempts Error]", err);
-    }
-    return [];
+    const docs = await db
+      .collection<AttemptDoc>("attempts")
+      .find({ studentId: { $in: ids } })
+      .sort({ createdAt: -1 })
+      .limit(MAX_ATTEMPTS_RETURNED)
+      .toArray();
+
+    return docs.map(toAttemptResult);
   }
 
   /**
-   * Save student practice/homework attempt, store audio persistently, and generate transcript
+   * Stores the recording, then saves the attempt. Any failure is reported to the caller, so the
+   * client can keep the recording and offer a retry. The same attempt ID may be sent again safely:
+   * if the first try succeeded but its response was lost, the existing attempt is returned.
    */
   static async saveAttempt(
     payload: SaveAttemptPayload,
   ): Promise<{ success: boolean; id: string; audioUrl?: string }> {
-    try {
-      const db = await getDb();
-      if (db) {
-        let finalAudioUrl = payload.result.audioUrl;
-        let audioId = payload.result.audioId;
-        let audioMimeType = payload.result.audioMimeType || "audio/webm";
-        let audioSize = payload.result.audioSize || 0;
-        const transcript = payload.result.transcript?.trim() || "";
-        const fillerCount = payload.result.fillerCount ?? 0;
-        const pauseCount = payload.result.pauseCount ?? 0;
-        let transcriptionStatus: "pending" | "processing" | "completed" | "failed" = "completed";
+    const db = await requireDb();
+    const attempts = db.collection<AttemptDoc>("attempts");
+    const attemptId = payload.result.id;
 
-        // 1. If audio is provided as Base64 Data URI or binary string, store in GridFS / disk
-        if (
-          payload.result.audioUrl &&
-          (payload.result.audioUrl.startsWith("data:") || payload.result.audioUrl.length > 200)
-        ) {
-          try {
-            console.log(
-              `[AttemptService] Persisting audio recording for student ${payload.studentId}...`,
-            );
-            const stored = await StorageService.saveAudio(
-              payload.result.audioUrl,
-              `student-${payload.studentId}-${Date.now()}.webm`,
-              audioMimeType,
-            );
-            audioId = stored.audioId;
-            finalAudioUrl = stored.url;
-            audioMimeType = stored.mimeType;
-            audioSize = stored.size;
-            console.log(
-              `[AttemptService] Audio stored successfully at permanent URL: ${finalAudioUrl} (${audioSize} bytes)`,
-            );
-
-            // 2. Full-Audio Server-side Transcription & Diagnostic Pipeline
-            // If client already provided a transcript, mark completed immediately; otherwise process in background
-            transcriptionStatus = transcript.length > 0 ? "completed" : "processing";
-            const capturedAttemptId = payload.result.id;
-            const promptContext = payload.result.prompt;
-            const currentAudioId = audioId;
-            const currentMime = audioMimeType;
-
-            void (async () => {
-              try {
-                const settings = await SettingsService.getSettings();
-                if (settings.postTranscriptionEnabled === false) {
-                  console.log(
-                    `[AttemptService] Post-recording transcription disabled globally — skipping full-audio pass for attempt ${capturedAttemptId}.`,
-                  );
-                  return;
-                }
-
-                if (currentAudioId) {
-                  const audioBufferRes = await StorageService.getAudioBuffer(currentAudioId);
-                  if (audioBufferRes && audioBufferRes.buffer.length > 2000) {
-                    console.log(
-                      `[AttemptService] Full-audio transcribing for attempt ${capturedAttemptId}...`,
-                    );
-                    const transRes = await TranscriptionService.transcribeAudio(
-                      audioBufferRes.buffer,
-                      currentMime || audioBufferRes.mimeType,
-                      promptContext,
-                    );
-                    if (transRes.transcript && transRes.transcript.trim().length > 0) {
-                      const fullText = transRes.transcript.trim();
-                      const bgDb = await getDb();
-                      if (bgDb) {
-                        await bgDb.collection<AttemptDoc>("attempts").updateOne(
-                          { id: capturedAttemptId },
-                          {
-                            $set: {
-                              transcript: fullText,
-                              fillerCount: transRes.fillerCount,
-                              pauseCount: transRes.pauseCount,
-                              transcriptionStatus: "completed",
-                              updatedAt: new Date(),
-                            },
-                          },
-                        );
-                        console.log(
-                          `[AttemptService] Full-audio transcript saved for attempt ${capturedAttemptId}: "${fullText.slice(0, 80)}..."`,
-                        );
-                      }
-                    }
-                  }
-                }
-              } catch (bgErr) {
-                console.warn("[AttemptService] Background transcription note:", bgErr);
-              } finally {
-                // Ensure transcriptionStatus is never left stuck in 'processing'
-                try {
-                  const bgDb = await getDb();
-                  if (bgDb) {
-                    await bgDb
-                      .collection<AttemptDoc>("attempts")
-                      .updateOne(
-                        { id: capturedAttemptId, transcriptionStatus: "processing" },
-                        { $set: { transcriptionStatus: "completed", updatedAt: new Date() } },
-                      );
-                  }
-                } catch {
-                  /* ignore cleanup update error */
-                }
-              }
-            })();
-          } catch (storageErr) {
-            console.error("[AttemptService] Audio persistence failed, falling back:", storageErr);
-          }
-        }
-
-        const attemptDoc: AttemptDoc = {
-          id: payload.result.id,
-          studentId: payload.studentId,
-          moduleId: payload.moduleId,
-          assignmentId: payload.assignmentId || payload.result.assignmentId,
-          assignmentTitle: payload.result.assignmentTitle,
-          prompt: payload.result.prompt,
-          transcript: transcript || "",
-          audioId,
-          audioUrl: finalAudioUrl,
-          audioMimeType,
-          audioSize,
-          transcriptionStatus,
-          durationSec: payload.result.durationSec,
-          targetDurationSec: payload.result.targetDurationSec,
-          pronunciation: payload.result.pronunciation,
-          vocabulary: payload.result.vocabulary,
-          grammar: payload.result.grammar,
-          fillerCount,
-          pauseCount,
-          feedback: payload.result.feedback,
-          waveform: payload.result.waveform,
-          createdAt: new Date(),
-        };
-
-        await db.collection<AttemptDoc>("attempts").insertOne(attemptDoc);
-
-        // Compute completion percentage score based on recorded duration vs target duration (same as student dashboard)
-        const avgScore =
-          payload.result.targetDurationSec && payload.result.targetDurationSec > 0
-            ? Math.min(
-                100,
-                Math.round((payload.result.durationSec / payload.result.targetDurationSec) * 100),
-              )
-            : Math.round(
-                (payload.result.pronunciation +
-                  payload.result.vocabulary +
-                  payload.result.grammar) /
-                  3,
-              );
-
-        // Derive the weakest metric to show as "focus" area for the teacher
-        const { pronunciation, vocabulary, grammar } = payload.result;
-        let focus = "General";
-        const minScore = Math.min(pronunciation, vocabulary, grammar);
-        if (minScore === pronunciation) focus = "Pronunciation";
-        else if (minScore === vocabulary) focus = "Vocabulary";
-        else focus = "Grammar";
-
-        // Compute trendPct from previous attempt's completion score (if one exists)
-        const prevAttempt = await db
-          .collection<AttemptDoc>("attempts")
-          .findOne(
-            { studentId: payload.studentId, id: { $ne: payload.result.id } },
-            { sort: { createdAt: -1 } },
-          );
-        let prevScore = avgScore;
-        if (prevAttempt) {
-          if (prevAttempt.targetDurationSec && prevAttempt.targetDurationSec > 0) {
-            prevScore = Math.min(
-              100,
-              Math.round((prevAttempt.durationSec / prevAttempt.targetDurationSec) * 100),
-            );
-          } else {
-            prevScore = Math.round(
-              ((prevAttempt.pronunciation ?? 70) +
-                (prevAttempt.vocabulary ?? 70) +
-                (prevAttempt.grammar ?? 70)) /
-                3,
-            );
-          }
-        }
-        const trendPct = avgScore - prevScore;
-
-        // Check if student doc exists in students collection; if not, sync from users collection
-        const studentExists = await db
-          .collection<StudentDoc>("students")
-          .findOne({ id: payload.studentId });
-
-        const userDoc = await db.collection<UserDoc>("users").findOne({
-          $or: [{ id: payload.studentId }, { email: payload.studentId.toLowerCase() }],
-        });
-        const studentName = userDoc ? userDoc.name : studentExists?.name || payload.studentId;
-
-        // Auto-create performance flag if score is critically low (< 50%)
-        if (avgScore < 50) {
-          const existingOpenFlag = await db.collection("flags").findOne({
-            studentId: payload.studentId,
-            type: "low_score",
-            status: "pending",
-          });
-          if (!existingOpenFlag) {
-            const { randomUUID } = await import("crypto");
-            await db.collection("flags").insertOne({
-              id: `flag-${Date.now()}-${randomUUID().slice(0, 6)}`,
-              studentId: payload.studentId,
-              studentName,
-              studentEmail: userDoc?.email,
-              attemptId: payload.result.id,
-              attemptPrompt: payload.result.prompt,
-              attemptDurationSec: payload.result.durationSec,
-              audioUrl: finalAudioUrl,
-              type: "low_score",
-              category: "Low Fluency Score",
-              studentNote: `Automated alert: Scored ${avgScore}% on "${payload.result.prompt?.substring(0, 40)}"`,
-              status: "pending",
-              scorePct: avgScore,
-              createdAt: new Date(),
-            });
-          }
-        }
-
-        if (!studentExists) {
-          const sessionSeason = userDoc?.sessionSeason || "summer";
-          const batchTime = userDoc?.batchTime || "morning";
-
-          await db.collection<StudentDoc>("students").insertOne({
-            id: payload.studentId,
-            name: studentName,
-            status: avgScore < 50 ? "flagged" : "on-track",
-            focus,
-            lastActive: "Today",
-            scorePct: avgScore,
-            trendPct,
-            waveform:
-              payload.result.waveform.length > 0
-                ? payload.result.waveform
-                : makeSampleWaveform(10, 40, 0.2),
-            sessionSeason,
-            batchTime,
-            batchId: `${sessionSeason}-${batchTime}`,
-            flagReason: avgScore < 50 ? `Low Score: ${avgScore}%` : undefined,
-            updatedAt: new Date(),
-          });
-        } else {
-          // Build flagReason from real data
-          const isLowScore = avgScore < 50;
-          const flagReason = isLowScore
-            ? `${focus} ${avgScore}% · Low Score`
-            : trendPct <= -10
-              ? `Score down ${Math.abs(trendPct)}%`
-              : undefined;
-
-          await db.collection<StudentDoc>("students").updateOne(
-            { id: payload.studentId },
-            {
-              $set: {
-                lastActive: "Today",
-                scorePct: avgScore,
-                trendPct,
-                focus,
-                ...(isLowScore ? { status: "flagged" } : {}),
-                ...(flagReason !== undefined ? { flagReason } : {}),
-                waveform: payload.result.waveform,
-                updatedAt: new Date(),
-              },
-            },
-          );
-        }
-
-        invalidateRosterCache();
-        return { success: true, id: payload.result.id, audioUrl: finalAudioUrl };
+    const existing = await attempts.findOne(
+      { id: attemptId },
+      { projection: { studentId: 1, audioUrl: 1 } },
+    );
+    if (existing) {
+      if (existing.studentId !== payload.studentId) {
+        throw new AppError("This recording could not be saved. Please record it again.", 409);
       }
-    } catch (err) {
-      console.error("[AttemptService.saveAttempt Error]", err);
+      return { success: true, id: attemptId, audioUrl: existing.audioUrl ?? undefined };
     }
-    return { success: true, id: payload.result.id };
+
+    // Only inline audio is accepted. A client-supplied URL or ID is ignored: it could point to an
+    // external site, or claim another student's recording.
+    const dataUri = payload.result.audioUrl?.startsWith("data:")
+      ? payload.result.audioUrl
+      : undefined;
+    const stored = dataUri
+      ? await StorageService.saveAudio(dataUri, `student-${payload.studentId}-${Date.now()}.webm`)
+      : null;
+
+    const transcript = payload.result.transcript?.trim() || "";
+    const assignmentId = payload.assignmentId || payload.result.assignmentId;
+    const settings = stored ? await SettingsService.getSettings() : null;
+    const willTranscribe = Boolean(stored && settings?.postTranscriptionEnabled !== false);
+
+    const attemptDoc: AttemptDoc = {
+      id: attemptId,
+      studentId: payload.studentId,
+      moduleId: payload.moduleId,
+      assignmentId,
+      assignmentTitle: payload.result.assignmentTitle,
+      prompt: payload.result.prompt,
+      transcript,
+      // Left out entirely when there is no audio. The driver would store undefined as null.
+      ...(stored
+        ? {
+            audioId: stored.audioId,
+            audioUrl: stored.url,
+            audioMimeType: stored.mimeType,
+            audioSize: stored.size,
+          }
+        : {}),
+      transcriptionStatus: willTranscribe && !transcript ? "processing" : "completed",
+      durationSec: payload.result.durationSec,
+      targetDurationSec: await resolveTargetDuration(db, payload, assignmentId),
+      pronunciation: payload.result.pronunciation,
+      vocabulary: payload.result.vocabulary,
+      grammar: payload.result.grammar,
+      fillerCount: payload.result.fillerCount ?? 0,
+      pauseCount: payload.result.pauseCount ?? 0,
+      feedback: payload.result.feedback,
+      waveform: payload.result.waveform,
+      createdAt: new Date(),
+    };
+
+    try {
+      await attempts.insertOne(attemptDoc);
+    } catch (err) {
+      // Lost a race with a retry of this same attempt: remove our duplicate audio and succeed.
+      if ((err as { code?: number }).code === 11000) {
+        if (stored) void StorageService.deleteAudio(stored.audioId);
+        const winner = await attempts.findOne(
+          { id: attemptId, studentId: payload.studentId },
+          { projection: { audioUrl: 1 } },
+        );
+        if (winner) return { success: true, id: attemptId, audioUrl: winner.audioUrl };
+        throw new AppError("This recording could not be saved. Please record it again.", 409);
+      }
+      // Nothing references the stored audio, so don't leave it behind.
+      if (stored) void StorageService.deleteAudio(stored.audioId);
+      throw err;
+    }
+
+    // The attempt is saved. Everything below is best-effort and must not fail the request.
+    await updateStudentSummary(db, attemptDoc).catch((err) => {
+      console.error("[AttemptService] Could not update student summary:", (err as Error).message);
+    });
+
+    if (stored && willTranscribe) {
+      void runBackgroundTranscription(
+        db,
+        attemptId,
+        stored.audioId,
+        stored.mimeType,
+        attemptDoc.prompt,
+        !transcript,
+      ).catch((err) => {
+        console.warn("[AttemptService] Background job error:", (err as Error).message);
+      });
+    }
+
+    return { success: true, id: attemptId, audioUrl: stored?.url };
   }
 
   /**
    * Fetch attempt result by ID
    */
   static async getAttemptById(attemptId: string): Promise<AttemptResult> {
-    try {
-      const db = await getDb();
-      if (db) {
-        const doc = await db.collection<AttemptDoc>("attempts").findOne({ id: attemptId });
-        if (doc) {
-          return {
-            id: doc.id,
-            studentId: doc.studentId,
-            moduleId: doc.moduleId,
-            assignmentId: doc.assignmentId,
-            assignmentTitle: doc.assignmentTitle,
-            prompt: doc.prompt,
-            transcript: doc.transcript || "",
-            audioId: doc.audioId,
-            audioUrl: doc.audioUrl,
-            audioMimeType: doc.audioMimeType,
-            audioSize: doc.audioSize,
-            transcriptionStatus: doc.transcriptionStatus || "completed",
-            durationSec: doc.durationSec,
-            targetDurationSec: doc.targetDurationSec,
-            pronunciation: doc.pronunciation,
-            vocabulary: doc.vocabulary,
-            grammar: doc.grammar,
-            fillerCount: doc.fillerCount,
-            pauseCount: doc.pauseCount,
-            feedback: doc.feedback,
-            teacherFeedback: doc.teacherFeedback,
-            isFlagged: doc.isFlagged,
-            flagReason: doc.flagReason,
-            flagStatus: doc.flagStatus,
-            waveform: doc.waveform,
-            createdAt: doc.createdAt
-              ? new Date(doc.createdAt).toISOString()
-              : new Date().toISOString(),
-          };
-        }
-      }
-    } catch (err) {
-      console.error("[AttemptService.getAttemptById Error]", err);
-    }
-    throw new Error(`Attempt with ID "${attemptId}" was not found.`);
+    const db = await requireDb();
+    const doc = await db.collection<AttemptDoc>("attempts").findOne({ id: attemptId });
+    if (!doc) throw notFound("This recording could not be found.");
+    return toAttemptResult(doc);
   }
 
   /**
-   * Save or update teacher feedback on an attempt (and sync to all attempts of that assignment for the student)
+   * Save or update teacher feedback on an attempt, and on the student's other attempts at the same
+   * assignment.
    */
   static async saveTeacherFeedback(attemptId: string, feedback: string): Promise<boolean> {
-    try {
-      const db = await getDb();
-      if (db) {
-        const attempt = await db.collection<AttemptDoc>("attempts").findOne({ id: attemptId });
-        if (attempt) {
-          await db
-            .collection<AttemptDoc>("attempts")
-            .updateOne({ id: attemptId }, { $set: { teacherFeedback: feedback } });
-          if (attempt.assignmentId) {
-            await db
-              .collection<AttemptDoc>("attempts")
-              .updateMany(
-                { studentId: attempt.studentId, assignmentId: attempt.assignmentId },
-                { $set: { teacherFeedback: feedback } },
-              );
-          }
-          return true;
-        }
-      }
-    } catch (err) {
-      console.error("[AttemptService.saveTeacherFeedback Error]", err);
-    }
-    return false;
+    const db = await requireDb();
+    const attempts = db.collection<AttemptDoc>("attempts");
+
+    const attempt = await attempts.findOne(
+      { id: attemptId },
+      { projection: { studentId: 1, assignmentId: 1 } },
+    );
+    if (!attempt) return false;
+
+    await attempts.updateMany(
+      attempt.assignmentId
+        ? { studentId: attempt.studentId, assignmentId: attempt.assignmentId }
+        : { id: attemptId },
+      { $set: { teacherFeedback: feedback } },
+    );
+    return true;
   }
 
   /**
-   * Update student attempt transcript (allows students or teachers to correct transcription mismatches).
+   * Update an attempt's transcript (students or teachers correcting transcription mistakes).
    * Automatically recalculates filler words, vocabulary metrics, and speech feedback.
    */
   static async updateTranscript(
@@ -442,40 +367,34 @@ export class AttemptService {
     requestingUserId: string,
     isFaculty: boolean = false,
   ): Promise<AttemptResult> {
-    const db = await getDb();
-    if (!db) throw new Error("Database service unavailable.");
+    const db = await requireDb();
+    const attempts = db.collection<AttemptDoc>("attempts");
 
-    const attempt = await db.collection<AttemptDoc>("attempts").findOne({ id: attemptId });
-    if (!attempt) throw new Error(`Attempt "${attemptId}" not found.`);
+    const attempt = await attempts.findOne({ id: attemptId });
+    if (!attempt) throw notFound("This recording could not be found.");
 
-    // Security authorization guard: student can only edit their own attempt, faculty can edit any
     if (!isFaculty && attempt.studentId !== requestingUserId) {
-      throw new Error("Forbidden: You can only edit your own speaking attempt.");
+      throw forbidden("You can only edit your own speaking attempt.");
     }
 
     const trimmed = newTranscript.trim();
-    if (!trimmed) throw new Error("Transcript cannot be empty.");
+    if (!trimmed) throw new AppError("Transcript cannot be empty.");
 
-    // Recalculate filler count based on corrected words
-    const fillerCount = TranscriptionService.countFillers(trimmed);
-
-    // Compute updated speech metrics
+    const fillerCount = countFillerWords(trimmed);
     const words = trimmed.split(/\s+/).filter(Boolean);
-    const wordCount = words.length;
 
-    // Adjust vocabulary and grammar slightly based on word count / fluency
+    // Adjust vocabulary slightly based on word variety
     let vocabScore = attempt.vocabulary ?? 75;
-    if (wordCount > 10) {
+    if (words.length > 10) {
       const uniqueWords = new Set(words.map((w) => w.toLowerCase().replace(/[^a-z]/g, "")));
-      const diversity = uniqueWords.size / wordCount;
+      const diversity = uniqueWords.size / words.length;
       vocabScore = Math.min(98, Math.max(60, Math.round(55 + diversity * 40)));
     }
 
-    // Pronunciation score adjustment: fewer fillers -> higher fluency score
-    const fillerPenalty = Math.min(25, fillerCount * 4);
-    const pronScore = Math.min(98, Math.max(50, 92 - fillerPenalty));
+    // Fewer fillers means a higher fluency score
+    const pronScore = Math.min(98, Math.max(50, 92 - Math.min(25, fillerCount * 4)));
 
-    await db.collection<AttemptDoc>("attempts").updateOne(
+    await attempts.updateOne(
       { id: attemptId },
       {
         $set: {
@@ -484,7 +403,7 @@ export class AttemptService {
           pronunciation: pronScore,
           vocabulary: vocabScore,
           transcriptionStatus: "completed",
-          updatedAt: new Date(),
+          manuallyEdited: true,
         },
       },
     );

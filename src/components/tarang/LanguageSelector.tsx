@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { Languages, Globe, Check } from "lucide-react";
-import { useLanguage, LANGUAGES, type Language } from "@/lib/i18n";
+import { Globe, Check } from "lucide-react";
+import { useLanguage, LANGUAGES } from "@/lib/i18n";
 
 interface LanguageSelectorProps {
   /**

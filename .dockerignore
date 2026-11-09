@@ -1,0 +1,28 @@
+# Secrets and student data must never enter an image layer
+.env
+.env.*
+!.env.example
+.storage
+
+# Version control and tooling
+.git
+.github
+.vscode
+.idea
+
+# Rebuilt inside the image
+node_modules
+dist
+.output
+.tanstack
+.vinxi
+
+# Not needed at runtime
+docs
+tests
+*.md
+*.log
+__pycache__
+.venv
+venv
+.whisper_cache

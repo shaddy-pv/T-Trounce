@@ -1,26 +1,58 @@
-import { getDb } from "../db/client";
-import type { FlagDoc, AttemptDoc, UserDoc, StudentDoc } from "../db/schemas";
-import type { FlagItem, CreateFlagInput, ResolveFlagInput } from "@/types";
+import { randomUUID } from "crypto";
+import type { Filter } from "mongodb";
+import { attemptScore } from "@/lib/scoring";
+import type { CreateFlagInput, FlagItem, ResolveFlagInput } from "@/types";
+import { requireDb } from "../db/client";
+import type { AttemptDoc, FlagDoc, StudentDoc, UserDoc } from "../db/schemas";
+import { forbidden } from "../errors";
 import { MessageService } from "./message.service";
 import { invalidateRosterCache } from "./student.service";
-import { randomUUID } from "crypto";
+
+const MAX_FLAGS_RETURNED = 500;
+
+function toFlagItem(doc: FlagDoc): FlagItem {
+  return {
+    id: doc.id,
+    studentId: doc.studentId,
+    studentName: doc.studentName,
+    studentEmail: doc.studentEmail,
+    attemptId: doc.attemptId,
+    attemptPrompt: doc.attemptPrompt,
+    attemptDurationSec: doc.attemptDurationSec,
+    audioUrl: doc.audioUrl,
+    type: doc.type,
+    category: doc.category,
+    studentNote: doc.studentNote,
+    teacherFeedback: doc.teacherFeedback,
+    status: doc.status,
+    scorePct: doc.scorePct,
+    createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
+    resolvedAt: doc.resolvedAt ? new Date(doc.resolvedAt).toISOString() : undefined,
+    resolvedBy: doc.resolvedBy,
+  };
+}
 
 export class FlagService {
   /**
-   * Create a flag (Student help request or automated alert)
+   * Create a flag (student help request or automated alert).
+   * The linked attempt must belong to the student the flag is for.
    */
   static async createFlag(
     input: CreateFlagInput & { studentId: string; studentName?: string; studentEmail?: string },
   ): Promise<FlagItem> {
-    const db = await getDb();
-    if (!db) throw new Error("Database not connected");
+    const db = await requireDb();
+    const attempts = db.collection<AttemptDoc>("attempts");
+    const flags = db.collection<FlagDoc>("flags");
 
     let studentName = input.studentName || "Student";
     let studentEmail = input.studentEmail;
 
-    const user = await db.collection<UserDoc>("users").findOne({
-      $or: [{ id: input.studentId }, { email: input.studentId.toLowerCase() }],
-    });
+    const user = await db
+      .collection<UserDoc>("users")
+      .findOne(
+        { $or: [{ id: input.studentId }, { email: input.studentId.toLowerCase() }] },
+        { projection: { name: 1, email: 1 } },
+      );
     if (user) {
       studentName = user.name;
       studentEmail = user.email;
@@ -32,23 +64,27 @@ export class FlagService {
     let scorePct: number | undefined;
 
     if (input.attemptId) {
-      const attempt = await db.collection<AttemptDoc>("attempts").findOne({ id: input.attemptId });
+      const attempt = await attempts.findOne({ id: input.attemptId });
       if (attempt) {
+        if (attempt.studentId !== input.studentId && attempt.studentId !== studentEmail) {
+          throw forbidden("You can only flag your own recordings.");
+        }
+
+        // Repeated submissions for the same recording return the open request.
+        const openFlag = await flags.findOne({
+          attemptId: input.attemptId,
+          studentId: input.studentId,
+          status: "pending",
+          type: input.type || "student_request",
+        });
+        if (openFlag) return toFlagItem(openFlag);
+
         attemptPrompt = attempt.prompt;
         attemptDurationSec = attempt.durationSec;
         audioUrl = attempt.audioUrl;
-        scorePct =
-          attempt.targetDurationSec && attempt.targetDurationSec > 0
-            ? Math.min(100, Math.round((attempt.durationSec / attempt.targetDurationSec) * 100))
-            : Math.round(
-                ((attempt.pronunciation ?? 70) +
-                  (attempt.vocabulary ?? 70) +
-                  (attempt.grammar ?? 70)) /
-                  3,
-              );
+        scorePct = attemptScore(attempt);
 
-        // Mark attempt as flagged
-        await db.collection<AttemptDoc>("attempts").updateOne(
+        await attempts.updateOne(
           { id: attempt.id },
           {
             $set: {
@@ -61,11 +97,9 @@ export class FlagService {
       }
     }
 
-    const flagId = `flag-${Date.now()}-${randomUUID().slice(0, 6)}`;
     const now = new Date();
-
     const flagDoc: FlagDoc = {
-      id: flagId,
+      id: `flag-${Date.now()}-${randomUUID().slice(0, 6)}`,
       studentId: input.studentId,
       studentName,
       studentEmail,
@@ -81,112 +115,69 @@ export class FlagService {
       createdAt: now,
     };
 
-    await db.collection<FlagDoc>("flags").insertOne(flagDoc);
+    await flags.insertOne(flagDoc);
 
-    // Update student status in students collection so dashboard and flags register it
+    // Update student status so the dashboard and flags page register it
     const flagReasonLabel =
-      input.type === "student_request"
+      flagDoc.type === "student_request"
         ? `Help Request: ${input.category || "Guidance"}`
-        : input.type === "low_score"
+        : flagDoc.type === "low_score"
           ? `Low Score: ${scorePct ?? 0}%`
           : input.category || "Needs Attention";
 
-    await db.collection<StudentDoc>("students").updateOne(
-      { id: input.studentId },
-      {
-        $set: {
-          status: "flagged",
-          flagReason: flagReasonLabel,
-          updatedAt: now,
-        },
-      },
-      { upsert: false },
-    );
+    await db
+      .collection<StudentDoc>("students")
+      .updateOne(
+        { id: input.studentId },
+        { $set: { status: "flagged", flagReason: flagReasonLabel, updatedAt: now } },
+      );
 
     invalidateRosterCache();
-    return {
-      id: flagDoc.id,
-      studentId: flagDoc.studentId,
-      studentName: flagDoc.studentName,
-      studentEmail: flagDoc.studentEmail,
-      attemptId: flagDoc.attemptId,
-      attemptPrompt: flagDoc.attemptPrompt,
-      attemptDurationSec: flagDoc.attemptDurationSec,
-      audioUrl: flagDoc.audioUrl,
-      type: flagDoc.type,
-      category: flagDoc.category,
-      studentNote: flagDoc.studentNote,
-      status: flagDoc.status,
-      scorePct: flagDoc.scorePct,
-      createdAt: flagDoc.createdAt.toISOString(),
-    };
+    return toFlagItem(flagDoc);
   }
 
   /**
-   * Fetch all flags with optional status filter
+   * Fetch flags with optional filters
    */
   static async getFlags(filter?: {
     status?: "all" | "pending" | "resolved" | "dismissed";
     type?: string;
     studentId?: string;
   }): Promise<FlagItem[]> {
-    const db = await getDb();
-    if (!db) return [];
+    const db = await requireDb();
 
-    const query: import("mongodb").Filter<FlagDoc> = {};
-    if (filter?.status && filter.status !== "all") {
-      query.status = filter.status;
-    }
-    if (filter?.type && filter.type !== "all") {
-      query.type = filter.type as import("../db/schemas").FlagDoc["type"];
-    }
-    if (filter?.studentId) {
-      query.studentId = filter.studentId;
-    }
+    const query: Filter<FlagDoc> = {};
+    if (filter?.status && filter.status !== "all") query.status = filter.status;
+    if (filter?.type && filter.type !== "all") query.type = filter.type as FlagDoc["type"];
+    if (filter?.studentId) query.studentId = filter.studentId;
 
     const docs = await db
       .collection<FlagDoc>("flags")
       .find(query)
       .sort({ createdAt: -1 })
+      .limit(MAX_FLAGS_RETURNED)
       .toArray();
 
-    return docs.map((doc) => ({
-      id: doc.id,
-      studentId: doc.studentId,
-      studentName: doc.studentName,
-      studentEmail: doc.studentEmail,
-      attemptId: doc.attemptId,
-      attemptPrompt: doc.attemptPrompt,
-      attemptDurationSec: doc.attemptDurationSec,
-      audioUrl: doc.audioUrl,
-      type: doc.type,
-      category: doc.category,
-      studentNote: doc.studentNote,
-      teacherFeedback: doc.teacherFeedback,
-      status: doc.status,
-      scorePct: doc.scorePct,
-      createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
-      resolvedAt: doc.resolvedAt ? new Date(doc.resolvedAt).toISOString() : undefined,
-      resolvedBy: doc.resolvedBy,
-    }));
+    return docs.map(toFlagItem);
   }
 
   /**
-   * Resolve a flag, save feedback to attempt, and notify student
+   * Resolve a flag, save feedback to the attempt, and notify the student
    */
   static async resolveFlag(
     input: ResolveFlagInput & { teacherId: string; teacherName: string },
   ): Promise<boolean> {
-    const db = await getDb();
-    if (!db) return false;
+    const db = await requireDb();
+    const flags = db.collection<FlagDoc>("flags");
 
-    const flag = await db.collection<FlagDoc>("flags").findOne({ id: input.flagId });
+    const flag = await flags.findOne({ id: input.flagId });
     if (!flag) return false;
 
     const now = new Date();
     const resolvedStatus = input.status || "resolved";
+    const feedback = input.teacherFeedback?.trim();
 
-    await db.collection<FlagDoc>("flags").updateOne(
+    await flags.updateOne(
       { id: input.flagId },
       {
         $set: {
@@ -198,46 +189,40 @@ export class FlagService {
       },
     );
 
-    // If linked to an attempt, persist teacher feedback on the attempt
     if (flag.attemptId) {
       await db.collection<AttemptDoc>("attempts").updateOne(
         { id: flag.attemptId },
         {
           $set: {
             flagStatus: resolvedStatus,
-            ...(input.teacherFeedback ? { teacherFeedback: input.teacherFeedback } : {}),
+            ...(feedback ? { teacherFeedback: input.teacherFeedback } : {}),
           },
         },
       );
     }
 
-    // Send direct note to student if teacher wrote feedback
-    if (input.teacherFeedback && input.teacherFeedback.trim()) {
+    if (feedback) {
       await MessageService.sendMessage({
         studentId: flag.studentId,
         teacherId: input.teacherId,
         teacherName: input.teacherName,
-        content: `[Teacher Feedback on your Flagged Recording] ${input.teacherFeedback.trim()}`,
+        content: `[Teacher Feedback on your Flagged Recording] ${feedback}`,
         senderRole: "teacher",
       });
     }
 
-    // Check if student has remaining pending flags
-    const remainingPending = await db
-      .collection<FlagDoc>("flags")
-      .countDocuments({ studentId: flag.studentId, status: "pending" });
+    const remainingPending = await flags.countDocuments({
+      studentId: flag.studentId,
+      status: "pending",
+    });
 
     if (remainingPending === 0) {
-      await db.collection<StudentDoc>("students").updateOne(
-        { id: flag.studentId },
-        {
-          $set: {
-            status: "on-track",
-            flagReason: undefined,
-            updatedAt: now,
-          },
-        },
-      );
+      await db
+        .collection<StudentDoc>("students")
+        .updateOne(
+          { id: flag.studentId },
+          { $set: { status: "on-track", updatedAt: now }, $unset: { flagReason: "" } },
+        );
     }
 
     invalidateRosterCache();

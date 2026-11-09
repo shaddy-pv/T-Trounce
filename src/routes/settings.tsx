@@ -3,19 +3,16 @@ import { useState } from "react";
 import { TeacherShell } from "@/components/tarang/TeacherShell";
 import { useUser } from "@/lib/auth";
 import { useLiveTranscriptionSetting, usePostTranscriptionSetting } from "@/lib/app-settings";
-import { getAppSettingsFn } from "@/server/data";
 import {
   Mic,
   Sliders,
   CheckCircle2,
-  AlertCircle,
   FileText,
   Shield,
   Layers,
   Cpu,
   Radio,
   Power,
-  RotateCcw,
   Sun,
   Globe,
 } from "lucide-react";
@@ -35,22 +32,17 @@ export const Route = createFileRoute("/settings")({
   }),
   beforeLoad: ({ context }) => {
     if (!context.session) throw redirect({ to: "/login" });
-    const isMasterAdmin = context.session.email?.toLowerCase() === "shadanmd566@gmail.com";
-    if (!isMasterAdmin) {
+    if (!context.session.isMasterAdmin) {
       throw redirect({ to: "/dashboard" });
     }
-  },
-  loader: async () => {
-    return await getAppSettingsFn();
   },
   component: SettingsPage,
 });
 
 function SettingsPage() {
-  const initialSettings = Route.useLoaderData();
   const user = useUser();
   const { t } = useLanguage();
-  const isMasterAdmin = user?.email?.toLowerCase() === "shadanmd566@gmail.com";
+  const isMasterAdmin = Boolean(user?.isMasterAdmin);
 
   const {
     enabled: liveEnabled,
@@ -70,8 +62,7 @@ function SettingsPage() {
       <TeacherShell>
         <div className="py-16 text-center">
           <p className="text-[16px] text-secondary-warm">
-            Access to System Settings is strictly restricted to master administrator
-            (shadanmd566@gmail.com).
+            Access to System Settings is restricted to the master administrator.
           </p>
         </div>
       </TeacherShell>
@@ -493,16 +484,12 @@ function SettingsPage() {
                 <h2 className="text-[16px] font-semibold text-primary-warm">
                   {t("lang_pref_title")}
                 </h2>
-                <p className="text-[12px] text-tertiary-warm mt-0.5">
-                  {t("lang_pref_desc")}
-                </p>
+                <p className="text-[12px] text-tertiary-warm mt-0.5">{t("lang_pref_desc")}</p>
               </div>
             </div>
             <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
-                <p className="text-[14px] font-medium text-primary-warm">
-                  System Display Language
-                </p>
+                <p className="text-[14px] font-medium text-primary-warm">System Display Language</p>
                 <p className="text-[12px] text-tertiary-warm">
                   Choose between English, Hinglish, or Hindi
                 </p>
@@ -518,19 +505,13 @@ function SettingsPage() {
                 <h2 className="text-[16px] font-semibold text-primary-warm">
                   {t("theme_pref_title")}
                 </h2>
-                <p className="text-[12px] text-tertiary-warm mt-0.5">
-                  {t("theme_pref_desc")}
-                </p>
+                <p className="text-[12px] text-tertiary-warm mt-0.5">{t("theme_pref_desc")}</p>
               </div>
             </div>
             <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
-                <p className="text-[14px] font-medium text-primary-warm">
-                  Color Theme Mode
-                </p>
-                <p className="text-[12px] text-tertiary-warm">
-                  Light, Dark, or System preference
-                </p>
+                <p className="text-[14px] font-medium text-primary-warm">Color Theme Mode</p>
+                <p className="text-[12px] text-tertiary-warm">Light, Dark, or System preference</p>
               </div>
               <ThemeToggle variant="segmented" />
             </div>

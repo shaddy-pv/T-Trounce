@@ -1,6 +1,5 @@
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { StudentShell } from "@/components/tarang/StudentShell";
-import { Waveform } from "@/components/tarang/Waveform";
 import {
   fetchModulesFn,
   fetchAssignmentsFn,
@@ -9,12 +8,22 @@ import {
   fetchStudentAttemptsFn,
   sendDirectMessageFn,
 } from "@/server/data";
-import { cachedClientFetch } from "@/lib/client-cache";
+import { cachedClientFetch, invalidateClientDataCache } from "@/lib/client-cache";
 import { useUser } from "@/lib/auth";
-import { BookOpen, Calendar, Mic, MessageSquare, Check, Send, Clock, ChevronRight } from "lucide-react";
+import {
+  BookOpen,
+  Calendar,
+  Mic,
+  MessageSquare,
+  Check,
+  Send,
+  Clock,
+  ChevronRight,
+} from "lucide-react";
 import { useState, useMemo } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { useLanguage } from "@/lib/i18n";
+import { InstallHomeCard } from "@/features/pwa/components/InstallApp";
 
 export const Route = createFileRoute("/practice/")({
   head: () => ({
@@ -97,11 +106,13 @@ function PracticeHubBody() {
   const { modules, assignments, messages, attempts } = Route.useLoaderData();
   const user = useUser();
   const router = useRouter();
+  const { t } = useLanguage();
   const firstName = user?.name.split(" ")[0] ?? "you";
 
   const [msgs, setMsgs] = useState(messages || []);
   const [replyText, setReplyText] = useState("");
   const [isReplying, setIsReplying] = useState(false);
+  const [messageError, setMessageError] = useState<string | null>(null);
 
   // Count completed modules this week (real, from actual attempts)
   const completedModulesCount = useMemo(() => {
@@ -186,12 +197,15 @@ function PracticeHubBody() {
   }, [attempts]);
 
   const handleMarkRead = async (messageId: string) => {
+    setMessageError(null);
     try {
       await markMessageReadFn({ data: { messageId } });
       setMsgs((prev) => prev.map((m) => (m.id === messageId ? { ...m, read: true } : m)));
+      invalidateClientDataCache("student-messages-");
       router.invalidate();
     } catch (err) {
       console.error("Failed to mark message read", err);
+      setMessageError(t("action_failed_retry"));
     }
   };
 
@@ -204,27 +218,27 @@ function PracticeHubBody() {
     if (!lastTeacherMsg) return;
 
     setIsReplying(true);
+    setMessageError(null);
     try {
       const newMsg = await sendDirectMessageFn({
         data: {
           studentId: user.userId,
           teacherId: lastTeacherMsg.teacherId,
-          teacherName: lastTeacherMsg.teacherName,
           content: replyText.trim(),
-          senderRole: "student",
         },
       });
       setMsgs([newMsg, ...msgs]);
       setReplyText("");
+      invalidateClientDataCache("student-messages-");
     } catch (err) {
       console.error("Failed to send reply", err);
+      setMessageError(t("action_failed_retry"));
     } finally {
       setIsReplying(false);
     }
   };
 
   const hasRecordedToday = streakGraph[6] === 1;
-  const { t } = useLanguage();
 
   return (
     <div className="px-5 pt-2 pb-10">
@@ -245,7 +259,9 @@ function PracticeHubBody() {
             </div>
           </div>
           <div className="text-right">
-            <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">{t("this_week")}</p>
+            <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">
+              {t("this_week")}
+            </p>
             <p className="num mt-1 text-[14px] font-semibold text-primary-warm">
               {t("completed_of", { completed: completedCount, total: totalCount })}
             </p>
@@ -275,12 +291,17 @@ function PracticeHubBody() {
           {streakGraph.map((d, i) => (
             <div
               key={i}
-              className={"h-2 rounded-full transition-all " + (d ? "bg-[#3FB8AF] shadow-[0_0_6px_#3FB8AF]" : "bg-ink-800")}
+              className={
+                "h-2 rounded-full transition-all " +
+                (d ? "bg-[#3FB8AF] shadow-[0_0_6px_#3FB8AF]" : "bg-ink-800")
+              }
               title={i === 6 ? "Today" : `${6 - i} days ago`}
             />
           ))}
         </div>
       </div>
+
+      <InstallHomeCard className="mt-4" />
 
       {/* Teacher Notes / Direct Feedback Section */}
       {msgs.length > 0 && (
@@ -357,6 +378,12 @@ function PracticeHubBody() {
                 Send
               </button>
             </form>
+          )}
+
+          {messageError && (
+            <p role="alert" className="mt-2 text-[12px] text-[#C1503B]">
+              {messageError}
+            </p>
           )}
         </div>
       )}
@@ -436,7 +463,7 @@ function PracticeHubBody() {
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-ink-950 px-2.5 py-0.5 num text-[11px] font-medium text-secondary-warm whitespace-nowrap shrink-0">
-                          ⏱️ {t("status_pending")}
+                          {t("status_pending")}
                         </span>
                       )}
                     </div>
@@ -499,9 +526,7 @@ function PracticeHubBody() {
           <h2 className="display text-[18px] text-primary-warm font-medium">
             {t("practice_drills_title")}
           </h2>
-          <p className="text-[12px] text-secondary-warm mt-0.5">
-            {t("practice_drills_sub")}
-          </p>
+          <p className="text-[12px] text-secondary-warm mt-0.5">{t("practice_drills_sub")}</p>
         </div>
         <span className="num text-[11px] rounded-full bg-ink-800 px-2 py-0.5 text-secondary-warm">
           {t("available_count", { count: modules.length })}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Check, Loader2, Send } from "lucide-react";
+import { Loader2, Send } from "lucide-react";
 import { TButton } from "@/components/tarang/Button";
 import { sendDirectMessageFn, fetchStudentMessagesFn } from "@/server/data";
 import { useUser } from "@/lib/auth";
@@ -18,6 +18,7 @@ export function DirectNoteModal({ studentId, studentName, isOpen, onClose }: Dir
   const [messageText, setMessageText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [msgs, setMsgs] = useState<DirectMessagePublic[]>([]);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -32,20 +33,19 @@ export function DirectNoteModal({ studentId, studentName, isOpen, onClose }: Dir
     if (!messageText.trim() || !user) return;
 
     setIsSending(true);
+    setSendError(null);
     try {
       const newMsg = await sendDirectMessageFn({
         data: {
           studentId,
-          teacherId: user.userId,
-          teacherName: user.name,
           content: messageText.trim(),
-          senderRole: "teacher",
         },
       });
       setMsgs([newMsg, ...msgs]);
       setMessageText("");
     } catch (err) {
       console.error("Failed to send message:", err);
+      setSendError("Could not send your message. Please check your connection and try again.");
     } finally {
       setIsSending(false);
     }
@@ -101,6 +101,11 @@ export function DirectNoteModal({ studentId, studentName, isOpen, onClose }: Dir
             {isSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
           </TButton>
         </form>
+        {sendError && (
+          <p role="alert" className="mt-2 text-[12px] text-[#C1503B]">
+            {sendError}
+          </p>
+        )}
         <div className="mt-4 flex justify-end">
           <button
             onClick={onClose}

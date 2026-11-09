@@ -18,7 +18,7 @@ Welcome AI Agent. Before writing or modifying any code in this repository, you m
 
 - **Framework**: TanStack Start (`@tanstack/react-start`) with file-based routing in `src/routes/`.
 - **Root Shell**: `src/routes/__root.tsx` is the sole root wrapper. Do not add Next.js/Remix style layout folders.
-- **Database**: Local MongoDB via native `mongodb` driver with connection helper `getDb()` in `src/lib/db.ts`. Do not use or reintroduce Supabase or third-party cloud-locked SDKs.
+- **Database**: Local MongoDB via native `mongodb` driver with connection helpers `getDb()` and `requireDb()` in `src/server/db/client.ts`. Do not use or reintroduce Supabase or third-party cloud-locked SDKs.
 - **Server Functions**: Use `createServerFn` from `@tanstack/react-start` for backend operations.
 
 ---
@@ -29,6 +29,8 @@ Before completing any task:
 
 1. `npx tsc --noEmit` — must pass with 0 type errors.
 2. `npm run lint` — must pass with 0 lint errors.
-3. `npm run build` — must compile both client and SSR environments.
+3. `npm test` — unit and integration tests must pass.
+4. `npm run build` — must compile both client and SSR environments.
+5. `npm run test:e2e` — end-to-end checks against the production build must pass.
 
 Refer to `docs/AI_CONTEXT.md`, `docs/PRD.md`, and `docs/TLD.md` for complete specifications.

@@ -27,7 +27,8 @@ export const TButton = forwardRef<HTMLButtonElement, TButtonProps>(function TBut
 
   const variants: Record<Variant, string> = {
     primary: "bg-[#3FB8AF] text-[#100E0C] hover:brightness-110 font-medium",
-    secondary: "bg-transparent border border-hairline text-primary-warm hover:border-signal-teal hover:bg-ink-800",
+    secondary:
+      "bg-transparent border border-hairline text-primary-warm hover:border-signal-teal hover:bg-ink-800",
     ghost: "bg-transparent text-secondary-warm hover:text-primary-warm hover:bg-ink-800",
     danger: "bg-transparent border border-[#C1503B]/70 text-[#C1503B] hover:bg-[#C1503B]/10",
   };

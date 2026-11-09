@@ -1,5 +1,7 @@
 # Server Functions & API Specification — Tarang
 
+> The function list below is an early design sketch. The source of truth is `src/server/data.ts`.
+
 ## 1. Overview
 
 Tarang utilizes **TanStack Start Server Functions** (`createServerFn`) to provide type-safe RPC contracts between the React client and the Node.js / MongoDB backend.
@@ -98,4 +100,10 @@ All server functions follow uniform error handling:
 
 - **Success**: Returns requested data directly.
 - **Client Error (Invalid input / not found)**: Throws structured error with `{ message: string, code: "NOT_FOUND" | "INVALID_INPUT" }`.
-- **Database Fallback**: In the event MongoDB is temporarily offline during local offline rehearsals, server functions return valid in-memory data to ensure uninterrupted UI operations.
+- **Errors**: Messages written for users come from `AppError` (`src/server/errors.ts`). Anything else is logged on the server and the client receives a generic message.
+- **Database unavailable**: Saves and private data fail with a clear error rather than reporting false success or empty results. Only the static curriculum has a built-in fallback.
+
+## 4. HTTP Endpoints
+
+- `GET /api/audio/:audioId`: streams a recording, with range support. Requires a session; available to the student who made it and to faculty.
+- `GET /api/health`: `200` when the database is reachable, otherwise `503`.

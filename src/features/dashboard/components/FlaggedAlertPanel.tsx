@@ -50,7 +50,9 @@ export function FlaggedAlertPanel({
               <Waveform mode="thumbnail" data={s.waveform} height={20} />
             </div>
 
-            <p className="num text-[12px] font-medium text-[#C1503B] light:text-red-700">{s.flagReason}</p>
+            <p className="num text-[12px] font-medium text-[#C1503B] light:text-red-700">
+              {s.flagReason}
+            </p>
           </div>
         ))}
       </div>

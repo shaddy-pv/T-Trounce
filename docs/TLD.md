@@ -32,7 +32,7 @@ Tarang is architected as a high-performance, full-stack SSR application using **
 │              │                                                         │
 │              ▼                                                         │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │          Local MongoDB Client Layer (src/lib/db.ts)              │  │
+│  │          Local MongoDB Client Layer (src/server/db/client.ts)              │  │
 │  │    • Global Connection Pooling & HMR Socket Cache                │  │
 │  │    • Automatic Schema Validation & Indexing                      │  │
 │  │    • Resilient In-Memory Fallback & Auto-Seeding                 │  │
@@ -77,7 +77,7 @@ The UI uses strict semantic color tokens and a deliberate dual-radius hierarchy:
 The backend uses the official Node.js `mongodb` driver with optimized connection pooling.
 
 ```typescript
-// src/lib/db.ts Connection Cache Pattern
+// src/server/db/client.ts Connection Cache Pattern
 let cachedClient: MongoClient | null = null;
 let cachedDb: Db | null = null;
 

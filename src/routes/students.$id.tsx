@@ -21,10 +21,8 @@ import { TButton } from "@/components/tarang/Button";
 import { DirectNoteModal } from "@/features/students/components/DirectNoteModal";
 import { AudioTranscriptEvaluator } from "@/features/students/components/AudioTranscriptEvaluator";
 import { useUser } from "@/lib/auth";
-import {
-  cleanIndianPhoneNumber,
-  formatPhoneDisplay,
-} from "@/features/assignments/lib/whatsapp-reminders";
+import { cleanIndianPhoneNumber, formatPhoneDisplay } from "@/lib/phone";
+import { attemptScore } from "@/lib/scoring";
 import type { StudentRow, AttemptResult } from "@/types";
 
 export interface StudentProfileData {
@@ -228,7 +226,7 @@ function StudentDetail() {
               <h1 className="display text-[26px] sm:text-[30px] text-primary-warm">{s.name}</h1>
               {s.phone && (
                 <span className="num text-[12px] font-medium text-emerald-500 light:text-emerald-700 bg-emerald-500/10 light:bg-emerald-100 px-2 py-0.5 rounded-[4px] border border-emerald-500/20">
-                  📱 {formatPhoneDisplay(s.phone)}
+                  {formatPhoneDisplay(s.phone)}
                 </span>
               )}
             </div>
@@ -599,15 +597,7 @@ function StudentDetail() {
                     const isRetakeActive =
                       (activeRetake && activeRetake.id === retake.id) ||
                       (!activeRetake && idx === 0);
-                    const compPct =
-                      retake.targetDurationSec && retake.targetDurationSec > 0
-                        ? Math.min(
-                            100,
-                            Math.round((retake.durationSec / retake.targetDurationSec) * 100),
-                          )
-                        : Math.round(
-                            (retake.pronunciation + retake.vocabulary + retake.grammar) / 3,
-                          );
+                    const compPct = attemptScore(retake);
 
                     return (
                       <button
