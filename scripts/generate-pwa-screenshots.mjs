@@ -169,3 +169,4 @@ const desktopPng = createPng(1280, 720, (x, y) => {
 
 fs.writeFileSync(path.join(outDir, "desktop-dashboard.png"), desktopPng);
 console.log("PWA screenshots generated successfully!");
+
