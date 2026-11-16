@@ -1,6 +1,16 @@
 import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { Send, Check, Printer, Loader2, Search, UserPlus, RotateCcw } from "lucide-react";
+import {
+  Send,
+  Check,
+  Printer,
+  Download,
+  Loader2,
+  Search,
+  UserPlus,
+  RotateCcw,
+  FileCheck2,
+} from "lucide-react";
 import { TeacherShell } from "@/components/tarang/TeacherShell";
 import { fetchStudentRosterFn, fetchStudentReportFn } from "@/server/data";
 import { cachedClientFetch, invalidateClientDataCache } from "@/lib/client-cache";
@@ -8,13 +18,14 @@ import { TButton } from "@/components/tarang/Button";
 import { StatusDot } from "@/components/tarang/StatusDot";
 import { ParentReportCard } from "@/features/reports/components/ParentReportCard";
 import { generateParentReportWhatsAppLink } from "@/features/reports/lib/whatsapp";
+import { downloadReportPdf, printIsolatedDocument } from "@/features/reports/lib/pdf-export";
 import type { StudentRow, StudentWeeklyReport } from "@/types";
 import { useLanguage } from "@/lib/i18n";
 import { useUser } from "@/lib/auth";
 
 export const Route = createFileRoute("/reports")({
   head: () => ({
-    meta: [{ title: "Parent Reports · Trounce" }],
+    meta: [{ title: "Parent Reports & Progress Dossiers · Trounce" }],
   }),
   beforeLoad: ({ context }) => {
     if (!context.session) throw redirect({ to: "/login" });
@@ -73,6 +84,8 @@ function ReportsPage() {
   );
   const [loadingReport, setLoadingReport] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [pdfSuccessMessage, setPdfSuccessMessage] = useState<string | null>(null);
 
   // Sync selectedId when studentRoster updates
   useEffect(() => {
@@ -132,6 +145,28 @@ function ReportsPage() {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    setIsGeneratingPdf(true);
+    setPdfSuccessMessage(null);
+    try {
+      await downloadReportPdf("parent-report-card", {
+        studentName: s.name,
+      });
+      setPdfSuccessMessage(`Official PDF report for "${s.name}" generated & downloaded!`);
+      setTimeout(() => setPdfSuccessMessage(null), 4000);
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      alert("Direct PDF export encountered an issue. Falling back to print dialog.");
+      printIsolatedDocument("parent-report-card");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handlePrintDocument = () => {
+    printIsolatedDocument("parent-report-card");
+  };
+
   const sendWhatsApp = () => {
     setSentIds((arr) => [...new Set([...arr, s.id])]);
     const url = generateParentReportWhatsAppLink(
@@ -144,26 +179,22 @@ function ReportsPage() {
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  const printReport = () => {
-    window.print();
-  };
-
   const filteredRoster = studentRoster.filter((r) =>
     r.name.toLowerCase().includes(searchQuery.trim().toLowerCase()),
   );
 
   return (
     <TeacherShell>
-      {/* Page Header (Screen Only, completely hidden in Print) */}
+      {/* Page Header (Screen Only, hidden in Print) */}
       <div className="border-b border-hairline pb-6 print:hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <p className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
-              parent reports & progress cards
+              parent reports & progress dossiers
             </p>
             <h1 className="display mt-1 text-[24px] sm:text-[28px]">This week's signal</h1>
             <p className="mt-1 text-[13px] text-secondary-warm">
-              Pick a student to preview their weekly acoustic progress dossier. Send via WhatsApp or export as certified PDF.
+              Generate certified student progress documents. Download as authentic standalone PDF, print cleanly, or dispatch to WhatsApp.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -173,7 +204,7 @@ function ReportsPage() {
               className="inline-flex items-center gap-1.5 rounded-lg border border-hairline bg-ink-900 px-3 py-1.5 text-[12px] font-medium text-secondary-warm hover:text-primary-warm hover:bg-ink-800 transition cursor-pointer"
             >
               <RotateCcw size={13} className={isRefreshing ? "animate-spin text-[#3FB8AF]" : ""} />
-              <span>Refresh</span>
+              <span>Refresh Roster</span>
             </button>
             <Link
               to="/users"
@@ -203,7 +234,7 @@ function ReportsPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search students..."
+                placeholder="Search student by name..."
                 className="w-full rounded-md border border-hairline bg-ink-950 pl-8 pr-3 py-1.5 text-[12px] text-primary-warm placeholder:text-tertiary-warm focus:outline-none focus:border-[#3FB8AF]"
               />
             </div>
@@ -270,7 +301,7 @@ function ReportsPage() {
           {/* Preview Subhead (Screen Only) */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 print:hidden">
             <p className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm font-semibold">
-              preview · what the parent sees
+              official document preview
             </p>
             {loadingReport && (
               <span className="inline-flex items-center gap-1.5 num text-[11px] text-tertiary-warm">
@@ -280,7 +311,15 @@ function ReportsPage() {
             )}
           </div>
 
-          {/* The High-Fidelity Report Card */}
+          {/* Success Banner */}
+          {pdfSuccessMessage && (
+            <div className="mt-2 mb-1 rounded-lg border border-[#3FB8AF]/40 bg-[#3FB8AF]/15 px-3 py-2 text-[12px] text-primary-warm flex items-center gap-2 print:hidden animate-in fade-in duration-200">
+              <FileCheck2 size={15} className="text-[#3FB8AF]" />
+              <span>{pdfSuccessMessage}</span>
+            </div>
+          )}
+
+          {/* The High-Fidelity Certified Report Card */}
           <ParentReportCard
             student={s}
             report={currentReport}
@@ -288,7 +327,7 @@ function ReportsPage() {
           />
 
           {/* WhatsApp Language Selector (Screen Only, hidden in Print) */}
-          <div className="mt-4 flex items-center justify-between rounded-[10px] border border-hairline bg-ink-900 px-4 py-2.5 w-full max-w-[460px] mx-auto text-[12px] print:hidden">
+          <div className="mt-4 flex items-center justify-between rounded-[10px] border border-hairline bg-ink-900 px-4 py-2.5 w-full max-w-[500px] mx-auto text-[12px] print:hidden">
             <span className="text-secondary-warm font-medium">{t("whatsapp_lang_label")}</span>
             <div className="flex items-center gap-1.5">
               <button
@@ -316,26 +355,48 @@ function ReportsPage() {
             </div>
           </div>
 
-          {/* Print & WhatsApp Buttons (Screen Only, hidden in Print) */}
-          <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-center gap-2.5 w-full max-w-[460px] mx-auto print:hidden">
+          {/* Dedicated Action Buttons: Download PDF, Print Document, Share WhatsApp */}
+          <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-center gap-2.5 w-full max-w-[500px] mx-auto print:hidden">
+            <TButton
+              surface="console"
+              size="md"
+              onClick={handleDownloadPdf}
+              disabled={isGeneratingPdf}
+              className="w-full sm:w-auto whitespace-nowrap cursor-pointer font-semibold bg-[#3FB8AF] text-ink-950 hover:bg-[#3FB8AF]/90"
+            >
+              {isGeneratingPdf ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  Generating PDF...
+                </>
+              ) : (
+                <>
+                  <Download size={14} />
+                  Download PDF Document
+                </>
+              )}
+            </TButton>
+
             <TButton
               variant="secondary"
               surface="console"
               size="md"
-              onClick={printReport}
+              onClick={handlePrintDocument}
               className="w-full sm:w-auto whitespace-nowrap cursor-pointer font-medium"
             >
               <Printer size={14} />
-              Print / Save PDF
+              Print Document
             </TButton>
+
             <TButton
+              variant="secondary"
               surface="console"
               size="md"
               onClick={sendWhatsApp}
-              className="w-full sm:w-auto whitespace-nowrap cursor-pointer font-semibold"
+              className="w-full sm:w-auto whitespace-nowrap cursor-pointer font-semibold text-[#25D366] border-[#25D366]/30 hover:bg-[#25D366]/10"
             >
               <Send size={14} />
-              {sentIds.includes(s.id) ? "Resend to WhatsApp" : t("share_on_whatsapp_btn")}
+              {sentIds.includes(s.id) ? "Resend WhatsApp" : t("share_on_whatsapp_btn")}
             </TButton>
           </div>
         </div>
