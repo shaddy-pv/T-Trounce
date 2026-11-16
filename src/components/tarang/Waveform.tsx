@@ -32,16 +32,44 @@ interface WaveformProps {
 }
 
 function getThemeColors() {
+  const isPrint = typeof window !== "undefined" && window.matchMedia("print").matches;
   const isLight =
-    typeof document !== "undefined" && document.documentElement.classList.contains("light");
+    isPrint ||
+    (typeof document !== "undefined" && document.documentElement.classList.contains("light"));
   return {
     clear: isLight ? "#0D9488" : "#3FB8AF",
     filler: isLight ? "#D97706" : "#E2A33C",
-    pause: isLight ? "#94A3B8" : "#6B645A",
+    pause: isLight ? "#64748B" : "#6B645A",
     live: isLight ? "#0D9488" : "#3FB8AF",
     rest: isLight ? "#CBD5E1" : "#2E2A26",
     unplayed: isLight ? "#E2E8F0" : "#26221D",
   };
+}
+
+/**
+ * Realistic baseline speech waveform (cadence peaks, syllables, breath pauses)
+ * Graceful acoustic placeholder when an attempt has no audio segments recorded yet.
+ */
+export function getBaselineWaveform(count: number = 64): WaveformSegment[] {
+  const baseAmplitudes = [
+    0.15, 0.28, 0.45, 0.68, 0.82, 0.88, 0.76, 0.62, 0.38, 0.22,
+    0.12, 0.08, 0.25, 0.54, 0.78, 0.92, 0.85, 0.70, 0.48, 0.28,
+    0.15, 0.10, 0.20, 0.38, 0.58, 0.75, 0.68, 0.50, 0.32, 0.16,
+    0.08, 0.05, 0.22, 0.48, 0.72, 0.88, 0.82, 0.65, 0.42, 0.26,
+    0.14, 0.08, 0.16, 0.35, 0.60, 0.78, 0.72, 0.54, 0.36, 0.20,
+    0.12, 0.06, 0.18, 0.40, 0.65, 0.82, 0.76, 0.58, 0.34, 0.20,
+    0.14, 0.08, 0.05, 0.04,
+  ];
+
+  const result: WaveformSegment[] = [];
+  for (let i = 0; i < count; i++) {
+    const idx = Math.floor((i / count) * baseAmplitudes.length);
+    const v = baseAmplitudes[idx] ?? 0.15;
+    const kind: "clear" | "filler" | "pause" =
+      v < 0.09 ? "pause" : (i === 17 || i === 42) ? "filler" : "clear";
+    result.push({ v, kind });
+  }
+  return result;
 }
 
 export function Waveform({
@@ -174,23 +202,34 @@ export function Waveform({
     return () => cancelAnimationFrame(animId);
   }, [mode, data, settleProgress, playbackProgress]);
 
-  // Re-draw on window resize
+  // Re-draw on window resize & print media events
   useEffect(() => {
     if (mode === "live") return;
-    const handleResize = () => {
+    const render = (forceFullProgress = false) => {
       const canvas = canvasRef.current;
-      if (canvas && data) {
-        const progress =
-          playbackProgress !== undefined && playbackProgress > 0
-            ? 1
-            : mode === "result"
-              ? settleProgress
-              : 1;
-        drawStatic(canvas, data, progress, mode, playbackProgress);
-      }
+      if (!canvas) return;
+      const effectiveData = data && data.length > 0 ? data : getBaselineWaveform();
+      const progress =
+        forceFullProgress || (playbackProgress !== undefined && playbackProgress > 0)
+          ? 1
+          : mode === "result"
+            ? settleProgress
+            : 1;
+      drawStatic(canvas, effectiveData, progress, mode, playbackProgress);
     };
+
+    const handleResize = () => render(false);
+    const handleBeforePrint = () => render(true);
+    const handleAfterPrint = () => render(false);
+
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    window.addEventListener("beforeprint", handleBeforePrint);
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("beforeprint", handleBeforePrint);
+      window.removeEventListener("afterprint", handleAfterPrint);
+    };
   }, [mode, data, settleProgress, playbackProgress]);
 
   // Global mouseup to cleanly release dragging seek anywhere on the window
@@ -334,8 +373,9 @@ function drawStatic(
   mode: WaveformMode,
   playbackProgress?: number,
 ) {
+  const effectiveData = data && data.length > 0 ? data : getBaselineWaveform();
   const { ctx, w, h } = setupCanvas(canvas);
-  if (!ctx || w <= 0 || h <= 0 || !data.length) return;
+  if (!ctx || w <= 0 || h <= 0 || !effectiveData.length) return;
   const colors = getThemeColors();
 
   // High-density, slender audio bars
@@ -358,7 +398,7 @@ function drawStatic(
 
   for (let i = 0; i < totalBars; i++) {
     const fraction = totalBars > 1 ? i / (totalBars - 1) : 0;
-    const seg = sampleSegmentAt(data, fraction);
+    const seg = sampleSegmentAt(effectiveData, fraction);
     const revealed = i < revealCount || progress >= 1;
 
     // Amplitude mapping

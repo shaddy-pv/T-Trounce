@@ -416,3 +416,67 @@ html.light {
 .audio-scrubber::-moz-range-thumb:hover {
   transform: scale(1.25);
 }
+
+/* ==========================================================================
+   PRINT / PDF EXPORT SYSTEM
+   Ensures crystal-clear, executive-grade printed reports and PDF exports
+   without browser headers, navigation artifacts, or missing backgrounds.
+   ========================================================================== */
+
+@media print {
+  /* Enforce exact colors, background fills, and borders across all browsers */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Define standard A4 page layout with clean, professional margins */
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm 10mm 12mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 11pt;
+    line-height: 1.4;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    min-height: auto !important;
+  }
+
+  /* Ensure root layout containers don't clip or add extra margins */
+  #root,
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Hide all non-printable application elements */
+  header,
+  nav,
+  aside,
+  button,
+  .print-hidden,
+  .no-print,
+  [data-print-hide="true"] {
+    display: none !important;
+  }
+
+  /* Prevent page breaks inside the report card */
+  .printable-card,
+  #parent-report-card {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+
