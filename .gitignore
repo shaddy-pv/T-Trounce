@@ -48,7 +48,6 @@ venv/
 
 # Android
 *.apk
-!public/Trounce.apk
 android/.gradle/
 android/build/
 android/app/build/

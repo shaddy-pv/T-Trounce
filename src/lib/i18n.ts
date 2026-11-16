@@ -36,20 +36,10 @@ export const translations = {
     hi: "Trounce ऐप पाएं",
   },
   install_card_desc: {
-    en: "Download the official Android app to your phone for pure speech practice. Installs to your App Drawer with no browser badge.",
+    en: "Install Trounce on your phone as a standalone app. Installs into your App Drawer with no browser badge.",
     hinglish:
-      "Official Android app (.apk) download karein. Seedhe App Drawer mein install hoga, bina kisi browser sign ke.",
-    hi: "आधिकारिक एंड्रॉइड ऐप (.apk) डाउनलोड करें। बिना किसी ब्राउज़र चिह्न के सीधे ऐप ड्रॉअर में इंस्टॉल होगा।",
-  },
-  install_download_apk: {
-    en: "Download Trounce APK (4.5 MB)",
-    hinglish: "Trounce APK Download Karein (4.5 MB)",
-    hi: "Trounce APK डाउनलोड करें (4.5 MB)",
-  },
-  install_downloading: {
-    en: "Downloading APK...",
-    hinglish: "APK Download Ho Raha Hai...",
-    hi: "APK डाउनलोड हो रहा है...",
+      "Trounce ko apne phone par standalone app ki tarah install karein. Seedhe App Drawer mein install hoga bina kisi browser sign ke.",
+    hi: "Trounce को अपने फ़ोन पर स्टैंडअलोन ऐप की तरह इंस्टॉल करें। बिना किसी ब्राउज़र मार्क के सीधे ऐप ड्रॉअर में इंस्टॉल होगा।",
   },
   install_not_now: {
     en: "Not now",
@@ -92,24 +82,24 @@ export const translations = {
     hi: '"Add" दबाएं। Trounce आपकी होम स्क्रीन पर आ जाएगा।',
   },
   install_android_title: {
-    en: "Install Trounce Android App (.apk)",
-    hinglish: "Trounce Android App (.apk) Install Karein",
-    hi: "Trounce एंड्रॉइड ऐप (.apk) इंस्टॉल करें",
+    en: "Install Trounce on your phone",
+    hinglish: "Trounce ko apne phone par install karein",
+    hi: "Trounce को अपने फ़ोन पर इंस्टॉल करें",
   },
   install_android_step1: {
-    en: "Trounce.apk is downloading. Check your notification bar or downloads.",
-    hinglish: "Trounce.apk download ho raha hai. Notification bar ya downloads dekhein.",
-    hi: "Trounce.apk डाउनलोड हो रहा है। नोटिफिकेशन बार या डाउनलोड देखें।",
+    en: "Open this site on your phone in Google Chrome over HTTPS.",
+    hinglish: "Apne phone mein Google Chrome par yeh website kholein.",
+    hi: "अपने फ़ोन में Google Chrome पर यह वेबसाइट खोलें।",
   },
   install_android_step2: {
-    en: 'Tap on Trounce.apk and select "Install" (Allow unknown apps if prompted).',
-    hinglish: 'Trounce.apk par tap karein aur "Install" select karein (Prompt aane par allow karein).',
-    hi: 'Trounce.apk पर टैप करें और "Install" चुनें (प्रॉम्प्ट आने पर अनुमति दें)।',
+    en: 'Tap the three-dots menu in Chrome and select "Install app" (or "Install Trounce").',
+    hinglish: 'Chrome ke teen dots (menu) par tap karke "Install app" (ya "Install Trounce") chunein.',
+    hi: 'Chrome के तीन डॉट्स (मेनू) पर टैप करके "Install app" (या "Install Trounce") चुनें।',
   },
   install_android_step3: {
-    en: "Trounce installs directly into your Android App Drawer with no browser badge.",
-    hinglish: "Trounce bina kisi browser sign ke seedhe aapke App Drawer mein install ho jayega.",
-    hi: "Trounce बिना किसी ब्राउज़र मार्क के सीधे आपके ऐप ड्रॉअर में इंस्टॉल हो जाएगा।",
+    en: 'Tap "Install". Trounce will be installed directly into your phone\'s App Drawer with no browser badge.',
+    hinglish: '"Install" dabayein. Trounce bina kisi browser sign ke seedhe aapke App Drawer mein install ho jayega.',
+    hi: '"Install" दबाएं। Trounce बिना किसी ब्राउज़र मार्क के सीधे आपके ऐप ड्रॉअर में इंस्टॉल हो जाएगा।',
   },
   install_macsafari_title: {
     en: "Add Trounce to your Dock",

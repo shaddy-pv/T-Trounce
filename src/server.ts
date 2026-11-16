@@ -153,50 +153,6 @@ async function handleHealthRequest(): Promise<Response> {
   });
 }
 
-/** Serves the official Trounce Android APK for direct mobile installation without browser badging. */
-async function handleApkDownload(request: Request): Promise<Response> {
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
-  }
-
-  const { existsSync } = await import("fs");
-  const { readFile, stat } = await import("fs/promises");
-  const path = await import("path");
-
-  const candidates = [
-    path.join(process.cwd(), "public", "Trounce.apk"),
-    path.join(process.cwd(), "dist", "client", "Trounce.apk"),
-    path.join(process.cwd(), "Trounce.apk"),
-    path.join(process.cwd(), "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
-  ];
-
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      try {
-        const fileStat = await stat(candidate);
-        const headers = new Headers({
-          "Content-Type": "application/vnd.android.package-archive",
-          "Content-Disposition": 'attachment; filename="Trounce.apk"',
-          "Content-Length": String(fileStat.size),
-          "Cache-Control": "public, max-age=3600",
-        });
-        if (request.method === "HEAD") {
-          return new Response(null, { status: 200, headers });
-        }
-        const buffer = await readFile(candidate);
-        return new Response(buffer, { status: 200, headers });
-      } catch (err) {
-        console.error("[server.ts] Error reading APK candidate:", candidate, err);
-      }
-    }
-  }
-
-  return new Response("APK package not found on server.", {
-    status: 404,
-    headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
-  });
-}
-
 /**
  * Reads and discards a rejected body, without buffering it. If the server replied without reading
  * it, the connection would reset and the client would see a network error instead of the 413. Past
@@ -268,9 +224,6 @@ function withSecurityHeaders(response: Response): Response {
 async function route(request: Request, env: unknown, ctx: unknown): Promise<Response> {
   const { pathname } = new URL(request.url);
 
-  if (pathname === "/Trounce.apk" || pathname === "/download-apk" || pathname === "/api/app/download") {
-    return handleApkDownload(request);
-  }
   if (pathname.startsWith("/api/audio/")) {
     return handleAudioRequest(request, pathname.slice("/api/audio/".length));
   }

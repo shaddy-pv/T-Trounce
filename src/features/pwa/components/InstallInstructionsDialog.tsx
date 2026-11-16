@@ -1,17 +1,7 @@
 import { useEffect, useRef } from "react";
-import { Download, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useLanguage, type TranslationKey } from "@/lib/i18n";
 import type { InstallMode, InstallPlatform } from "../pwa-store";
-
-function triggerApkDownload() {
-  if (typeof document === "undefined") return;
-  const link = document.createElement("a");
-  link.href = "/Trounce.apk";
-  link.download = "Trounce.apk";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
 
 const STEPS: Partial<Record<InstallPlatform, { title: TranslationKey; steps: TranslationKey[] }>> =
   {
@@ -34,7 +24,8 @@ const STEPS: Partial<Record<InstallPlatform, { title: TranslationKey; steps: Tra
   };
 
 /**
- * Manual install steps for browsers with no programmatic prompt, most importantly iPhone Safari.
+ * Manual install steps for browsers with no programmatic prompt, most importantly iPhone Safari
+ * and Android Chrome when the native bottom-sheet prompt needs to be triggered from the browser menu.
  * A native dialog element handles focus trapping, Escape to close and the backdrop.
  */
 export function InstallInstructionsDialog({
@@ -83,18 +74,6 @@ export function InstallInstructionsDialog({
             className="shrink-0 rounded p-1 text-tertiary-warm transition hover:text-primary-warm cursor-pointer"
           >
             <X size={18} />
-          </button>
-        </div>
-
-        {/* Direct APK Download Button */}
-        <div className="mt-4 rounded-[8px] border border-[#3FB8AF]/30 bg-[#3FB8AF]/10 p-3">
-          <button
-            type="button"
-            onClick={triggerApkDownload}
-            className="flex w-full items-center justify-center gap-2 rounded-[8px] bg-[#3FB8AF] px-4 py-2.5 text-[13px] font-semibold text-[#100E0C] shadow-sm transition hover:brightness-110 cursor-pointer"
-          >
-            <Download size={16} aria-hidden="true" />
-            <span>{t("install_download_apk")}</span>
           </button>
         </div>
 
