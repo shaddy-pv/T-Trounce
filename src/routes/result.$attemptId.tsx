@@ -17,11 +17,13 @@ import {
   Check,
   Award,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Waveform } from "@/components/tarang/Waveform";
-import { fetchAttemptByIdFn, createFlagFn, updateAttemptTranscriptFn } from "@/server/data";
+import { fetchAttemptByIdFn, createFlagFn, updateAttemptTranscriptFn, deleteAttemptFn } from "@/server/data";
 import { useUser } from "@/lib/auth";
+import { isAdmin } from "@/lib/roles";
 import { ThemeToggle } from "@/components/tarang/ThemeToggle";
 import { LanguageSelector } from "@/components/tarang/LanguageSelector";
 import { useLanguage } from "@/lib/i18n";
@@ -131,6 +133,26 @@ function ResultPage() {
   // Pronunciation learning states
   const [speakingWord, setSpeakingWord] = useState<string | null>(null);
   const [isSpeakingFull, setIsSpeakingFull] = useState(false);
+  const [isDeletingAttempt, setIsDeletingAttempt] = useState(false);
+
+  const handleDeleteAttempt = async () => {
+    if (
+      !confirm(
+        "Are you sure you want to permanently delete this voice recording and remove its score?"
+      )
+    ) {
+      return;
+    }
+    setIsDeletingAttempt(true);
+    try {
+      await deleteAttemptFn({ data: { attemptId: result.id } });
+      invalidateClientDataCache("student-attempts-");
+      navigate({ to: "/dashboard" });
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete attempt");
+      setIsDeletingAttempt(false);
+    }
+  };
 
   const speakWord = (word: string) => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -302,6 +324,17 @@ function ResultPage() {
           <div className="flex items-center gap-2">
             <LanguageSelector variant="button" />
             <ThemeToggle showLabel={false} />
+            {isAdmin(user) && (
+              <button
+                onClick={handleDeleteAttempt}
+                disabled={isDeletingAttempt}
+                className="inline-flex items-center gap-1 rounded border border-alert-rust/40 bg-alert-rust/10 px-2.5 py-1 text-[11px] font-medium text-alert-rust transition hover:bg-alert-rust/20 cursor-pointer disabled:opacity-50"
+                title="Delete this voice attempt"
+              >
+                <Trash2 size={12} />
+                <span>{isDeletingAttempt ? "Deleting..." : "Delete Voice"}</span>
+              </button>
+            )}
             <span className="num text-[11px] uppercase tracking-[0.18em] text-tertiary-warm">
               attempt · {result.durationSec || 30}s · saved
             </span>

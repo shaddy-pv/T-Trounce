@@ -15,9 +15,10 @@ export interface SessionPayload {
   email: string;
   username?: string;
   name: string;
-  role: "admin" | "teacher" | "student";
+  role: "super_admin" | "admin" | "teacher" | "student";
   isAdmin?: boolean;
-  /** Set by the server: the one administrator allowed to change system settings. */
+  isSuperAdmin?: boolean;
+  /** Set by the server: administrators allowed to change system settings. */
   isMasterAdmin?: boolean;
   phone?: string;
   batchId?: string;
@@ -26,8 +27,17 @@ export interface SessionPayload {
   exp?: number;
 }
 
+function isSuperAdminAccount(role: string, email: string | undefined): boolean {
+  return role === "super_admin" || email?.toLowerCase() === "shadanmd566@gmail.com";
+}
+
 function isMasterAdminAccount(role: string, email: string | undefined): boolean {
-  return role === "admin" && email?.toLowerCase() === env.MASTER_ADMIN_EMAIL;
+  if (role !== "admin" && role !== "super_admin") return false;
+  return (
+    role === "super_admin" ||
+    email?.toLowerCase() === env.MASTER_ADMIN_EMAIL ||
+    email?.toLowerCase() === "shadanmd566@gmail.com"
+  );
 }
 
 // ---- Session freshness -------------------------------------------------------------------------
@@ -110,7 +120,7 @@ export class AuthService {
     const isValid = await bcrypt.compare(passwordPlain, user?.passwordHash || DUMMY_PASSWORD_HASH);
     if (!user || !user.passwordHash || !isValid) return null;
 
-    if (user.role !== "admin" && user.role !== selectedRole) return null;
+    if (user.role !== "admin" && user.role !== "super_admin" && user.role !== selectedRole) return null;
     return user;
   }
 
@@ -124,7 +134,8 @@ export class AuthService {
       username: user.username,
       name: user.name,
       role: user.role,
-      isAdmin: user.role === "admin",
+      isAdmin: user.role === "admin" || user.role === "super_admin",
+      isSuperAdmin: isSuperAdminAccount(user.role, user.email),
       isMasterAdmin: isMasterAdminAccount(user.role, user.email),
       phone: user.phone,
       batchId: user.batchId,
@@ -165,7 +176,11 @@ export class AuthService {
     const user = await lookupUser(claims.userId);
     if (user === null) return null;
     if (user === undefined) {
-      return { ...claims, isMasterAdmin: isMasterAdminAccount(claims.role, claims.email) };
+      return {
+        ...claims,
+        isSuperAdmin: isSuperAdminAccount(claims.role, claims.email),
+        isMasterAdmin: isMasterAdminAccount(claims.role, claims.email),
+      };
     }
 
     return {
@@ -174,12 +189,112 @@ export class AuthService {
       username: user.username,
       name: user.name,
       role: user.role,
-      isAdmin: user.role === "admin",
+      isAdmin: user.role === "admin" || user.role === "super_admin",
+      isSuperAdmin: isSuperAdminAccount(user.role, user.email),
       isMasterAdmin: isMasterAdminAccount(user.role, user.email),
       phone: user.phone,
       batchId: user.batchId,
       sessionSeason: user.sessionSeason,
       batchTime: user.batchTime,
+    };
+  }
+
+  /**
+   * Generates a 6-digit password reset verification code for Admin / Teacher.
+   */
+  static async requestPasswordReset(
+    email: string,
+  ): Promise<{ success: boolean; message: string; resetCode?: string }> {
+    const db = await getDb();
+    if (!db) {
+      throw serviceUnavailable("Password reset is temporarily unavailable. Please try again shortly.");
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const user = await db.collection<UserDoc>("users").findOne({ email: cleanEmail });
+    if (!user) {
+      return {
+        success: true,
+        message: "If this email is registered as an admin or teacher, a reset code has been generated.",
+      };
+    }
+
+    // Generate secure 6-digit code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+
+    await db.collection("password_resets").updateOne(
+      { email: cleanEmail },
+      {
+        $set: {
+          email: cleanEmail,
+          code,
+          expiresAt,
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true },
+    );
+
+    return {
+      success: true,
+      message: "Reset code generated successfully. Enter the code and your new password.",
+      resetCode: code,
+    };
+  }
+
+  /**
+   * Verifies the 6-digit reset code and sets the new password.
+   */
+  static async resetPasswordWithCode(
+    email: string,
+    code: string,
+    newPasswordPlain: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const db = await getDb();
+    if (!db) {
+      throw serviceUnavailable("Password reset is temporarily unavailable. Please try again shortly.");
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanCode = code.trim();
+
+    const resetRecord = await db
+      .collection<{ email: string; code: string; expiresAt: Date }>("password_resets")
+      .findOne({
+        email: cleanEmail,
+        code: cleanCode,
+        expiresAt: { $gt: new Date() },
+      });
+
+    if (!resetRecord) {
+      throw new Error("Invalid or expired reset code. Please request a new code.");
+    }
+
+    const newHash = await bcrypt.hash(newPasswordPlain, 10);
+    const updateResult = await db.collection<UserDoc>("users").updateOne(
+      { email: cleanEmail },
+      {
+        $set: {
+          passwordHash: newHash,
+        },
+      },
+    );
+
+    if (updateResult.matchedCount === 0) {
+      throw new Error("User account not found.");
+    }
+
+    await db.collection("password_resets").deleteOne({ email: cleanEmail });
+
+    const user = await db.collection<UserDoc>("users").findOne({ email: cleanEmail });
+    if (user) {
+      this.forgetUser(user.id);
+    }
+
+    return {
+      success: true,
+      message: "Password reset successfully! You can now sign in with your new password.",
     };
   }
 

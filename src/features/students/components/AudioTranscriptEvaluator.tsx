@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "@tanstack/react-router";
 import {
   Play,
   Pause,
@@ -10,12 +11,15 @@ import {
   Check,
   Award,
   Send,
+  Trash2,
 } from "lucide-react";
 import { Waveform } from "@/components/tarang/Waveform";
-import { saveTeacherFeedbackFn } from "@/server/data";
+import { saveTeacherFeedbackFn, deleteAttemptFn } from "@/server/data";
 import type { AttemptResult } from "@/types";
 import { useLanguage } from "@/lib/i18n";
 import { attemptScore, FILLER_KEYWORDS } from "@/lib/scoring";
+import { useUser } from "@/lib/auth";
+import { isAdmin } from "@/lib/roles";
 
 export function AudioTranscriptEvaluator({
   attempt,
@@ -48,6 +52,28 @@ export function AudioTranscriptEvaluator({
   useEffect(() => {
     setFeedbackText(attempt.teacherFeedback || "");
   }, [attempt.id, attempt.teacherFeedback]);
+
+  const currentUser = useUser();
+  const router = useRouter();
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteAttempt = async () => {
+    if (
+      !confirm(
+        "Are you sure you want to permanently delete this voice recording and remove its score?"
+      )
+    ) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await deleteAttemptFn({ data: { attemptId: attempt.id } });
+      await router.invalidate();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete attempt");
+      setIsDeleting(false);
+    }
+  };
 
   const handleSaveFeedback = async () => {
     if (!feedbackText.trim() || !attempt.id) return;
@@ -213,8 +239,19 @@ export function AudioTranscriptEvaluator({
           </h3>
         </div>
 
-        {/* Aggregate Score Pill */}
+        {/* Aggregate Score Pill & Actions */}
         <div className="flex items-center gap-3">
+          {isAdmin(currentUser) && (
+            <button
+              onClick={handleDeleteAttempt}
+              disabled={isDeleting}
+              className="inline-flex items-center gap-1.5 rounded-[8px] border border-alert-rust/40 bg-alert-rust/10 px-2.5 py-1.5 text-[11px] font-medium text-alert-rust transition hover:bg-alert-rust/20 cursor-pointer disabled:opacity-50"
+              title="Delete this voice recording"
+            >
+              <Trash2 size={13} />
+              <span>{isDeleting ? "Deleting..." : "Delete Voice"}</span>
+            </button>
+          )}
           <div className="text-right">
             <p className="num text-[10px] uppercase tracking-wider text-tertiary-warm">
               Overall Fluency

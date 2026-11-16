@@ -5,6 +5,8 @@ import { TButton } from "@/components/tarang/Button";
 import { Waveform } from "@/components/tarang/Waveform";
 import { makeSampleWaveform } from "@/lib/sample-waveform";
 import { InstallLoginLink } from "@/features/pwa/components/InstallApp";
+import { requestPasswordResetFn, resetPasswordWithCodeFn } from "@/server/data";
+import { KeyRound, X, CheckCircle, AlertCircle } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -15,6 +17,7 @@ export const Route = createFileRoute("/login")({
       const isTeacherOrAdmin =
         context.session.role === "teacher" ||
         context.session.role === "admin" ||
+        context.session.role === "super_admin" ||
         context.session.isAdmin;
       throw redirect({
         to: isTeacherOrAdmin ? "/dashboard" : "/practice",
@@ -33,6 +36,74 @@ function LoginPage() {
 
   const [formValidation, setFormValidation] = useState<string | null>(null);
 
+  // Forgot Password Modal State
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotCode, setForgotCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [forgotStep, setForgotStep] = useState<"request" | "reset">("request");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotMsg, setForgotMsg] = useState<string | null>(null);
+  const [forgotErr, setForgotErr] = useState<string | null>(null);
+
+  const handleRequestCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotErr(null);
+    setForgotMsg(null);
+    if (!forgotEmail.trim()) {
+      setForgotErr("Please enter your registered email address.");
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const res = await requestPasswordResetFn({ data: { email: forgotEmail.trim() } });
+      setForgotMsg(res.message);
+      if (res.resetCode) {
+        setForgotCode(res.resetCode);
+      }
+      setForgotStep("reset");
+    } catch (err) {
+      setForgotErr(err instanceof Error ? err.message : "Failed to request reset code.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotErr(null);
+    setForgotMsg(null);
+    if (!forgotCode.trim() || !newPassword.trim()) {
+      setForgotErr("Please enter both the reset code and your new password.");
+      return;
+    }
+    if (newPassword.trim().length < 6) {
+      setForgotErr("New password must be at least 6 characters.");
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const res = await resetPasswordWithCodeFn({
+        data: {
+          email: forgotEmail.trim(),
+          code: forgotCode.trim(),
+          newPassword: newPassword.trim(),
+        },
+      });
+      setForgotMsg(res.message);
+      setTimeout(() => {
+        setPassword(newPassword.trim());
+        setEmail(forgotEmail.trim());
+        setShowForgotModal(false);
+        setForgotStep("request");
+      }, 1500);
+    } catch (err) {
+      setForgotErr(err instanceof Error ? err.message : "Failed to reset password.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormValidation(null);
@@ -49,7 +120,7 @@ function LoginPage() {
       const user = await login(cleanEmail, cleanPassword, role);
       navigate({
         to:
-          user.role === "admin"
+          user.role === "admin" || user.role === "super_admin"
             ? role === "student"
               ? "/practice"
               : "/dashboard"
@@ -164,10 +235,27 @@ function LoginPage() {
               className="mt-2 h-11 w-full rounded-[12px] border border-hairline bg-ink-900 px-3 text-[14px] text-primary-warm placeholder:text-tertiary-warm focus:outline-none focus:border-[#3FB8AF]"
             />
 
-            {/* Password Input */}
-            <label className="mt-4 block text-[12px] uppercase tracking-wider text-tertiary-warm">
-              Password
-            </label>
+            {/* Password Input Header */}
+            <div className="mt-4 flex items-center justify-between">
+              <label className="block text-[12px] uppercase tracking-wider text-tertiary-warm">
+                Password
+              </label>
+              {role === "teacher" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotEmail(email);
+                    setShowForgotModal(true);
+                    setForgotStep("request");
+                    setForgotMsg(null);
+                    setForgotErr(null);
+                  }}
+                  className="text-[12px] text-[#3FB8AF] hover:underline cursor-pointer"
+                >
+                  Forgot Password?
+                </button>
+              )}
+            </div>
             <input
               type="password"
               required
@@ -188,6 +276,134 @@ function LoginPage() {
           </form>
         </div>
       </div>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-[16px] border border-hairline bg-ink-900 p-6 shadow-2xl relative">
+            <button
+              onClick={() => setShowForgotModal(false)}
+              className="absolute right-4 top-4 text-tertiary-warm hover:text-primary-warm cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-2.5 mb-2">
+              <span className="flex size-8 items-center justify-center rounded-full bg-[#3FB8AF]/20 text-[#3FB8AF]">
+                <KeyRound size={16} />
+              </span>
+              <h3 className="display text-[18px]">Reset Password</h3>
+            </div>
+            <p className="text-[13px] text-secondary-warm mb-5">
+              {forgotStep === "request"
+                ? "Enter your registered email address to receive a secure password reset code."
+                : "Enter the reset code sent to your account and choose a new password."}
+            </p>
+
+            {forgotErr && (
+              <div className="mb-4 flex items-center gap-2 rounded-md border border-alert-rust bg-alert-rust/10 p-3 text-[13px] text-alert-rust">
+                <AlertCircle size={15} className="shrink-0" />
+                <span>{forgotErr}</span>
+              </div>
+            )}
+
+            {forgotMsg && (
+              <div className="mb-4 flex items-center gap-2 rounded-md border border-[#3FB8AF]/40 bg-[#3FB8AF]/10 p-3 text-[13px] text-[#3FB8AF]">
+                <CheckCircle size={15} className="shrink-0" />
+                <span>{forgotMsg}</span>
+              </div>
+            )}
+
+            {forgotStep === "request" ? (
+              <form onSubmit={handleRequestCode} className="space-y-4">
+                <div>
+                  <label className="block text-[12px] uppercase tracking-wider text-tertiary-warm mb-1.5">
+                    Account Email
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="e.g. admin@trounce.in"
+                    className="h-11 w-full rounded-[10px] border border-hairline bg-ink-950 px-3 text-[14px] text-primary-warm placeholder:text-tertiary-warm focus:border-[#3FB8AF] focus:outline-none"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotModal(false)}
+                    className="rounded-[8px] border border-hairline px-4 py-2 text-[13px] text-secondary-warm hover:bg-ink-800 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="rounded-[8px] bg-[#3FB8AF] px-4 py-2 text-[13px] font-semibold text-[#100E0C] hover:brightness-110 disabled:opacity-50 cursor-pointer"
+                  >
+                    {forgotLoading ? "Generating..." : "Get Reset Code"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <div>
+                  <label className="block text-[12px] uppercase tracking-wider text-tertiary-warm mb-1.5">
+                    6-Digit Verification Code
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={forgotCode}
+                    onChange={(e) => setForgotCode(e.target.value)}
+                    placeholder="123456"
+                    className="h-11 w-full rounded-[10px] border border-hairline bg-ink-950 px-3 text-[15px] font-mono tracking-widest text-[#3FB8AF] placeholder:text-tertiary-warm focus:border-[#3FB8AF] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[12px] uppercase tracking-wider text-tertiary-warm mb-1.5">
+                    New Password (min 6 characters)
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="h-11 w-full rounded-[10px] border border-hairline bg-ink-950 px-3 text-[14px] text-primary-warm placeholder:text-tertiary-warm focus:border-[#3FB8AF] focus:outline-none"
+                  />
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setForgotStep("request")}
+                    className="text-[12px] text-tertiary-warm hover:underline cursor-pointer"
+                  >
+                    ← Back
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(false)}
+                      className="rounded-[8px] border border-hairline px-4 py-2 text-[13px] text-secondary-warm hover:bg-ink-800 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={forgotLoading}
+                      className="rounded-[8px] bg-[#3FB8AF] px-4 py-2 text-[13px] font-semibold text-[#100E0C] hover:brightness-110 disabled:opacity-50 cursor-pointer"
+                    >
+                      {forgotLoading ? "Resetting..." : "Save New Password"}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

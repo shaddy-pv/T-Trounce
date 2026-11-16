@@ -2,7 +2,7 @@ import { Route as rootRoute } from "@/routes/__root";
 import { getSessionFn, logoutFn } from "@/server/data";
 import type { SessionPayload } from "@/server/services/auth.service";
 
-export type Role = "admin" | "teacher" | "student";
+export type Role = "super_admin" | "admin" | "teacher" | "student";
 
 export interface TrounceUser {
   userId: string;
@@ -11,6 +11,7 @@ export interface TrounceUser {
   name: string;
   role: Role;
   isAdmin?: boolean;
+  isSuperAdmin?: boolean;
   isMasterAdmin?: boolean;
   phone?: string;
   batchId?: string;

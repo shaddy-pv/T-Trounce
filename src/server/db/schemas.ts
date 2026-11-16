@@ -12,10 +12,19 @@ export interface UserDoc {
   username?: string; // Optional legacy username
   passwordHash: string; // Bcrypt hashed password
   name: string; // Display name
-  role: "admin" | "teacher" | "student";
+  role: "super_admin" | "admin" | "teacher" | "student";
   sessionSeason?: SessionSeason;
   batchTime?: BatchTime;
   batchId?: string; // e.g. "summer-morning"
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
+export interface PasswordResetDoc {
+  _id?: ObjectId;
+  email: string;
+  code: string;
+  expiresAt: Date;
   createdAt: Date;
 }
 

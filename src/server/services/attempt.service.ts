@@ -411,4 +411,74 @@ export class AttemptService {
     invalidateRosterCache();
     return await this.getAttemptById(attemptId);
   }
+
+  /**
+   * Delete an attempt and its associated audio recording, flags, and update student stats.
+   * Accessible by faculty (Super Admin and Admin).
+   */
+  static async deleteAttempt(attemptId: string): Promise<boolean> {
+    const db = await requireDb();
+    const attempts = db.collection<AttemptDoc>("attempts");
+
+    const attempt = await attempts.findOne({ id: attemptId });
+    if (!attempt) return false;
+
+    // Delete audio if present
+    if (attempt.audioId) {
+      await StorageService.deleteAudio(attempt.audioId).catch(() => {});
+    }
+
+    // Delete attempt document
+    await attempts.deleteOne({ id: attemptId });
+
+    // Delete linked flags
+    await db.collection("flags").deleteMany({ attemptId });
+
+    // Recalculate student latest attempt stats
+    const studentId = attempt.studentId;
+    if (studentId) {
+      const remainingAttempts = await attempts
+        .find({ studentId })
+        .sort({ createdAt: -1 })
+        .limit(2)
+        .toArray();
+
+      const latest = remainingAttempts[0];
+      if (latest) {
+        const score = attemptScore(latest);
+        const focus = weakestMetric(latest);
+        const trendPct = remainingAttempts[1] ? score - attemptScore(remainingAttempts[1]) : 0;
+        await db.collection<StudentDoc>("students").updateOne(
+          { id: studentId },
+          {
+            $set: {
+              scorePct: score,
+              trendPct,
+              focus,
+              waveform: latest.waveform || [],
+              updatedAt: new Date(),
+            },
+          },
+        );
+      } else {
+        await db.collection<StudentDoc>("students").updateOne(
+          { id: studentId },
+          {
+            $set: {
+              lastActive: "Never",
+              scorePct: 0,
+              trendPct: 0,
+              waveform: [],
+              status: "on-track",
+              updatedAt: new Date(),
+            },
+            $unset: { flagReason: "" },
+          },
+        );
+      }
+    }
+
+    invalidateRosterCache();
+    return true;
+  }
 }

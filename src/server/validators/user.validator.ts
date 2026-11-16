@@ -8,7 +8,7 @@ export const CreateUserInputSchema = z.object({
     .max(20)
     .regex(/^[+\d\s()-]*$/, "Please enter a valid phone number")
     .optional(),
-  role: z.enum(["teacher", "student"]),
+  role: z.enum(["teacher", "student", "admin"]),
   // bcrypt only uses the first 72 bytes, so longer passwords would be silently truncated.
   passwordPlain: z
     .string()
@@ -23,5 +23,11 @@ export const DeleteUserInputSchema = z.object({
   userId: z.string().min(1, "User ID is required").max(200),
 });
 
+export const UpdateUserRoleInputSchema = z.object({
+  userId: z.string().min(1, "User ID is required").max(200),
+  role: z.enum(["super_admin", "admin", "teacher", "student"]),
+});
+
 export type CreateUserInput = z.infer<typeof CreateUserInputSchema>;
 export type DeleteUserInput = z.infer<typeof DeleteUserInputSchema>;
+export type UpdateUserRoleInput = z.infer<typeof UpdateUserRoleInputSchema>;

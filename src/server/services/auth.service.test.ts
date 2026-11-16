@@ -61,4 +61,34 @@ describe("AuthService Unit Tests", () => {
     const payload = await AuthService.verifySessionToken("invalid.token.here");
     expect(payload).toBeNull();
   });
+
+  it("should generate a valid session token for super admin with isSuperAdmin=true", async () => {
+    const superAdmin: UserDoc = {
+      id: "super-1",
+      email: "shadanmd566@gmail.com",
+      name: "Shadan",
+      role: "super_admin",
+      passwordHash: "mock_hash",
+      createdAt: new Date(),
+    };
+    const token = await AuthService.createSessionToken(superAdmin);
+    const payload = await AuthService.verifySessionToken(token);
+    expect(payload?.isSuperAdmin).toBe(true);
+    expect(payload?.isAdmin).toBe(true);
+  });
+
+  it("should generate a valid session token for admin with isSuperAdmin=false and isAdmin=true", async () => {
+    const admin: UserDoc = {
+      id: "admin-1",
+      email: "admin@trounce.in",
+      name: "Trounce Admin",
+      role: "admin",
+      passwordHash: "mock_hash",
+      createdAt: new Date(),
+    };
+    const token = await AuthService.createSessionToken(admin);
+    const payload = await AuthService.verifySessionToken(token);
+    expect(payload?.isSuperAdmin).toBe(false);
+    expect(payload?.isAdmin).toBe(true);
+  });
 });

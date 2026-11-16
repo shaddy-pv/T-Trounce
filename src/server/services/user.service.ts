@@ -1,17 +1,18 @@
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import { requireDb } from "../db/client";
-import type { UserDoc, StudentDoc, SessionSeason, BatchTime } from "../db/schemas";
+import type { UserDoc, StudentDoc, AttemptDoc, SessionSeason, BatchTime } from "../db/schemas";
 import { AppError } from "../errors";
 import { AuthService } from "./auth.service";
 import { invalidateRosterCache } from "./student.service";
+import { StorageService } from "./storage.service";
 
 export interface UserPublic {
   id: string;
   email: string;
   phone?: string;
   name: string;
-  role: "admin" | "teacher" | "student";
+  role: "super_admin" | "admin" | "teacher" | "student";
   sessionSeason?: SessionSeason;
   batchTime?: BatchTime;
   batchId?: string;
@@ -22,7 +23,7 @@ export interface CreateUserInput {
   name: string;
   email: string;
   phone?: string;
-  role: "teacher" | "student";
+  role: "teacher" | "student" | "admin";
   passwordPlain: string;
   sessionSeason?: SessionSeason;
   batchTime?: BatchTime;
@@ -136,21 +137,129 @@ export class UserService {
   }
 
   /**
-   * Delete a user by ID from both users and students collections, ending their access immediately.
+   * Delete a user by ID from users, students, attempts and flags.
+   * Super Admin can delete admins, teachers, and students.
+   * Admin can delete teachers and students, but cannot delete admins or super admins.
+   * Super Admin account itself is protected from deletion.
    */
-  static async deleteUser(userId: string): Promise<boolean> {
+  static async deleteUser(
+    userId: string,
+    requester?: { userId?: string; role?: string; isSuperAdmin?: boolean },
+  ): Promise<boolean> {
     const db = await requireDb();
 
-    // Safety check: protect administrator accounts from deletion
-    const user = await db
+    const targetUser = await db
       .collection<UserDoc>("users")
-      .findOne({ id: userId }, { projection: { role: 1 } });
-    if (user?.role === "admin") {
-      throw new AppError("Administrator accounts cannot be deleted directly.", 403);
+      .findOne({ id: userId });
+
+    if (!targetUser) return false;
+
+    // Self-protection
+    if (requester?.userId === userId) {
+      throw new AppError("You cannot delete your own account.", 400);
     }
 
+    // Super Admin cannot be deleted
+    if (
+      targetUser.role === "super_admin" ||
+      targetUser.email.toLowerCase() === "shadanmd566@gmail.com"
+    ) {
+      throw new AppError("Super administrator account is permanently protected.", 403);
+    }
+
+    const isRequesterSuper =
+      requester?.role === "super_admin" ||
+      requester?.isSuperAdmin ||
+      requester?.userId === "admin-master";
+
+    // Regular admin cannot delete other administrators
+    if (targetUser.role === "admin" && !isRequesterSuper) {
+      throw new AppError(
+        "Administrator accounts cannot be deleted without Super Administrator authorization.",
+        403,
+      );
+    }
+
+    // Delete user doc and student doc
     await db.collection<UserDoc>("users").deleteOne({ id: userId });
     await db.collection<StudentDoc>("students").deleteOne({ id: userId });
+
+    // Clean up attempts & GridFS audio for this user
+    const userAttempts = await db
+      .collection<AttemptDoc>("attempts")
+      .find({ studentId: userId }, { projection: { id: 1, audioId: 1 } })
+      .toArray();
+
+    for (const att of userAttempts) {
+      if (att.audioId) {
+        await StorageService.deleteAudio(att.audioId).catch(() => {});
+      }
+    }
+    await db.collection("attempts").deleteMany({ studentId: userId });
+    await db.collection("flags").deleteMany({ studentId: userId });
+    await db.collection("messages").deleteMany({ studentId: userId });
+
+    AuthService.forgetUser(userId);
+    invalidateRosterCache();
+    return true;
+  }
+
+  /**
+   * Updates a user's role (Super Admin freedom: promote any user/teacher to admin or student).
+   */
+  static async updateUserRole(
+    userId: string,
+    newRole: "super_admin" | "admin" | "teacher" | "student",
+    requester?: { userId?: string; role?: string; isSuperAdmin?: boolean },
+  ): Promise<boolean> {
+    const isRequesterSuper =
+      requester?.role === "super_admin" ||
+      requester?.isSuperAdmin ||
+      requester?.userId === "admin-master";
+
+    if (!isRequesterSuper) {
+      throw new AppError("Only the Super Administrator can change user roles.", 403);
+    }
+
+    const db = await requireDb();
+    const targetUser = await db.collection<UserDoc>("users").findOne({ id: userId });
+    if (!targetUser) {
+      throw new AppError("User not found.", 404);
+    }
+
+    if (targetUser.email.toLowerCase() === "shadanmd566@gmail.com" && newRole !== "super_admin") {
+      throw new AppError("The primary Super Administrator role cannot be changed.", 400);
+    }
+
+    await db.collection<UserDoc>("users").updateOne(
+      { id: userId },
+      { $set: { role: newRole, updatedAt: new Date() } },
+    );
+
+    // If changed to student, ensure student document exists
+    if (newRole === "student") {
+      await db.collection<StudentDoc>("students").updateOne(
+        { id: userId },
+        {
+          $setOnInsert: {
+            id: userId,
+            name: targetUser.name,
+            phone: targetUser.phone,
+            status: "on-track",
+            focus: "General",
+            lastActive: "Never",
+            scorePct: 0,
+            trendPct: 0,
+            waveform: [],
+            sessionSeason: targetUser.sessionSeason,
+            batchTime: targetUser.batchTime,
+            batchId: targetUser.batchId,
+            updatedAt: new Date(),
+          },
+        },
+        { upsert: true },
+      );
+    }
 
     AuthService.forgetUser(userId);
     invalidateRosterCache();
@@ -163,7 +272,7 @@ export class UserService {
     const user = await db
       .collection<UserDoc>("users")
       .findOne(
-        { id: userId, role: { $in: ["teacher", "admin"] } },
+        { id: userId, role: { $in: ["teacher", "admin", "super_admin"] } },
         { projection: { id: 1, name: 1 } },
       );
     return user ? { id: user.id, name: user.name } : null;

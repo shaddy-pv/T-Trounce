@@ -60,6 +60,12 @@ export const UpdateAttemptTranscriptInputSchema = z.object({
 
 export type UpdateAttemptTranscriptInput = z.infer<typeof UpdateAttemptTranscriptInputSchema>;
 
+export const DeleteAttemptInputSchema = z.object({
+  attemptId: z.string().min(1).max(200),
+});
+
+export type DeleteAttemptInput = z.infer<typeof DeleteAttemptInputSchema>;
+
 export const StreamTranscribeInputSchema = z.object({
   audioBase64: z.string().max(UPLOAD_LIMITS.maxTranscribeBase64Bytes, "This clip is too large."),
   mimeType: z.string().max(100).default("audio/wav"),

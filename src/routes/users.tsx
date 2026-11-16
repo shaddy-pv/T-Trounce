@@ -2,12 +2,12 @@ import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-rout
 import { useState } from "react";
 import { TeacherShell } from "@/components/tarang/TeacherShell";
 import { TButton } from "@/components/tarang/Button";
-import { fetchUsersFn, createUserFn, deleteUserFn } from "@/server/data";
+import { fetchUsersFn, createUserFn, deleteUserFn, updateUserRoleFn } from "@/server/data";
 import { cachedClientFetch, invalidateClientDataCache } from "@/lib/client-cache";
 import type { UserPublic } from "@/server/services/user.service";
 import { useUser } from "@/lib/auth";
 import { cleanIndianPhoneNumber, formatPhoneDisplay } from "@/lib/phone";
-import { isAdmin } from "@/lib/roles";
+import { isAdmin, isSuperAdmin } from "@/lib/roles";
 import {
   UserPlus,
   Trash2,
@@ -82,14 +82,14 @@ function UsersManagementPage() {
 
   const [users, setUsers] = useState(initialUsers);
   const [searchTerm, setSearchTerm] = useState("");
-  const [roleFilter, setRoleFilter] = useState<"all" | "teacher" | "student">("all");
+  const [roleFilter, setRoleFilter] = useState<"all" | "admin" | "teacher" | "student">("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Form State for New User Creation
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPhone, setNewPhone] = useState("");
-  const [newRole, setNewRole] = useState<"teacher" | "student">("student");
+  const [newRole, setNewRole] = useState<"teacher" | "student" | "admin">("student");
   const [newPassword, setNewPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [newSession, setNewSession] = useState<"summer" | "autumn" | "winter" | "spring">("summer");
@@ -101,7 +101,7 @@ function UsersManagementPage() {
     name: string;
     email: string;
     phone?: string;
-    role: "teacher" | "student";
+    role: "teacher" | "student" | "admin";
     passwordPlain: string;
     sessionSeason: string;
     batchTime: string;
@@ -113,11 +113,17 @@ function UsersManagementPage() {
     const matchesSearch =
       u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = roleFilter === "all" || u.role === roleFilter;
+    const matchesRole =
+      roleFilter === "all"
+        ? true
+        : roleFilter === "admin"
+        ? u.role === "admin" || u.role === "super_admin"
+        : u.role === roleFilter;
     return matchesSearch && matchesRole;
   });
 
-  const teacherCount = users.filter((u) => u.role === "teacher" || u.role === "admin").length;
+  const adminCount = users.filter((u) => u.role === "admin" || u.role === "super_admin").length;
+  const teacherCount = users.filter((u) => u.role === "teacher").length;
   const studentCount = users.filter((u) => u.role === "student").length;
 
   const generateRandomPassword = () => {
@@ -186,6 +192,31 @@ function UsersManagementPage() {
     }
   };
 
+  const handleUpdateRole = async (
+    userId: string,
+    targetRole: "teacher" | "student" | "admin",
+    userName: string
+  ) => {
+    if (
+      !confirm(
+        `Are you sure you want to change the role of "${userName}" to ${targetRole.toUpperCase()}?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await updateUserRoleFn({ data: { userId, role: targetRole } });
+      setUsers(users.map((u) => (u.id === userId ? { ...u, role: targetRole } : u)));
+      setSuccessMessage(`Updated role for "${userName}" to ${targetRole.toUpperCase()}`);
+      invalidateClientDataCache("users");
+      invalidateClientDataCache("student-roster");
+      await router.invalidate();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to update role");
+    }
+  };
+
   const handleDeleteUser = async (userId: string, userName: string) => {
     if (!confirm(`Are you sure you want to permanently delete user "${userName}"?`)) {
       return;
@@ -249,15 +280,26 @@ function UsersManagementPage() {
         )}
 
         {/* Metrics Overview Cards */}
-        <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-4">
           <div className="rounded-[12px] border border-hairline bg-ink-900 p-4">
             <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">
               Total Accounts
             </p>
             <p className="display num mt-2 text-[28px] text-primary-warm">{users.length}</p>
             <p className="mt-1 text-[12px] text-secondary-warm">
-              Across all 4 sessions & 8 batches
+              All registered users
             </p>
+          </div>
+
+          <div className="rounded-[12px] border border-hairline bg-ink-900 p-4">
+            <div className="flex items-center justify-between">
+              <p className="num text-[11px] uppercase tracking-wider text-tertiary-warm">
+                Administrators
+              </p>
+              <Shield size={14} className="text-blue-400" />
+            </div>
+            <p className="display num mt-2 text-[28px] text-primary-warm">{adminCount}</p>
+            <p className="mt-1 text-[12px] text-secondary-warm">Platform & institute admins</p>
           </div>
 
           <div className="rounded-[12px] border border-hairline bg-ink-900 p-4">
@@ -268,7 +310,7 @@ function UsersManagementPage() {
               <Shield size={14} className="text-[#3FB8AF]" />
             </div>
             <p className="display num mt-2 text-[28px] text-primary-warm">{teacherCount}</p>
-            <p className="mt-1 text-[12px] text-secondary-warm">Batch mentors & Administrators</p>
+            <p className="mt-1 text-[12px] text-secondary-warm">Batch mentors & educators</p>
           </div>
 
           <div className="rounded-[12px] border border-hairline bg-ink-900 p-4">
@@ -297,7 +339,7 @@ function UsersManagementPage() {
           </div>
 
           <div className="flex items-center gap-1 rounded-[8px] border border-hairline bg-ink-950 p-1 shrink-0 justify-center">
-            {(["all", "teacher", "student"] as const).map((tab) => (
+            {(["all", "admin", "teacher", "student"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setRoleFilter(tab)}
@@ -308,7 +350,7 @@ function UsersManagementPage() {
                     : "text-secondary-warm hover:text-primary-warm")
                 }
               >
-                {tab === "all" ? "All Users" : `${tab}s`}
+                {tab === "all" ? "All Users" : tab === "admin" ? "Admins" : `${tab}s`}
               </button>
             ))}
           </div>
@@ -322,8 +364,18 @@ function UsersManagementPage() {
             </div>
           ) : (
             filteredUsers.map((u) => {
-              const isCurrent = u.id === currentUser?.userId || u.email === currentUser?.email;
-              const isSuperAdmin = u.role === "admin";
+              const isTargetSuper =
+                u.role === "super_admin" || u.email.toLowerCase() === "shadanmd566@gmail.com";
+              const isTargetAdmin = u.role === "admin";
+              const isCurrent =
+                u.id === currentUser?.userId ||
+                u.email?.toLowerCase() === currentUser?.email?.toLowerCase();
+              const canManageRoles = isSuperAdmin(currentUser) && !isTargetSuper;
+              const canDelete =
+                !isTargetSuper &&
+                !isCurrent &&
+                (isSuperAdmin(currentUser) || (isAdmin(currentUser) && !isTargetAdmin));
+
               const sessionLabel = u.sessionSeason
                 ? u.sessionSeason.charAt(0).toUpperCase() + u.sessionSeason.slice(1)
                 : "Summer";
@@ -355,8 +407,13 @@ function UsersManagementPage() {
                       </div>
                     </div>
                     <div>
-                      {isSuperAdmin ? (
+                      {isTargetSuper ? (
                         <span className="inline-flex items-center gap-1 rounded bg-[#3FB8AF]/20 px-2 py-0.5 text-[11px] font-semibold text-[#3FB8AF] shrink-0">
+                          <Shield size={11} />
+                          SUPER ADMIN
+                        </span>
+                      ) : isTargetAdmin ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-blue-500/20 px-2 py-0.5 text-[11px] font-semibold text-blue-400 shrink-0">
                           <Shield size={11} />
                           ADMIN
                         </span>
@@ -371,6 +428,27 @@ function UsersManagementPage() {
                       )}
                     </div>
                   </div>
+
+                  {canManageRoles && (
+                    <div className="flex items-center justify-between border-t border-hairline pt-2 text-[12px]">
+                      <span className="text-secondary-warm">Change Role:</span>
+                      <select
+                        value={u.role === "super_admin" ? "admin" : u.role}
+                        onChange={(e) =>
+                          handleUpdateRole(
+                            u.id,
+                            e.target.value as "student" | "teacher" | "admin",
+                            u.name
+                          )
+                        }
+                        className="rounded bg-ink-950 border border-hairline px-2 py-1 text-[11px] font-medium text-primary-warm focus:outline-none focus:border-[#3FB8AF] cursor-pointer"
+                      >
+                        <option value="student">Student</option>
+                        <option value="teacher">Teacher</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                  )}
 
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t border-hairline pt-3 text-[11px]">
                     <span className="inline-flex items-center gap-1.5 rounded-[6px] border border-hairline bg-ink-950 px-2 py-1 text-secondary-warm">
@@ -395,7 +473,7 @@ function UsersManagementPage() {
                       <span className="text-[11px] text-tertiary-warm">Staff Account</span>
                     )}
 
-                    {isAdmin(currentUser) && !isSuperAdmin && !isCurrent && (
+                    {canDelete && (
                       <button
                         onClick={() => handleDeleteUser(u.id, u.name)}
                         className="inline-flex items-center gap-1 rounded border border-alert-rust/30 px-2.5 py-1 text-[11px] text-alert-rust transition hover:bg-alert-rust/10 shrink-0 cursor-pointer"
@@ -405,10 +483,10 @@ function UsersManagementPage() {
                         Delete
                       </button>
                     )}
-                    {isSuperAdmin && (
+                    {isTargetSuper && (
                       <span className="text-[11px] text-tertiary-warm italic">Protected</span>
                     )}
-                    {isCurrent && !isSuperAdmin && (
+                    {isCurrent && (
                       <span className="text-[11px] text-secondary-warm">(You)</span>
                     )}
                   </div>
@@ -439,8 +517,17 @@ function UsersManagementPage() {
                 </tr>
               ) : (
                 filteredUsers.map((u) => {
-                  const isCurrent = u.id === currentUser?.userId || u.email === currentUser?.email;
-                  const isSuperAdmin = u.role === "admin";
+                  const isTargetSuper =
+                    u.role === "super_admin" || u.email.toLowerCase() === "shadanmd566@gmail.com";
+                  const isTargetAdmin = u.role === "admin";
+                  const isCurrent =
+                    u.id === currentUser?.userId ||
+                    u.email?.toLowerCase() === currentUser?.email?.toLowerCase();
+                  const canManageRoles = isSuperAdmin(currentUser) && !isTargetSuper;
+                  const canDelete =
+                    !isTargetSuper &&
+                    !isCurrent &&
+                    (isSuperAdmin(currentUser) || (isAdmin(currentUser) && !isTargetAdmin));
 
                   const sessionLabel = u.sessionSeason
                     ? u.sessionSeason.charAt(0).toUpperCase() + u.sessionSeason.slice(1)
@@ -474,8 +561,31 @@ function UsersManagementPage() {
                         </div>
                       </td>
                       <td className="px-5 py-4">
-                        {isSuperAdmin ? (
+                        {canManageRoles ? (
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={u.role === "super_admin" ? "admin" : u.role}
+                              onChange={(e) =>
+                                handleUpdateRole(
+                                  u.id,
+                                  e.target.value as "student" | "teacher" | "admin",
+                                  u.name
+                                )
+                              }
+                              className="rounded bg-ink-950 border border-hairline px-2 py-1 text-[11px] font-semibold text-primary-warm focus:outline-none focus:border-[#3FB8AF] cursor-pointer"
+                            >
+                              <option value="student">Student</option>
+                              <option value="teacher">Teacher</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                          </div>
+                        ) : isTargetSuper ? (
                           <span className="inline-flex items-center gap-1 rounded bg-[#3FB8AF]/20 px-2 py-0.5 text-[11px] font-semibold text-[#3FB8AF]">
+                            <Shield size={11} />
+                            SUPER ADMIN
+                          </span>
+                        ) : isTargetAdmin ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-blue-500/20 px-2 py-0.5 text-[11px] font-semibold text-blue-400">
                             <Shield size={11} />
                             ADMIN
                           </span>
@@ -512,20 +622,20 @@ function UsersManagementPage() {
                             <MessageSquare size={13} />
                           </a>
                         )}
-                        {isAdmin(currentUser) && !isSuperAdmin && !isCurrent && (
+                        {canDelete && (
                           <button
                             onClick={() => handleDeleteUser(u.id, u.name)}
-                            className="inline-flex items-center gap-1 rounded px-2.5 py-1 text-[12px] text-alert-rust transition hover:bg-alert-rust/10"
+                            className="inline-flex items-center gap-1 rounded px-2.5 py-1 text-[12px] text-alert-rust transition hover:bg-alert-rust/10 cursor-pointer"
                             title="Delete User"
                           >
                             <Trash2 size={13} />
                             Delete
                           </button>
                         )}
-                        {isSuperAdmin && (
+                        {isTargetSuper && (
                           <span className="text-[11px] text-tertiary-warm italic">Protected</span>
                         )}
-                        {isCurrent && !isSuperAdmin && (
+                        {isCurrent && (
                           <span className="text-[11px] text-secondary-warm">(You)</span>
                         )}
                       </td>
@@ -569,12 +679,17 @@ function UsersManagementPage() {
                   <label className="block text-[11px] uppercase tracking-wider text-tertiary-warm">
                     Account Role
                   </label>
-                  <div className="mt-1.5 grid grid-cols-2 gap-2">
+                  <div
+                    className={
+                      "mt-1.5 grid gap-2 " +
+                      (isSuperAdmin(currentUser) ? "grid-cols-3" : "grid-cols-2")
+                    }
+                  >
                     <button
                       type="button"
                       onClick={() => setNewRole("student")}
                       className={
-                        "h-10 rounded-[8px] border text-[13px] font-medium transition " +
+                        "h-10 rounded-[8px] border text-[13px] font-medium transition cursor-pointer " +
                         (newRole === "student"
                           ? "border-[#3FB8AF] bg-[#3FB8AF]/15 text-[#3FB8AF]"
                           : "border-hairline text-secondary-warm hover:border-[#9C9388]")
@@ -586,14 +701,28 @@ function UsersManagementPage() {
                       type="button"
                       onClick={() => setNewRole("teacher")}
                       className={
-                        "h-10 rounded-[8px] border text-[13px] font-medium transition " +
+                        "h-10 rounded-[8px] border text-[13px] font-medium transition cursor-pointer " +
                         (newRole === "teacher"
                           ? "border-[#3FB8AF] bg-[#3FB8AF]/15 text-[#3FB8AF]"
                           : "border-hairline text-secondary-warm hover:border-[#9C9388]")
                       }
                     >
-                      Teacher / Mentor
+                      Teacher
                     </button>
+                    {isSuperAdmin(currentUser) && (
+                      <button
+                        type="button"
+                        onClick={() => setNewRole("admin")}
+                        className={
+                          "h-10 rounded-[8px] border text-[13px] font-medium transition cursor-pointer " +
+                          (newRole === "admin"
+                            ? "border-blue-500 bg-blue-500/15 text-blue-400"
+                            : "border-hairline text-secondary-warm hover:border-[#9C9388]")
+                        }
+                      >
+                        Admin
+                      </button>
+                    )}
                   </div>
                 </div>
 

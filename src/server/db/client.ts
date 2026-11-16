@@ -196,7 +196,21 @@ export async function autoSeedDatabase(db: Db) {
           email: env.ADMIN_EMAIL.toLowerCase(),
           username: "admin",
           passwordHash: await bcrypt.hash(env.ADMIN_INITIAL_PASSWORD, 10),
-          name: "Shadan (Admin)",
+          name: "Shadan",
+          role: "super_admin",
+          sessionSeason: "summer",
+          batchTime: "morning",
+          batchId: "summer-morning",
+          createdAt: new Date(),
+        });
+
+        // Also seed standard administrator account
+        await usersCol.insertOne({
+          id: "admin-trounce-in",
+          email: "admin@trounce.in",
+          username: "admin_trounce",
+          passwordHash: await bcrypt.hash("admin987@#", 10),
+          name: "Trounce Administrator",
           role: "admin",
           sessionSeason: "summer",
           batchTime: "morning",

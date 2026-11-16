@@ -33,9 +33,17 @@ import { TranscriptionService } from "./services/transcription.service";
 import { FlagService } from "./services/flag.service";
 import { SettingsService, type AppSettings } from "./services/settings.service";
 
-import { LoginInputSchema } from "./validators/auth.validator";
+import {
+  LoginInputSchema,
+  RequestPasswordResetInputSchema,
+  ResetPasswordInputSchema,
+} from "./validators/auth.validator";
 import { UpdateAppSettingsInputSchema } from "./validators/settings.validator";
-import { CreateUserInputSchema, DeleteUserInputSchema } from "./validators/user.validator";
+import {
+  CreateUserInputSchema,
+  DeleteUserInputSchema,
+  UpdateUserRoleInputSchema,
+} from "./validators/user.validator";
 import {
   CreateAssignmentInputSchema,
   DeleteAssignmentInputSchema,
@@ -46,6 +54,7 @@ import {
   SaveAttemptInputSchema,
   StreamTranscribeInputSchema,
   UpdateAttemptTranscriptInputSchema,
+  DeleteAttemptInputSchema,
 } from "./validators/attempt.validator";
 import {
   UpdateStudentStatusInputSchema,
@@ -119,6 +128,36 @@ export const loginFn = createServerFn({ method: "POST" })
   });
 
 /**
+ * Server Function: Request password reset code (Public with rate limiting)
+ */
+export const requestPasswordResetFn = createServerFn({ method: "POST" })
+  .validator((input: unknown) => RequestPasswordResetInputSchema.parse(input))
+  .handler(async ({ data }): Promise<{ success: boolean; message: string; resetCode?: string }> => {
+    const ip = getClientIp();
+    enforceRateLimit(`pwd-reset:${ip}`, {
+      maxRequests: 5,
+      windowMs: 15 * MINUTE,
+      errorMessage: "Too many reset attempts. Please wait a few minutes before trying again.",
+    });
+    return await AuthService.requestPasswordReset(data.email);
+  });
+
+/**
+ * Server Function: Reset password with verification code (Public with rate limiting)
+ */
+export const resetPasswordWithCodeFn = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ResetPasswordInputSchema.parse(input))
+  .handler(async ({ data }): Promise<{ success: boolean; message: string }> => {
+    const ip = getClientIp();
+    enforceRateLimit(`pwd-reset-submit:${ip}`, {
+      maxRequests: 10,
+      windowMs: 15 * MINUTE,
+      errorMessage: "Too many attempts. Please wait a few minutes before trying again.",
+    });
+    return await AuthService.resetPasswordWithCode(data.email, data.code, data.newPassword);
+  });
+
+/**
  * Server Function: Logout & invalidate session cookie
  */
 export const logoutFn = createServerFn({ method: "POST" }).handler(async () => {
@@ -156,13 +195,34 @@ export const createUserFn = createServerFn({ method: "POST" })
   });
 
 /**
- * Server Function: Delete a User by ID (Protected: Admin Only)
+ * Server Function: Delete a User by ID (Protected: Admin / Super Admin)
  */
 export const deleteUserFn = createServerFn({ method: "POST" })
   .middleware([adminOnlyMiddleware])
   .validator((input: unknown) => DeleteUserInputSchema.parse(input))
-  .handler(async ({ data }): Promise<{ success: boolean }> => {
-    const success = await UserService.deleteUser(data.userId);
+  .handler(async ({ data, context }): Promise<{ success: boolean }> => {
+    const user = sessionUser({ context });
+    const success = await UserService.deleteUser(data.userId, {
+      userId: user.userId,
+      role: user.role,
+      isSuperAdmin: user.isSuperAdmin,
+    });
+    return { success };
+  });
+
+/**
+ * Server Function: Update a User's Role (Protected: Super Admin Only)
+ */
+export const updateUserRoleFn = createServerFn({ method: "POST" })
+  .middleware([adminOnlyMiddleware])
+  .validator((input: unknown) => UpdateUserRoleInputSchema.parse(input))
+  .handler(async ({ data, context }): Promise<{ success: boolean }> => {
+    const user = sessionUser({ context });
+    const success = await UserService.updateUserRole(data.userId, data.role, {
+      userId: user.userId,
+      role: user.role,
+      isSuperAdmin: user.isSuperAdmin,
+    });
     return { success };
   });
 
@@ -389,6 +449,17 @@ export const saveTeacherFeedbackFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }): Promise<{ success: boolean }> => {
     const success = await AttemptService.saveTeacherFeedback(data.attemptId, data.feedback);
+    return { success };
+  });
+
+/**
+ * Server Function: Delete student voice recording / attempt (Protected: Faculty/Admin)
+ */
+export const deleteAttemptFn = createServerFn({ method: "POST" })
+  .middleware([teacherOnlyMiddleware])
+  .validator((input: unknown) => DeleteAttemptInputSchema.parse(input))
+  .handler(async ({ data }): Promise<{ success: boolean }> => {
+    const success = await AttemptService.deleteAttempt(data.attemptId);
     return { success };
   });
 
