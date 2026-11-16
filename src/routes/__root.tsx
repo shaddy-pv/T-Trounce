@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { applyTheme, getStoredTheme } from "@/lib/theme";
 import { fetchSessionWithCache } from "@/lib/auth";
 import { PwaUpdateBanner } from "@/features/pwa/components/InstallApp";
+import { MobileNativeInstallPrompt } from "@/features/pwa/components/MobileNativeInstallPrompt";
 import { initPwa } from "@/features/pwa/pwa-store";
 import type { SessionPayload } from "@/server/services/auth.service";
 
@@ -86,7 +87,11 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      {
+        name: "viewport",
+        content:
+          "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover",
+      },
       { name: "theme-color", content: "#100E0C" },
       { title: "Trounce · Speak. See your signal." },
       {
@@ -103,9 +108,11 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       { name: "twitter:card", content: "summary" },
       { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
-      { name: "apple-mobile-web-app-status-bar-style", content: "black" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-touch-fullscreen", content: "yes" },
       { name: "apple-mobile-web-app-title", content: "Trounce" },
       { name: "application-name", content: "Trounce" },
+      { name: "format-detection", content: "telephone=no" },
     ],
     links: [
       { rel: "manifest", href: "/manifest.webmanifest" },
@@ -186,6 +193,7 @@ function RootComponent() {
     <>
       <NavigationProgressBar />
       <Outlet />
+      <MobileNativeInstallPrompt />
       <PwaUpdateBanner />
     </>
   );

@@ -38,7 +38,7 @@ export function StudentShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-ink-950 text-primary-warm">
       <div className="mx-auto flex min-h-screen w-full max-w-[480px] flex-col border-x border-hairline">
         {!isRecording && (
-          <header className="flex items-center justify-between px-5 pt-6 pb-4">
+          <header className="flex items-center justify-between px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-4">
             <Link to="/practice" className="flex items-center gap-2">
               <span className="size-2.5 rounded-full bg-[#3FB8AF] light:bg-teal-600 shadow-[0_0_8px_#3FB8AF] light:shadow-none" />
               <span className="display text-[17px] font-semibold tracking-wide">trounce</span>
@@ -70,7 +70,7 @@ export function StudentShell({ children }: { children: ReactNode }) {
         <main className="flex-1">{children}</main>
 
         {!isRecording && (
-          <nav className="sticky bottom-0 grid grid-flow-col auto-cols-fr border-t border-hairline bg-ink-950/98 light:bg-white/95 backdrop-blur-md z-30 shadow-lg">
+          <nav className="sticky bottom-0 grid grid-flow-col auto-cols-fr border-t border-hairline bg-ink-950/98 light:bg-white/95 backdrop-blur-md z-30 shadow-lg pb-[env(safe-area-inset-bottom,0px)]">
             {nav.map((n) => {
               const active =
                 pathname === n.to || (n.to === "/practice" && pathname.startsWith("/practice"));
@@ -80,7 +80,7 @@ export function StudentShell({ children }: { children: ReactNode }) {
                   key={n.to}
                   to={n.to}
                   className={
-                    "flex flex-col h-16 items-center justify-center gap-1 transition text-center " +
+                    "flex flex-col h-16 items-center justify-center gap-1 transition text-center select-none cursor-pointer " +
                     (active
                       ? "text-[#3FB8AF] light:text-teal-700 bg-ink-900/60 light:bg-teal-50/80 font-semibold"
                       : "text-secondary-warm hover:text-primary-warm")

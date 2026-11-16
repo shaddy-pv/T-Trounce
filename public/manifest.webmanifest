@@ -8,13 +8,29 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "background_color": "#100E0C",
   "theme_color": "#100E0C",
-  "orientation": "any",
+  "orientation": "portrait-primary",
   "categories": ["education", "productivity"],
   "prefer_related_applications": false,
   "related_applications": [{ "platform": "webapp", "url": "/manifest.webmanifest" }],
+  "screenshots": [
+    {
+      "src": "/screenshots/mobile-practice.png",
+      "sizes": "540x960",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Daily Speaking Drills & Waveform Analysis"
+    },
+    {
+      "src": "/screenshots/desktop-dashboard.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Teacher Console & Fluency Cohort Analytics"
+    }
+  ],
   "icons": [
     { "src": "/icons/icon-72x72.png", "sizes": "72x72", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-96x96.png", "sizes": "96x96", "type": "image/png", "purpose": "any" },

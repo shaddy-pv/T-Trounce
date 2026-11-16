@@ -66,7 +66,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-ink-950 text-primary-warm">
-      <header className="sticky top-0 z-40 border-b border-hairline bg-ink-950/95 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-hairline bg-ink-950/95 backdrop-blur-md pt-[env(safe-area-inset-top,0px)]">
         <div className="mx-auto flex h-14 max-w-[1280px] items-center justify-between px-4 sm:px-6">
           {/* Logo & Desktop Nav */}
           <div className="flex items-center gap-4 lg:gap-8">
@@ -196,7 +196,7 @@ export function TeacherShell({ children }: { children: ReactNode }) {
       </header>
 
       {/* Main Container: Mobile, Tablet & Desktop Responsive */}
-      <main className="mx-auto w-full max-w-[1280px] min-w-0 px-3 sm:px-6 py-5 sm:py-8 overflow-x-hidden">
+      <main className="mx-auto w-full max-w-[1280px] min-w-0 px-3 sm:px-6 py-5 sm:py-8 overflow-x-hidden pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
         {children}
       </main>
     </div>

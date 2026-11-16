@@ -29,6 +29,8 @@ const PRECACHE_OPTIONAL = [
   "/icons/maskable-icon-512x512.png",
   "/icons/apple-touch-icon.png",
   "/icons/icon.svg",
+  "/screenshots/mobile-practice.png",
+  "/screenshots/desktop-dashboard.png",
 ];
 
 self.addEventListener("install", (event) => {

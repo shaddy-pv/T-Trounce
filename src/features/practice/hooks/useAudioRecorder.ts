@@ -266,6 +266,7 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   const mimeTypeRef = useRef<string>("audio/webm");
   // The stream from getUserMedia. Stopping this is what actually turns the microphone off.
   const micStreamRef = useRef<MediaStream | null>(null);
+  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
 
   // ── Refs — Web Speech API ──────────────────────────────────────────────────
   // ONE recognition instance per session, restarted via its own onend closure.
@@ -370,6 +371,10 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
         } catch {
           /* ignore */
         }
+      }
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
+        wakeLockRef.current = null;
       }
     };
   }, []);
@@ -688,6 +693,20 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
     // ── Full state reset ─────────────────────────────────────────────────────
     isRecordingRef.current = true;
     sttUnavailableRef.current = false;
+
+    // Native haptic feedback for record start
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      try {
+        navigator.vibrate(35);
+      } catch {}
+    }
+
+    // Screen wake lock: keep phone display active throughout speaking drill
+    if (typeof navigator !== "undefined" && "wakeLock" in navigator) {
+      try {
+        wakeLockRef.current = await (navigator as any).wakeLock.request("screen");
+      } catch {}
+    }
     setMicError(null);
     setSttUnavailable(false);
     setElapsed(0);
@@ -888,6 +907,21 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   }> => {
     isRecordingRef.current = false;
     sttUnavailableRef.current = true;
+
+    // Release screen wake lock
+    if (wakeLockRef.current) {
+      try {
+        await wakeLockRef.current.release();
+      } catch {}
+      wakeLockRef.current = null;
+    }
+
+    // Native completion haptic feedback
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      try {
+        navigator.vibrate([25, 40, 25]);
+      } catch {}
+    }
 
     // Rescue any trailing interim words from Web Speech API before stopping (overlap-aware)
     const pendingInterim = interimTranscriptRef.current.trim();
