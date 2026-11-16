@@ -190,6 +190,18 @@ export class FlagService {
     );
 
     if (flag.attemptId) {
+      await flags.updateMany(
+        { attemptId: flag.attemptId, status: "pending" },
+        {
+          $set: {
+            status: resolvedStatus,
+            teacherFeedback: input.teacherFeedback,
+            resolvedAt: now,
+            resolvedBy: input.teacherName,
+          },
+        },
+      );
+
       await db.collection<AttemptDoc>("attempts").updateOne(
         { id: flag.attemptId },
         {
@@ -221,7 +233,20 @@ export class FlagService {
         .collection<StudentDoc>("students")
         .updateOne(
           { id: flag.studentId },
-          { $set: { status: "on-track", updatedAt: now }, $unset: { flagReason: "" } },
+          {
+            $set: { status: "on-track", updatedAt: now },
+            $unset: { flagReason: "" },
+            $setOnInsert: {
+              id: flag.studentId,
+              name: flag.studentName || "Student",
+              focus: "General",
+              lastActive: "Today",
+              scorePct: 0,
+              trendPct: 0,
+              waveform: [],
+            },
+          },
+          { upsert: true },
         );
     }
 

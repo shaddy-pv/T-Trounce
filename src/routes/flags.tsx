@@ -1,5 +1,5 @@
 import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { TeacherShell } from "@/components/tarang/TeacherShell";
 import { Waveform } from "@/components/tarang/Waveform";
 import { StatusDot } from "@/components/tarang/StatusDot";
@@ -67,6 +67,15 @@ function FlagsPage() {
   const [nudgeSuccess, setNudgeSuccess] = useState<Record<string, boolean>>({});
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Sync state when router loader refetches
+  useEffect(() => {
+    setFlags(activeFlags);
+  }, [activeFlags]);
+
+  useEffect(() => {
+    setRoster(studentRoster);
+  }, [studentRoster]);
+
   // Audio Playback in flag cards
   const [activeAudioId, setActiveAudioId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -95,6 +104,7 @@ function FlagsPage() {
     setActionError(null);
     const feedback = replyNotes[flagId]?.trim() || "";
     try {
+      const targetFlag = flags.find((f) => f.id === flagId);
       await resolveFlagFn({
         data: {
           flagId,
@@ -103,6 +113,15 @@ function FlagsPage() {
         },
       });
       setFlags((prev) => prev.filter((f) => f.id !== flagId));
+      if (targetFlag) {
+        setRoster((prev) =>
+          prev.map((s) =>
+            s.id === targetFlag.studentId
+              ? { ...s, status: "on-track", flagReason: undefined }
+              : s,
+          ),
+        );
+      }
       invalidateClientDataCache("flags");
       invalidateClientDataCache("student-roster");
       router.invalidate();
@@ -149,6 +168,7 @@ function FlagsPage() {
         ),
       );
       invalidateClientDataCache("student-roster");
+      invalidateClientDataCache("flags");
       router.invalidate();
     } catch (err) {
       console.error("Failed to update student status:", err);

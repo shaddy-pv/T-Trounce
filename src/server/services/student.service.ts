@@ -109,7 +109,10 @@ function buildStudentRow(
       inactiveDays === 0 ? "Today" : inactiveDays === 1 ? "Yesterday" : `${inactiveDays}d ago`;
   }
 
-  // Priority: open flag > low score > no recordings > long inactivity > teacher-set status
+  // Priority:
+  // 1. Open unresolved flag -> Always flagged
+  // 2. Persistent status in DB (teacher resolution / updated status) -> Respected
+  // 3. Fallback heuristics for initial / unconfigured records
   let status: StudentStatus = studentDoc?.status ?? "on-track";
   let flagReason = studentDoc?.flagReason ?? undefined;
 
@@ -119,18 +122,36 @@ function buildStudentRow(
       pendingFlag.type === "student_request"
         ? `Help Request: ${pendingFlag.category || "Guidance"}`
         : pendingFlag.category || "Needs Teacher Review";
-  } else if (latest && scorePct < 50) {
-    status = "flagged";
-    flagReason = `Low Fluency: ${scorePct}%`;
-  } else if (!latest) {
-    status = "nudge";
-    flagReason = "No recordings yet";
-  } else if (inactiveDays > 4) {
-    status = "flagged";
-    flagReason = `Inactive ${inactiveDays}d`;
-  } else if (inactiveDays > 2) {
-    status = "nudge";
-    flagReason = `Inactive ${inactiveDays}d`;
+  } else if (studentDoc?.status) {
+    // Persistent status is explicitly saved in DB (by teacher resolve or attempt hook).
+    // Respect the teacher's resolution; do not resurrect a resolved low-score flag.
+    status = studentDoc.status;
+    flagReason = studentDoc.flagReason;
+
+    // Only apply inactivity if teacher has not acted recently and student has been inactive
+    const lastAction = studentDoc.updatedAt ? new Date(studentDoc.updatedAt) : null;
+    const daysSinceAction = lastAction
+      ? Math.floor((now.getTime() - lastAction.getTime()) / DAY_MS)
+      : inactiveDays;
+    if (status === "on-track" && inactiveDays > 4 && daysSinceAction > 4) {
+      status = "flagged";
+      flagReason = `Inactive ${inactiveDays}d`;
+    }
+  } else {
+    // Initial heuristic for students without a saved status document
+    if (!latest) {
+      status = "nudge";
+      flagReason = "No recordings yet";
+    } else if (inactiveDays > 4) {
+      status = "flagged";
+      flagReason = `Inactive ${inactiveDays}d`;
+    } else if (inactiveDays > 2) {
+      status = "nudge";
+      flagReason = `Inactive ${inactiveDays}d`;
+    } else if (scorePct < 50) {
+      status = "flagged";
+      flagReason = `Low Fluency: ${scorePct}%`;
+    }
   }
 
   return {
@@ -453,14 +474,39 @@ export class StudentService {
    */
   static async updateStatus(studentId: string, status: StudentStatus): Promise<boolean> {
     const db = await requireDb();
-    const result = await db.collection<StudentDoc>("students").updateOne(
+    const now = new Date();
+    await db.collection<StudentDoc>("students").updateOne(
       { id: studentId },
       {
-        $set: { status, updatedAt: new Date() },
+        $set: { status, updatedAt: now },
         ...(status === "on-track" ? { $unset: { flagReason: "" } } : {}),
+        $setOnInsert: {
+          id: studentId,
+          name: "Student",
+          focus: "General",
+          lastActive: "Today",
+          scorePct: 0,
+          trendPct: 0,
+          waveform: [],
+        },
       },
+      { upsert: true },
     );
+
+    if (status === "on-track") {
+      await db.collection<FlagDoc>("flags").updateMany(
+        { studentId, status: "pending" },
+        {
+          $set: {
+            status: "resolved",
+            resolvedAt: now,
+            resolvedBy: "Teacher Intervention",
+          },
+        },
+      );
+    }
+
     invalidateRosterCache();
-    return result.matchedCount > 0;
+    return true;
   }
 }
