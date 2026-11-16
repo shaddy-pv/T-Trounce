@@ -180,10 +180,20 @@ export function InstallProfileCard() {
   return (
     <div className="mt-4 rounded-[12px] border border-hairline bg-ink-900 p-5">
       {action.mode === "installed" ? (
-        <p className="flex items-center gap-2 text-[14px] font-medium text-primary-warm">
-          <CheckCircle2 size={15} className="text-[#3FB8AF]" aria-hidden="true" />
-          {t("install_installed_title")}
-        </p>
+        <div>
+          <p className="flex items-center gap-2 text-[14px] font-medium text-primary-warm">
+            <CheckCircle2 size={15} className="text-[#3FB8AF]" aria-hidden="true" />
+            {t("install_installed_title")}
+          </p>
+          <button
+            type="button"
+            onClick={action.install}
+            className="mt-2 text-[12px] text-[#3FB8AF] hover:underline cursor-pointer"
+          >
+            {t("install_download_apk")}
+          </button>
+          <InstructionsFor action={action} />
+        </div>
       ) : (
         <>
           <p className="flex items-center gap-2 text-[14px] font-medium text-primary-warm">

@@ -42,6 +42,7 @@ const MIME_TYPES = {
   ".woff": "font/woff",
   ".map": "application/json; charset=utf-8",
   ".txt": "text/plain; charset=utf-8",
+  ".apk": "application/vnd.android.package-archive",
 };
 
 const COMPRESSIBLE = new Set([
@@ -119,6 +120,7 @@ async function serveStatic(request, pathname) {
   headers.set("Cache-Control", cacheControlFor(pathname));
   headers.set("Vary", "Accept-Encoding");
   if (pathname === "/sw.js") headers.set("Service-Worker-Allowed", "/");
+  if (ext === ".apk") headers.set("Content-Disposition", 'attachment; filename="Trounce.apk"');
 
   const encoding = COMPRESSIBLE.has(ext) ? preferredEncoding(request) : null;
   const body = encoding ? await compressedBody(filePath, encoding) : await readFile(filePath);
