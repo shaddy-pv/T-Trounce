@@ -1,20 +1,19 @@
 {
-  "id": "/",
+  "id": "in.trounce.app",
   "name": "Trounce · Signal Speak Studio",
   "short_name": "Trounce",
   "description": "Spoken-English waveform audio coaching and fluency analytics for students and teachers.",
   "lang": "en",
   "dir": "ltr",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "display_override": ["standalone"],
   "background_color": "#100E0C",
   "theme_color": "#100E0C",
   "orientation": "portrait-primary",
   "categories": ["education", "productivity"],
   "prefer_related_applications": false,
-  "related_applications": [{ "platform": "webapp", "url": "/manifest.webmanifest" }],
   "screenshots": [
     {
       "src": "/screenshots/mobile-practice.png",

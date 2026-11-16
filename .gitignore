@@ -45,3 +45,12 @@ __pycache__/
 .venv/
 venv/
 .whisper_cache/
+
+# Android
+*.apk
+android/.gradle/
+android/build/
+android/app/build/
+android/.idea/
+android/*.iml
+android/app/*.iml
